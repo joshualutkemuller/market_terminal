@@ -27,8 +27,42 @@ BlackRock.
 | `SXU`  | **Sources & Uses** | Matching engine network graph, internalization opportunities, funding savings, allocation heat map |
 | `OPT`  | **Optimization Center** | Flagship — solver runs (Gurobi / OR-Tools / Pyomo), objective/runtime/status/duals, before-after comparison, recommended trades |
 | `DESK` | **Trading Desk** | Trader scorecards, execution analytics (slippage / VWAP / TWAP / fill rates), risk analytics, position concentration |
+| `ECON` | **Macro Dashboard** | FRED-connected economic indicators grouped by category, surprise index, breadth, live series explorer |
+| `CURV` | **Treasury Curve Lab** | Multi-snapshot curve overlay (today vs 1M/3M/6M/1Y/2Y/pre-hiking/GFC), level/slope/curvature, point-in-time scrubber, 2s10s inversion timeline, full historical inversion → recession lead-time analysis |
+| `FOMC` | **Rate Probabilities** | CME-FedWatch-style meeting hike/cut odds, implied policy path, FOMC dot plot |
+| `CAL`  | **Economic Calendar** | Release stream (FRED release dates) with importance/category filters and beat/miss vs consensus |
+| `STAT` | **Statistical Analysis** | Correlation matrix, interactive OLS regression, change distributions / z-scores, regime map |
+| `EML`  | **ML Applications** | Recession probit (AUC 0.89), inflation nowcast, rate-path BVAR+LSTM, regime HMM, feature importances, model registry |
+| `SFE`  | **Sec-Finance Economics** | Differentiator — repo complex, rate sensitivities ("greeks for the book") with a Fed-cut scenario stepper, cash-collateral reinvestment ladder, macro→business linkage |
 | `AI`   | **AI Copilot** | Built-in "Bloomberg GPT" — natural-language Q&A over every dataset, with narratives, tables, charts, and recommended actions |
 | `ALRT` | **Alert Center** | Streaming risk & ops alerts with severity/category filters and a rules engine |
+
+---
+
+## Live economic data (FRED)
+
+The **Economics & Macro** modules are wired to **FRED** (Federal Reserve Economic Data).
+The connection is real but **optional and resilient**:
+
+- **With a key** — set `FRED_API_KEY` in the environment. Server-side route handlers
+  (`/api/econ/series`, `/api/econ/curve`, `/api/econ/calendar`) fetch live observations,
+  yield-curve tenors (`DGS1MO…DGS30`), and release dates from `api.stlouisfed.org`
+  (cached 10 min). Panels show a green **LIVE · FRED** badge.
+- **Without a key** — every module renders a **deterministic, seeded simulation** anchored
+  to a plausible mid-2026 macro regime. Panels show an amber **SIM** badge. No setup, no
+  hydration drift, fully functional offline.
+
+Client hooks render the simulation instantly, then transparently upgrade to live FRED data
+when the API reports it — so the UI never blocks or breaks.
+
+```bash
+# Get a free key: https://fred.stlouisfed.org/docs/api/api_key.html
+FRED_API_KEY=your_key_here npm run dev
+# On Vercel/Netlify: add FRED_API_KEY as a project environment variable.
+```
+
+> FRED does not send CORS headers, so it is only ever called server-side from the route
+> handlers — the key is never exposed to the browser.
 
 ---
 
@@ -45,14 +79,18 @@ BlackRock.
 
 ## Tech stack
 
-**This demo build** runs entirely in the browser — fully client-rendered Next.js with
-**deterministic, seeded mock data generators** (no backend, no database, no API keys).
-That makes it deploy anywhere static and reproducible across server/client renders.
+**This build** is fully client-rendered Next.js over **deterministic, seeded data
+generators**, so all 18 modules run with **zero configuration** — no database, no required
+keys — and stay reproducible across server/client renders. The only live integration is the
+**optional** FRED connection (see above), which runs through serverless route handlers and
+degrades gracefully to simulation when no key is present.
 
 - **Next.js 14 (App Router) · React 18 · TypeScript (strict) · Tailwind CSS**
 - **Zero-dependency SVG chart library** (sparklines, line/area, bars, candlesticks + VWAP,
-  treemaps, Sankey, network graphs, revenue waterfalls, correlation matrices, donuts, gauges, heat grids)
+  treemaps, Sankey, network graphs, revenue waterfalls, correlation matrices, donuts, gauges,
+  heat grids, yield curves, scatter/regression plots)
 - **AG-Grid-style sortable data grids** built from scratch for density and speed
+- **Optional live data:** FRED via server-side route handlers (`FRED_API_KEY`)
 
 **Production architecture** (what the demo simulates) — see `ARCHITECTURE.md`:
 - Backend: **Python · FastAPI**, analytics in **Pandas / Polars / NumPy**
@@ -77,10 +115,12 @@ npm run build && npm start
 
 ## Deploy free
 
-Every page is statically prerendered, so any free static/Next.js host works with **zero
-configuration** (no env vars required):
+Module pages are statically prerendered and the FRED API routes are lightweight serverless
+functions, so any free Next.js host works with **zero configuration** (the `FRED_API_KEY`
+env var is optional — without it the econ modules use simulation):
 
-- **Vercel (recommended):** import the repo → pick this branch → Deploy → get a `*.vercel.app` URL
+- **Vercel (recommended):** import the repo → pick this branch → Deploy → get a `*.vercel.app`
+  URL. Add `FRED_API_KEY` in project settings to enable live economic data.
 - **Netlify / Cloudflare Pages:** same — build command `npm run build`
 
 ---
@@ -89,13 +129,21 @@ configuration** (no env vars required):
 
 ```
 src/
-├── app/                     # one route per module (HOME, MKT, SLAB, PB, COLL, CASH, SXU, OPT, DESK, AI, ALRT)
+├── app/                     # one route per module
+│   ├── (HOME, markets, securities-lending, prime-finance, collateral, cash-optimizer,
+│   │    sources-uses, optimization, trading-desk, copilot, alerts)
+│   ├── economics/           # ECON + curve, rates, calendar, stats, ml, sec-finance
+│   └── api/econ/            # FRED route handlers (series, curve, calendar)
 ├── components/
 │   ├── shell/               # command bar, sidebar, status bar, ticker, command palette
 │   ├── ui/                  # Panel, Stat, Tag, DataGrid, PageHeader, KpiStrip
-│   └── charts/              # SVG chart library (Sparkline, LineChart, CandleChart, Treemap, Sankey, NetworkGraph, Waterfall, Matrix, Radial)
-├── data/                    # deterministic domain generators (universe, markets, securitiesLending, primeFinance, collateral, cash, sourcesUses, optimization, trading, alerts)
-└── lib/                     # rng (seeded), format, hooks, nav, theme
+│   ├── econ/               # SourceBadge (LIVE/SIM provenance)
+│   └── charts/              # SVG chart library (Sparkline, LineChart, CandleChart, Treemap,
+│                            #   Sankey, NetworkGraph, Waterfall, Matrix, Radial, YieldCurve, ScatterPlot)
+├── data/                    # deterministic domain generators (universe, markets, securitiesLending,
+│                            #   primeFinance, collateral, cash, sourcesUses, optimization, trading,
+│                            #   alerts, econSeries, econCurve, econRates, econModels)
+└── lib/                     # rng (seeded), format, hooks, nav, useEcon, server/fred.ts
 ```
 
 ---
