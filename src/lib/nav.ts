@@ -1,0 +1,46 @@
+import {
+  Activity,
+  LayoutDashboard,
+  Landmark,
+  Briefcase,
+  Layers,
+  Wallet,
+  GitMerge,
+  Cpu,
+  LineChart,
+  Bot,
+  BellRing,
+  type LucideIcon,
+} from "lucide-react";
+
+export interface NavItem {
+  /** Bloomberg-style mnemonic command, e.g. "SLAB". */
+  code: string;
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  desc: string;
+  group: "MARKETS" | "FINANCE" | "OPTIMIZATION" | "DESK" | "INTELLIGENCE";
+}
+
+export const NAV: NavItem[] = [
+  { code: "HOME", label: "Command Center", href: "/", icon: LayoutDashboard, desc: "Cross-desk overview & KPIs", group: "MARKETS" },
+  { code: "MKT", label: "Live Markets", href: "/markets", icon: Activity, desc: "Real-time multi-asset monitor", group: "MARKETS" },
+  { code: "SLAB", label: "Securities Lending", href: "/securities-lending", icon: Landmark, desc: "Inventory, loan book & revenue", group: "FINANCE" },
+  { code: "PB", label: "Prime Finance", href: "/prime-finance", icon: Briefcase, desc: "Hedge fund financing & risk", group: "FINANCE" },
+  { code: "COLL", label: "Collateral Mgmt", href: "/collateral", icon: Layers, desc: "Margin & collateral optimization", group: "OPTIMIZATION" },
+  { code: "CASH", label: "Cash Optimizer", href: "/cash-optimizer", icon: Wallet, desc: "Treasury funding optimization", group: "OPTIMIZATION" },
+  { code: "SXU", label: "Sources & Uses", href: "/sources-uses", icon: GitMerge, desc: "Matching & internalization engine", group: "OPTIMIZATION" },
+  { code: "OPT", label: "Optimization Center", href: "/optimization", icon: Cpu, desc: "Solver runs & impact analysis", group: "OPTIMIZATION" },
+  { code: "DESK", label: "Trading Desk", href: "/trading-desk", icon: LineChart, desc: "Scorecards & execution analytics", group: "DESK" },
+  { code: "AI", label: "AI Copilot", href: "/copilot", icon: Bot, desc: "Natural-language intelligence", group: "INTELLIGENCE" },
+  { code: "ALRT", label: "Alert Center", href: "/alerts", icon: BellRing, desc: "Streaming risk & ops alerts", group: "INTELLIGENCE" },
+];
+
+export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [
+  { id: "MARKETS", label: "Markets" },
+  { id: "FINANCE", label: "Financing" },
+  { id: "OPTIMIZATION", label: "Optimization" },
+  { id: "DESK", label: "Trading Desk" },
+  { id: "INTELLIGENCE", label: "Intelligence" },
+];
