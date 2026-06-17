@@ -1,0 +1,303 @@
+"use client";
+
+import { useState } from "react";
+import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
+import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { Sparkline } from "@/components/charts/Sparkline";
+import { LineChart } from "@/components/charts/LineChart";
+import { BarChart } from "@/components/charts/BarChart";
+import { SourceBadge } from "@/components/econ/SourceBadge";
+import { useEconSeries } from "@/lib/useEcon";
+import {
+  getIndicators,
+  getSeriesHistory,
+  ECON_CATEGORY_LABEL,
+  type IndicatorRow,
+  type EconCategory,
+} from "@/data/econSeries";
+import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
+
+type Tone = "up" | "down" | "amber" | "neutral";
+
+/** Pick a tone from an indicator's bullish semantics + the direction of its change. */
+function toneFor(bullish: boolean | null, change: number): Tone {
+  if (change === 0) return "neutral";
+  if (bullish === null) return "amber";
+  // "improving" = change agrees with the bullish direction.
+  const improving = bullish ? change > 0 : change < 0;
+  return improving ? "up" : "down";
+}
+
+/** Format a value with its unit suffix where the unit reads as a suffix. */
+function fmtVal(v: number, decimals: number, unit: string): string {
+  const n = fmtNum(v, decimals);
+  if (unit === "%" || unit.startsWith("%")) return `${n}%`;
+  if (unit === "bps") return `${n} bps`;
+  return `${n} ${unit}`;
+}
+
+const KPI_IDS = ["GDPNOW", "PCEPILFE", "UNRATE", "FEDFUNDS", "DGS10", "T10Y2Y"] as const;
+const KPI_LABEL: Record<string, string> = {
+  GDPNOW: "Real GDP (Nowcast)",
+  PCEPILFE: "Core PCE",
+  UNRATE: "Unemployment",
+  FEDFUNDS: "Effective Fed Funds",
+  DGS10: "10Y Treasury",
+  T10Y2Y: "2s10s Spread",
+};
+
+// Selector for the synchronous featured chart (driven by getSeriesHistory).
+const SELECTOR_IDS = ["DGS10", "DGS2", "CPIAUCSL", "UNRATE", "FEDFUNDS"] as const;
+const SELECTOR_LABEL: Record<string, string> = {
+  DGS10: "UST 10Y",
+  DGS2: "UST 2Y",
+  CPIAUCSL: "CPI",
+  UNRATE: "U-3",
+  FEDFUNDS: "EFFR",
+};
+
+const CATEGORY_ORDER: EconCategory[] = [
+  "GROWTH",
+  "INFLATION",
+  "LABOR",
+  "RATES",
+  "HOUSING",
+  "CONSUMER",
+  "MONEY",
+  "ACTIVITY",
+];
+
+export default function MacroDashboard() {
+  // Unconditional, fixed-id live hook — drives header provenance + featured live chart.
+  const live = useEconSeries("DGS10", 120);
+
+  const [selectedId, setSelectedId] = useState<string>("DGS2");
+
+  const indicators = getIndicators();
+  const byId = (id: string): IndicatorRow | undefined => indicators.find((i) => i.id === id);
+
+  const liveValues = live.data.map((o) => o.value);
+  const liveLabels = live.data.map((o) => o.date);
+
+  const selHist = getSeriesHistory(selectedId, 120);
+  const selValues = selHist.map((o) => o.value);
+  const selLabels = selHist.map((o) => o.date);
+  const selMeta = byId(selectedId);
+
+  // Economic surprise: high-signal series with non-trivial surprise magnitude.
+  const HIGH_SIGNAL = new Set([
+    "GDPNOW",
+    "CPIAUCSL",
+    "PCEPILFE",
+    "UNRATE",
+    "PAYEMS",
+    "ICSA",
+    "ISM-MFG",
+    "ISM-SVC",
+    "RSAFS",
+  ]);
+  const surpriseBars = indicators
+    .filter((i) => HIGH_SIGNAL.has(i.id))
+    .map((i) => ({
+      label: i.short,
+      value: i.surprise,
+      color: i.surprise >= 0 ? "#2ECC71" : "#FF3B3B",
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  // Macro heat: per-category improving vs deteriorating counts.
+  const heatTiles = CATEGORY_ORDER.map((cat) => {
+    const rows = indicators.filter((i) => i.category === cat);
+    let improving = 0;
+    let deteriorating = 0;
+    for (const r of rows) {
+      const t = toneFor(r.bullish, r.change);
+      if (t === "up") improving++;
+      else if (t === "down") deteriorating++;
+    }
+    return { cat, total: rows.length, improving, deteriorating };
+  });
+
+  return (
+    <div className="flex min-h-full flex-col">
+      <PageHeader
+        code="ECON"
+        title="Macro Dashboard"
+        desc="FRED-connected economic analytics"
+        right={<SourceBadge source={live.source} />}
+      />
+
+      <KpiStrip>
+        {KPI_IDS.map((id) => {
+          const r = byId(id);
+          if (!r) return <Stat key={id} label={KPI_LABEL[id]} value="—" />;
+          const tone = toneFor(r.bullish, r.change);
+          return (
+            <Stat
+              key={id}
+              label={KPI_LABEL[id]}
+              value={fmtVal(r.value, r.decimals, r.unit)}
+              sub={
+                <span className={pnlClass(r.change)}>
+                  {fmtSigned(r.change, r.decimals)} vs prior
+                </span>
+              }
+              tone={tone}
+            />
+          );
+        })}
+      </KpiStrip>
+
+      <div className="grid grid-cols-12 gap-2 p-2">
+        {/* Key indicators by category */}
+        <div className="col-span-12 xl:col-span-7">
+          <Panel
+            title="Key Indicators by Category"
+            code="ECDB"
+            accent
+            right={<span className="tnum text-3xs text-term-text-mute">{indicators.length} series</span>}
+          >
+            <div className="grid grid-cols-1 gap-px bg-term-border md:grid-cols-2">
+              {CATEGORY_ORDER.map((cat) => {
+                const rows = indicators.filter((i) => i.category === cat);
+                if (rows.length === 0) return null;
+                return (
+                  <div key={cat} className="bg-term-panel">
+                    <div className="flex items-center justify-between bg-term-panel-2 px-2 py-1">
+                      <span className="text-2xs font-semibold uppercase tracking-wide text-term-amber">
+                        {ECON_CATEGORY_LABEL[cat]}
+                      </span>
+                      <span className="text-3xs text-term-text-mute">{rows.length}</span>
+                    </div>
+                    <div className="divide-y divide-term-border-soft">
+                      {rows.map((r) => (
+                        <div key={r.id} className="flex items-center gap-2 px-2 py-1 text-2xs">
+                          <span className="w-16 shrink-0 truncate font-semibold text-term-text" title={r.label}>
+                            {r.short}
+                          </span>
+                          <span className="tnum w-16 shrink-0 text-right text-term-text">
+                            {fmtVal(r.value, r.decimals, r.unit)}
+                          </span>
+                          <span className={`tnum w-12 shrink-0 text-right ${pnlClass(r.change)}`}>
+                            {fmtSigned(r.change, r.decimals)}
+                          </span>
+                          <span className="tnum w-12 shrink-0 text-right text-term-text-mute">
+                            {fmtSigned(r.yoy, 1)}%
+                          </span>
+                          <span className="ml-auto inline-flex justify-end">
+                            <Sparkline data={r.spark} width={56} height={18} />
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
+        </div>
+
+        {/* Right column: featured live + selector */}
+        <div className="col-span-12 flex flex-col gap-2 xl:col-span-5">
+          <Panel
+            title="Live Series — UST 10Y"
+            code="DGS10"
+            right={<SourceBadge source={live.source} />}
+          >
+            <div className="p-2">
+              <LineChart
+                height={160}
+                labels={liveLabels}
+                yFmt={(n) => `${n.toFixed(2)}%`}
+                series={[{ name: "UST 10Y", data: liveValues, color: "#FF8C00", area: true }]}
+              />
+              <div className="mt-1 flex items-center justify-between px-1 text-3xs text-term-text-mute">
+                <span>120 observations · daily</span>
+                <span className="tnum">
+                  latest {liveValues.length ? liveValues[liveValues.length - 1].toFixed(2) : "—"}%
+                </span>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel
+            title="Series Explorer"
+            code="GRAPH"
+            right={<Tag tone="blue">SIM HISTORY</Tag>}
+          >
+            <div className="flex flex-wrap gap-px border-b border-term-border bg-term-border">
+              {SELECTOR_IDS.map((id) => (
+                <button
+                  key={id}
+                  onClick={() => setSelectedId(id)}
+                  className={`px-2.5 py-1 text-2xs font-semibold transition-colors ${
+                    selectedId === id
+                      ? "bg-term-panel text-term-amber"
+                      : "bg-term-panel-2 text-term-text-mute hover:text-term-text"
+                  }`}
+                >
+                  {SELECTOR_LABEL[id]}
+                </button>
+              ))}
+            </div>
+            <div className="p-2">
+              <LineChart
+                height={150}
+                labels={selLabels}
+                yFmt={(n) => fmtNum(n, selMeta?.decimals ?? 2)}
+                series={[{ name: selectedId, data: selValues, color: "#3B9DFF", area: true }]}
+              />
+              <div className="mt-1 px-1 text-3xs text-term-text-mute">
+                {selMeta ? `${selMeta.label} · ${selMeta.unit}` : selectedId}
+              </div>
+            </div>
+          </Panel>
+        </div>
+
+        {/* Economic surprise */}
+        <div className="col-span-12 md:col-span-6 xl:col-span-5">
+          <Panel
+            title="Economic Surprise Index"
+            code="SURP"
+            right={<span className="text-3xs text-term-text-mute">actual − consensus</span>}
+          >
+            <div className="p-2">
+              <BarChart
+                data={surpriseBars}
+                horizontal
+                fmt={(n) => fmtSigned(n, 1)}
+              />
+            </div>
+          </Panel>
+        </div>
+
+        {/* Macro heat strip */}
+        <div className="col-span-12 md:col-span-6 xl:col-span-7">
+          <Panel title="Macro Heat — Breadth" code="HEAT">
+            <div className="grid grid-cols-2 gap-px bg-term-border sm:grid-cols-4">
+              {heatTiles.map((t) => {
+                const net = t.improving - t.deteriorating;
+                const tone: Tone = net > 0 ? "up" : net < 0 ? "down" : "neutral";
+                return (
+                  <div key={t.cat} className="bg-term-panel px-2.5 py-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-2xs font-semibold uppercase tracking-wide text-term-text-dim">
+                        {ECON_CATEGORY_LABEL[t.cat]}
+                      </span>
+                      <Tag tone={tone}>{net >= 0 ? `+${net}` : `${net}`}</Tag>
+                    </div>
+                    <div className="mt-1 flex items-center gap-3 text-2xs">
+                      <span className="tnum text-term-up">▲ {t.improving}</span>
+                      <span className="tnum text-term-down">▼ {t.deteriorating}</span>
+                      <span className="tnum ml-auto text-term-text-mute">{t.total} tot</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -10,6 +10,13 @@ import {
   LineChart,
   Bot,
   BellRing,
+  Globe,
+  Spline,
+  Percent,
+  CalendarClock,
+  Sigma,
+  BrainCircuit,
+  Banknote,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,7 +27,7 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   desc: string;
-  group: "MARKETS" | "FINANCE" | "OPTIMIZATION" | "DESK" | "INTELLIGENCE";
+  group: "MARKETS" | "FINANCE" | "OPTIMIZATION" | "DESK" | "ECONOMICS" | "INTELLIGENCE";
 }
 
 export const NAV: NavItem[] = [
@@ -33,6 +40,13 @@ export const NAV: NavItem[] = [
   { code: "SXU", label: "Sources & Uses", href: "/sources-uses", icon: GitMerge, desc: "Matching & internalization engine", group: "OPTIMIZATION" },
   { code: "OPT", label: "Optimization Center", href: "/optimization", icon: Cpu, desc: "Solver runs & impact analysis", group: "OPTIMIZATION" },
   { code: "DESK", label: "Trading Desk", href: "/trading-desk", icon: LineChart, desc: "Scorecards & execution analytics", group: "DESK" },
+  { code: "ECON", label: "Macro Dashboard", href: "/economics", icon: Globe, desc: "FRED-connected economic analytics", group: "ECONOMICS" },
+  { code: "CURV", label: "Treasury Curve Lab", href: "/economics/curve", icon: Spline, desc: "Curve shape, history & inversions", group: "ECONOMICS" },
+  { code: "FOMC", label: "Rate Probabilities", href: "/economics/rates", icon: Percent, desc: "Fed path & hike/cut odds", group: "ECONOMICS" },
+  { code: "CAL", label: "Economic Calendar", href: "/economics/calendar", icon: CalendarClock, desc: "Releases & events", group: "ECONOMICS" },
+  { code: "STAT", label: "Statistical Analysis", href: "/economics/stats", icon: Sigma, desc: "Correlations, regressions, regimes", group: "ECONOMICS" },
+  { code: "EML", label: "ML Applications", href: "/economics/ml", icon: BrainCircuit, desc: "Recession, nowcast & rate models", group: "ECONOMICS" },
+  { code: "SFE", label: "Sec-Finance Economics", href: "/economics/sec-finance", icon: Banknote, desc: "Rates → repo, funding & lending", group: "ECONOMICS" },
   { code: "AI", label: "AI Copilot", href: "/copilot", icon: Bot, desc: "Natural-language intelligence", group: "INTELLIGENCE" },
   { code: "ALRT", label: "Alert Center", href: "/alerts", icon: BellRing, desc: "Streaming risk & ops alerts", group: "INTELLIGENCE" },
 ];
@@ -42,5 +56,6 @@ export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [
   { id: "FINANCE", label: "Financing" },
   { id: "OPTIMIZATION", label: "Optimization" },
   { id: "DESK", label: "Trading Desk" },
+  { id: "ECONOMICS", label: "Economics & Macro" },
   { id: "INTELLIGENCE", label: "Intelligence" },
 ];

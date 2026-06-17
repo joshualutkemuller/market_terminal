@@ -1,0 +1,174 @@
+import { Rng } from "@/lib/rng";
+
+/**
+ * US Treasury yield curve — current & historical snapshots, shape analytics,
+ * and a full history of curve inversions with recession lead-times.
+ *
+ * Live mode maps each tenor to its FRED series (DGS1MO … DGS30); the simulation
+ * layer below is anchored to a plausible mid-2026 normalizing curve.
+ */
+
+export interface CurvePoint {
+  tenor: string;
+  months: number;
+  fredId: string;
+  yield: number;
+}
+
+export interface CurveSnapshot {
+  id: string;
+  label: string;
+  date: string;
+  points: CurvePoint[];
+  regime: string;
+}
+
+const TENORS: [string, number, string][] = [
+  ["1M", 1, "DGS1MO"],
+  ["3M", 3, "DGS3MO"],
+  ["6M", 6, "DGS6MO"],
+  ["1Y", 12, "DGS1"],
+  ["2Y", 24, "DGS2"],
+  ["3Y", 36, "DGS3"],
+  ["5Y", 60, "DGS5"],
+  ["7Y", 84, "DGS7"],
+  ["10Y", 120, "DGS10"],
+  ["20Y", 240, "DGS20"],
+  ["30Y", 360, "DGS30"],
+];
+
+/** Curve presets: yields by tenor index for several historical regimes. */
+const CURVE_PRESETS: { id: string; label: string; date: string; regime: string; yields: number[] }[] = [
+  { id: "now", label: "Today", date: "2026-06-17", regime: "Normalizing / mild front inversion", yields: [4.3, 4.25, 4.15, 3.95, 3.74, 3.7, 3.8, 3.95, 4.11, 4.45, 4.35] },
+  { id: "1m", label: "1M Ago", date: "2026-05-17", regime: "Normalizing", yields: [4.33, 4.29, 4.19, 3.99, 3.79, 3.74, 3.83, 3.98, 4.14, 4.47, 4.37] },
+  { id: "3m", label: "3M Ago", date: "2026-03-17", regime: "Early steepening", yields: [4.4, 4.36, 4.25, 4.05, 3.86, 3.8, 3.87, 4.0, 4.16, 4.49, 4.39] },
+  { id: "6m", label: "6M Ago", date: "2025-12-17", regime: "Bull steepening (cuts begin)", yields: [4.55, 4.5, 4.38, 4.18, 3.98, 3.9, 3.93, 4.04, 4.18, 4.5, 4.4] },
+  { id: "1y", label: "1Y Ago", date: "2025-06-17", regime: "Inverted front, flat belly", yields: [5.3, 5.32, 5.2, 4.9, 4.55, 4.4, 4.3, 4.3, 4.35, 4.6, 4.5] },
+  { id: "2y", label: "2Y Ago (peak inversion)", date: "2024-06-17", regime: "Deeply inverted (2s10s ≈ -48bps)", yields: [5.4, 5.45, 5.4, 5.15, 4.72, 4.55, 4.35, 4.3, 4.24, 4.5, 4.38] },
+  { id: "preHike", label: "Pre-Hiking (2021)", date: "2021-06-17", regime: "ZIRP — steep, near-zero front", yields: [0.04, 0.05, 0.06, 0.09, 0.25, 0.46, 0.89, 1.25, 1.5, 2.05, 2.15] },
+  { id: "gfc", label: "GFC Trough (2009)", date: "2009-06-17", regime: "Crisis — ultra-steep, ZIRP front", yields: [0.17, 0.19, 0.31, 0.51, 1.21, 1.78, 2.79, 3.45, 3.79, 4.5, 4.55] },
+];
+
+export function getCurveSnapshots(): CurveSnapshot[] {
+  return CURVE_PRESETS.map((p) => ({
+    id: p.id,
+    label: p.label,
+    date: p.date,
+    regime: p.regime,
+    points: TENORS.map(([tenor, months, fredId], i) => ({ tenor, months, fredId, yield: p.yields[i] })),
+  }));
+}
+
+export function getCurrentCurve(): CurveSnapshot {
+  return getCurveSnapshots()[0];
+}
+
+export interface CurveMetrics {
+  s2s10: number; // 10Y - 2Y, bps
+  s3m10: number; // 10Y - 3M, bps
+  s5s30: number; // 30Y - 5Y, bps
+  level: number; // avg yield
+  slope: number; // 30Y - 1M, bps
+  curvature: number; // 2*5Y - 2Y - 10Y (butterfly), bps
+  inverted2s10: boolean;
+  inverted3m10: boolean;
+  shape: "Normal" | "Flat" | "Inverted" | "Humped" | "Steep";
+}
+
+export function getCurveMetrics(snap?: CurveSnapshot): CurveMetrics {
+  const c = snap ?? getCurrentCurve();
+  const y = (t: string) => c.points.find((p) => p.tenor === t)!.yield;
+  const s2s10 = (y("10Y") - y("2Y")) * 100;
+  const s3m10 = (y("10Y") - y("3M")) * 100;
+  const s5s30 = (y("30Y") - y("5Y")) * 100;
+  const level = c.points.reduce((a, p) => a + p.yield, 0) / c.points.length;
+  const slope = (y("30Y") - y("1M")) * 100;
+  const curvature = (2 * y("5Y") - y("2Y") - y("10Y")) * 100;
+  let shape: CurveMetrics["shape"] = "Normal";
+  if (s2s10 < -5) shape = "Inverted";
+  else if (Math.abs(s2s10) <= 15) shape = "Flat";
+  else if (slope > 250) shape = "Steep";
+  if (curvature < -25) shape = "Humped";
+  return {
+    s2s10, s3m10, s5s30, level, slope, curvature,
+    inverted2s10: s2s10 < 0,
+    inverted3m10: s3m10 < 0,
+    shape,
+  };
+}
+
+/** Long history of the 2s10s spread (bps) for the inversion timeline. */
+export function getSpreadHistory(years = 50): { date: string; s2s10: number; recession: boolean }[] {
+  // Key turning points (year, approx 2s10s bps) — interpolated between.
+  const knots: [number, number][] = [
+    [1976, 60], [1978, -40], [1980, -180], [1982, 30], [1985, 90], [1988, -20], [1989, -40],
+    [1990, 10], [1992, 180], [1994, 50], [1998, 30], [2000, -50], [2001, 40], [2003, 200],
+    [2006, -15], [2007, 5], [2009, 270], [2011, 200], [2013, 230], [2015, 130], [2018, 25],
+    [2019, -5], [2020, 50], [2021, 120], [2022, -55], [2023, -48], [2024, -10], [2025, 25], [2026.45, 37],
+  ];
+  const recessions: [number, number][] = [
+    [1980, 1980.5], [1981.5, 1982.9], [1990.5, 1991.2], [2001.2, 2001.9], [2007.95, 2009.45], [2020.15, 2020.45],
+  ];
+  const out: { date: string; s2s10: number; recession: boolean }[] = [];
+  const start = 2026.45 - years;
+  const rng = new Rng("spread-hist");
+  for (let t = start; t <= 2026.45; t += 0.25) {
+    // linear interp between knots
+    let v = knots[knots.length - 1][1];
+    for (let k = 0; k < knots.length - 1; k++) {
+      if (t >= knots[k][0] && t <= knots[k + 1][0]) {
+        const f = (t - knots[k][0]) / (knots[k + 1][0] - knots[k][0]);
+        v = knots[k][1] + f * (knots[k + 1][1] - knots[k][1]);
+        break;
+      }
+    }
+    v += rng.normal(0, 6);
+    const recession = recessions.some(([a, b]) => t >= a && t <= b);
+    const year = Math.floor(t);
+    const q = Math.floor((t - year) * 4) + 1;
+    out.push({ date: `${year}Q${q}`, s2s10: Number(v.toFixed(0)), recession });
+  }
+  return out;
+}
+
+export interface Inversion {
+  id: string;
+  invertedDate: string;
+  unInvertedDate: string;
+  durationMonths: number;
+  maxDepthBps: number;
+  recessionFollowed: boolean;
+  recessionStart: string | null;
+  leadTimeMonths: number | null;
+  note: string;
+}
+
+/** Every meaningful 2s10s inversion since the mid-1970s with recession lead-time. */
+export function getInversionHistory(): Inversion[] {
+  return [
+    { id: "1978", invertedDate: "Aug 1978", unInvertedDate: "May 1980", durationMonths: 21, maxDepthBps: -241, recessionFollowed: true, recessionStart: "Jan 1980", leadTimeMonths: 17, note: "Volcker-era; double-dip recession" },
+    { id: "1980", invertedDate: "Sep 1980", unInvertedDate: "Oct 1981", durationMonths: 13, maxDepthBps: -170, recessionFollowed: true, recessionStart: "Jul 1981", leadTimeMonths: 10, note: "Second leg of double-dip" },
+    { id: "1988", invertedDate: "Dec 1988", unInvertedDate: "Mar 1990", durationMonths: 15, maxDepthBps: -41, recessionFollowed: true, recessionStart: "Jul 1990", leadTimeMonths: 19, note: "Pre-Gulf War recession" },
+    { id: "2000", invertedDate: "Feb 2000", unInvertedDate: "Dec 2000", durationMonths: 10, maxDepthBps: -51, recessionFollowed: true, recessionStart: "Mar 2001", leadTimeMonths: 13, note: "Dot-com bust" },
+    { id: "2006", invertedDate: "Jun 2006", unInvertedDate: "May 2007", durationMonths: 11, maxDepthBps: -19, recessionFollowed: true, recessionStart: "Dec 2007", leadTimeMonths: 18, note: "Global Financial Crisis" },
+    { id: "2019", invertedDate: "Aug 2019", unInvertedDate: "Oct 2019", durationMonths: 2, maxDepthBps: -5, recessionFollowed: true, recessionStart: "Feb 2020", leadTimeMonths: 6, note: "Brief; COVID shock followed" },
+    { id: "2022", invertedDate: "Jul 2022", unInvertedDate: "Sep 2024", durationMonths: 26, maxDepthBps: -108, recessionFollowed: false, recessionStart: null, leadTimeMonths: null, note: "Longest inversion on record; soft landing (no NBER recession to date)" },
+  ];
+}
+
+export function getInversionStats() {
+  const h = getInversionHistory().filter((i) => i.leadTimeMonths !== null);
+  const leads = h.map((i) => i.leadTimeMonths!) as number[];
+  const depths = getInversionHistory().map((i) => i.maxDepthBps);
+  const all = getInversionHistory();
+  return {
+    total: all.length,
+    recessionRate: (all.filter((i) => i.recessionFollowed).length / all.length) * 100,
+    avgLeadMonths: leads.reduce((a, b) => a + b, 0) / leads.length,
+    minLeadMonths: Math.min(...leads),
+    maxLeadMonths: Math.max(...leads),
+    avgDepthBps: depths.reduce((a, b) => a + b, 0) / depths.length,
+    deepestBps: Math.min(...depths),
+    longestMonths: Math.max(...all.map((i) => i.durationMonths)),
+  };
+}
