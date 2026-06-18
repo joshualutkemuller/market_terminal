@@ -12,9 +12,12 @@ import { useLiveCurve } from "@/lib/useEcon";
 import {
   getCurveSnapshots,
   getCurveMetrics,
-  getSpreadHistory,
-  getInversionHistory,
   getInversionStats,
+  getSpreadSeriesFor,
+  getInversionsForSpread,
+  currentSpreadBps,
+  spreadDef,
+  SPREAD_DEFS,
   type CurveSnapshot,
   type CurvePoint,
   type Inversion,
@@ -48,6 +51,7 @@ export default function TreasuryCurveLab() {
 
   const [overlay, setOverlay] = useState<Set<string>>(new Set(["now", "1y", "2y"]));
   const [focusedId, setFocusedId] = useState<string>("now");
+  const [spreadId, setSpreadId] = useState<string>("10Y2Y");
   const focused = snapshots.find((s) => s.id === focusedId) ?? today;
   const focusedMetrics = getCurveMetrics(focused);
 
@@ -99,13 +103,15 @@ export default function TreasuryCurveLab() {
     },
   ];
 
-  // Spread history (2s10s) for the inversion timeline.
-  const spreadHist = getSpreadHistory();
+  // User-selectable spread for the inversion analysis (default 10Y-2Y).
+  const def = spreadDef(spreadId);
+  const spreadHist = getSpreadSeriesFor(spreadId);
   const recessionQuarters = spreadHist.filter((d) => d.recession).map((d) => d.date);
+  const currentSpread = currentSpreadBps(spreadId, live.data);
 
-  // Historical inversions.
-  const inversions = getInversionHistory();
-  const stats = getInversionStats();
+  // Historical inversions of the selected spread.
+  const inversions = getInversionsForSpread(spreadId);
+  const stats = getInversionStats(spreadId);
 
   const invCols: Column<Inversion>[] = [
     { key: "inv", header: "Inverted", render: (r) => <span className="text-term-text">{r.invertedDate}</span> },
@@ -255,16 +261,37 @@ export default function TreasuryCurveLab() {
         </Panel>
 
         {/* INVERSION TIMELINE */}
-        <Panel title="2s10s Inversion Timeline" code="HIST">
+        <Panel
+          title={`${def.label} Inversion Timeline`}
+          code="HIST"
+          right={
+            <div className="flex items-center gap-2">
+              <span className={`tnum text-2xs ${pnlClass(currentSpread)}`}>{fmtSigned(currentSpread, 0)}bps</span>
+              <select
+                value={spreadId}
+                onChange={(e) => setSpreadId(e.target.value)}
+                className="border border-term-border bg-term-panel-3 px-1.5 py-0.5 text-2xs text-term-amber outline-none hover:border-term-amber"
+                title="Choose curve spread to analyze"
+              >
+                {SPREAD_DEFS.map((s) => (
+                  <option key={s.id} value={s.id} className="bg-term-panel text-term-text">
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          }
+        >
           <div className="p-2">
             <LineChart
-              series={[{ name: "2s10s", data: spreadHist.map((d) => d.s2s10), color: "#FF8C00", area: true }]}
+              series={[{ name: def.label, data: spreadHist.map((d) => d.value), color: "#FF8C00", area: true }]}
               labels={spreadHist.map((d) => d.date)}
               height={200}
               yFmt={(n) => `${n.toFixed(0)}`}
             />
             <div className="mt-1 px-1 text-3xs text-term-text-mute">
-              Spread in bps; values below the <span className="text-term-down">zero line</span> mark inverted regimes (long-rates below 2Y).
+              <span className="text-term-amber">{def.label}</span> ({def.desc}) in bps; values below the{" "}
+              <span className="text-term-down">zero line</span> mark inverted regimes ({def.longT} below {def.shortT}).
             </div>
             <div className="mt-1 px-1 text-3xs text-term-text-dim">
               <span className="text-term-text-mute">Recession quarters:</span>{" "}
@@ -274,7 +301,7 @@ export default function TreasuryCurveLab() {
         </Panel>
 
         {/* HISTORICAL INVERSIONS */}
-        <Panel title="Historical Inversions" code="INVT" accent className="xl:col-span-2">
+        <Panel title={`Historical Inversions — ${def.label}`} code="INVT" accent className="xl:col-span-2">
           <div className="grid grid-cols-2 divide-x divide-term-border border-b border-term-border sm:grid-cols-4">
             <Stat label="Recession Hit-Rate" value={`${fmtNum(stats.recessionRate, 0)}%`} sub={`${stats.total} inversions`} tone="down" />
             <Stat label="Avg Lead" value={`${fmtNum(stats.avgLeadMonths, 1)} mo`} sub={`${stats.minLeadMonths}–${stats.maxLeadMonths} mo range`} tone="amber" />
@@ -300,7 +327,7 @@ export default function TreasuryCurveLab() {
             <li className="flex gap-2">
               <span className="text-term-amber">▸</span>
               <span>
-                Since the mid-1970s, <span className="text-term-amber">{fmtNum(stats.recessionRate, 0)}%</span> of 2s10s inversions
+                Since the mid-1970s, <span className="text-term-amber">{fmtNum(stats.recessionRate, 0)}%</span> of <span className="text-term-amber">{def.label}</span> inversions
                 preceded an NBER recession, with an average lead of <span className="text-term-amber">{fmtNum(stats.avgLeadMonths, 1)} months</span>{" "}
                 (range {stats.minLeadMonths}–{stats.maxLeadMonths}mo) — a slow, not immediate, signal.
               </span>
@@ -308,7 +335,8 @@ export default function TreasuryCurveLab() {
             <li className="flex gap-2">
               <span className="text-term-amber">▸</span>
               <span>
-                Current 2s10s is <span className={pnlClass(liveMetrics.s2s10)}>{fmtSigned(liveMetrics.s2s10, 0)}bps</span> and 3m10y is{" "}
+                The selected <span className="text-term-amber">{def.label}</span> spread is <span className={pnlClass(currentSpread)}>{fmtSigned(currentSpread, 0)}bps</span>;
+                2s10s is <span className={pnlClass(liveMetrics.s2s10)}>{fmtSigned(liveMetrics.s2s10, 0)}bps</span> and 3m10y is{" "}
                 <span className={pnlClass(liveMetrics.s3m10)}>{fmtSigned(liveMetrics.s3m10, 0)}bps</span>; the curve reads{" "}
                 <span className="text-term-amber">{liveMetrics.shape}</span>
                 {liveMetrics.inverted2s10 ? " — still flashing the classic warning." : " — having re-steepened out of inversion."}

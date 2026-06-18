@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
@@ -11,9 +12,11 @@ import {
   getFomcMeetings,
   getImpliedPath,
   getDotPlot,
+  getPolicyPathHistory,
+  POLICY_PATH_HORIZONS,
   type FomcMeeting,
 } from "@/data/econRates";
-import { fmtNum } from "@/lib/format";
+import { fmtNum, fmtSigned } from "@/lib/format";
 
 const CUT_COLOR = "#2ECC71";
 const HOLD_COLOR = "#5E5E66";
@@ -46,6 +49,15 @@ export default function RateProbabilitiesPage() {
   const meetings = getFomcMeetings();
   const path = getImpliedPath();
   const dot = getDotPlot();
+  const pathHistory = getPolicyPathHistory();
+  const [selPaths, setSelPaths] = useState<Set<string>>(new Set([pathHistory[0].asOf, "2026-05-17", "2025-12-17"]));
+  const togglePath = (asOf: string) =>
+    setSelPaths((s) => {
+      const n = new Set(s);
+      n.has(asOf) ? n.delete(asOf) : n.add(asOf);
+      return n;
+    });
+  const shownPaths = pathHistory.filter((p) => selPaths.has(p.asOf));
 
   const first = meetings[0];
   const last = path[path.length - 1];
@@ -148,18 +160,64 @@ export default function RateProbabilitiesPage() {
             <DataGrid columns={gridCols} rows={meetings} rowKey={(m) => m.date} initialSort={{ key: "days", dir: "asc" }} />
           </Panel>
 
-          <Panel title="Implied Policy Path" code="PATH" right={<span className="tnum text-2xs text-term-text-dim">{fmtNum(CURRENT_TARGET.mid, 2)}% → {fmtNum(terminalRate, 2)}%</span>}>
+          <Panel
+            title="Policy Path Evolution"
+            code="PATH"
+            right={<span className="tnum text-2xs text-term-text-dim">forward EFFR · {shownPaths.length} dates</span>}
+          >
             <div className="p-2">
+              {/* As-of date selector — toggle which historical prints to overlay */}
+              <div className="mb-1.5 flex flex-wrap gap-1">
+                {pathHistory.map((p) => {
+                  const on = selPaths.has(p.asOf);
+                  return (
+                    <button
+                      key={p.asOf}
+                      onClick={() => togglePath(p.asOf)}
+                      className={`flex items-center gap-1 border px-1.5 py-0.5 text-3xs transition-colors ${on ? "border-term-amber text-term-text" : "border-term-border text-term-text-mute hover:text-term-text-dim"}`}
+                      title={`Path as priced on ${p.asOf}`}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: on ? p.color : "#3a3a40" }} />
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
               <LineChart
-                height={170}
+                height={180}
                 grid
-                labels={path.map((p) => p.label)}
+                labels={POLICY_PATH_HORIZONS}
                 yFmt={(n) => `${n.toFixed(2)}%`}
-                series={[{ name: "Implied EFFR", data: path.map((p) => p.rate), color: "#FF8C00", area: true }]}
+                series={shownPaths.map((p) => ({ name: p.label, data: p.path.map((x) => x.rate), color: p.color, area: false }))}
               />
-              <div className="mt-1 flex justify-between px-1 text-3xs text-term-text-mute">
-                <span>Start <span className="tnum text-term-text-dim">{fmtNum(path[0].rate, 3)}%</span></span>
-                <span>Terminal <span className="tnum text-term-amber">{fmtNum(terminalRate, 2)}%</span></span>
+              {/* Legend with the EXACT as-of date each path was generated */}
+              <div className="mt-1.5 max-h-[92px] overflow-auto border-t border-term-border-soft">
+                <table className="w-full tnum">
+                  <thead>
+                    <tr className="text-3xs uppercase text-term-text-mute">
+                      <th className="px-1 py-0.5 text-left font-semibold">Path (as of)</th>
+                      <th className="px-1 py-0.5 text-right font-semibold">Date</th>
+                      <th className="px-1 py-0.5 text-right font-semibold">Terminal</th>
+                      <th className="px-1 py-0.5 text-right font-semibold">Cuts</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shownPaths.map((p) => (
+                      <tr key={p.asOf} className="border-b border-term-border-soft">
+                        <td className="px-1 py-0.5 text-left text-2xs">
+                          <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle" style={{ background: p.color }} />
+                          <span className="text-term-text">{p.label}</span>
+                        </td>
+                        <td className="px-1 py-0.5 text-right text-2xs text-term-text-dim">{p.asOf}</td>
+                        <td className="px-1 py-0.5 text-right text-2xs text-term-amber">{fmtNum(p.terminalRate, 2)}%</td>
+                        <td className="px-1 py-0.5 text-right text-2xs text-term-up">{fmtSigned(-p.cutsImplied, 1)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-1 px-1 text-3xs text-term-text-mute">
+                Each line is the forward fed-funds path priced on its <span className="text-term-amber">as-of date</span> — the drift shows how cuts have been re-priced over time.
               </div>
             </div>
           </Panel>

@@ -20,6 +20,7 @@ import {
   Flame,
   Globe2,
   Gavel,
+  SquareStack,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,6 +49,7 @@ export const NAV: NavItem[] = [
   { code: "INFL", label: "Inflation Explorer", href: "/economics/inflation", icon: Flame, desc: "CPI/PCE to item level, MoM & YoY", group: "ECONOMICS" },
   { code: "GCPI", label: "Global Inflation", href: "/economics/global-cpi", icon: Globe2, desc: "CPI by country, trend & streaks", group: "ECONOMICS" },
   { code: "GPOL", label: "Global Policy Rates", href: "/economics/policy-rates", icon: Gavel, desc: "Central-bank rates & cycles", group: "ECONOMICS" },
+  { code: "CRDT", label: "Credit Spreads", href: "/economics/credit", icon: SquareStack, desc: "IG/HY OAS deep dive & stress", group: "ECONOMICS" },
   { code: "FOMC", label: "Rate Probabilities", href: "/economics/rates", icon: Percent, desc: "Fed path & hike/cut odds", group: "ECONOMICS" },
   { code: "CAL", label: "Economic Calendar", href: "/economics/calendar", icon: CalendarClock, desc: "Releases & events", group: "ECONOMICS" },
   { code: "STAT", label: "Statistical Analysis", href: "/economics/stats", icon: Sigma, desc: "Correlations, regressions, regimes", group: "ECONOMICS" },

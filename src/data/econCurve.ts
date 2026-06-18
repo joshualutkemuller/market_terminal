@@ -156,19 +156,145 @@ export function getInversionHistory(): Inversion[] {
   ];
 }
 
-export function getInversionStats() {
-  const h = getInversionHistory().filter((i) => i.leadTimeMonths !== null);
-  const leads = h.map((i) => i.leadTimeMonths!) as number[];
-  const depths = getInversionHistory().map((i) => i.maxDepthBps);
-  const all = getInversionHistory();
+export function getInversionStats(spreadId = "10Y2Y") {
+  const all = getInversionsForSpread(spreadId);
+  const leads = all.filter((i) => i.leadTimeMonths !== null).map((i) => i.leadTimeMonths!) as number[];
+  const depths = all.map((i) => i.maxDepthBps);
   return {
     total: all.length,
-    recessionRate: (all.filter((i) => i.recessionFollowed).length / all.length) * 100,
-    avgLeadMonths: leads.reduce((a, b) => a + b, 0) / leads.length,
-    minLeadMonths: Math.min(...leads),
-    maxLeadMonths: Math.max(...leads),
-    avgDepthBps: depths.reduce((a, b) => a + b, 0) / depths.length,
-    deepestBps: Math.min(...depths),
-    longestMonths: Math.max(...all.map((i) => i.durationMonths)),
+    recessionRate: (all.filter((i) => i.recessionFollowed).length / Math.max(1, all.length)) * 100,
+    avgLeadMonths: leads.length ? leads.reduce((a, b) => a + b, 0) / leads.length : 0,
+    minLeadMonths: leads.length ? Math.min(...leads) : 0,
+    maxLeadMonths: leads.length ? Math.max(...leads) : 0,
+    avgDepthBps: depths.length ? depths.reduce((a, b) => a + b, 0) / depths.length : 0,
+    deepestBps: depths.length ? Math.min(...depths) : 0,
+    longestMonths: all.length ? Math.max(...all.map((i) => i.durationMonths)) : 0,
   };
+}
+
+/* ─────────────── Customizable curve spread (for inversion analysis) ─────────────── */
+
+export interface SpreadDef {
+  id: string;
+  label: string;
+  longT: string;
+  shortT: string;
+  fredId?: string;
+  desc: string;
+}
+
+/** Selectable curve spreads. 10Y-2Y is the default recession bellwether. */
+export const SPREAD_DEFS: SpreadDef[] = [
+  { id: "10Y2Y", label: "10Y − 2Y", longT: "10Y", shortT: "2Y", fredId: "T10Y2Y", desc: "Classic recession bellwether" },
+  { id: "10Y3M", label: "10Y − 3M", longT: "10Y", shortT: "3M", fredId: "T10Y3M", desc: "Fed/NY-Fed preferred model" },
+  { id: "30Y5Y", label: "30Y − 5Y", longT: "30Y", shortT: "5Y", desc: "Long-end steepness" },
+  { id: "10Y1Y", label: "10Y − 1Y", longT: "10Y", shortT: "1Y", desc: "Intermediate slope" },
+  { id: "5Y2Y", label: "5Y − 2Y", longT: "5Y", shortT: "2Y", desc: "Belly slope" },
+  { id: "2Y3M", label: "2Y − 3M", longT: "2Y", shortT: "3M", desc: "Front-end / hike expectations" },
+  { id: "30Y10Y", label: "30Y − 10Y", longT: "30Y", shortT: "10Y", desc: "Term-premium proxy" },
+];
+
+export function spreadDef(id: string): SpreadDef {
+  return SPREAD_DEFS.find((s) => s.id === id) ?? SPREAD_DEFS[0];
+}
+
+/** Current value of a spread (bps) from the live/sim current curve. */
+export function currentSpreadBps(spreadId: string, snap?: CurveSnapshot): number {
+  const def = spreadDef(spreadId);
+  const c = snap ?? getCurrentCurve();
+  const y = (t: string) => c.points.find((p) => p.tenor === t)?.yield ?? 0;
+  return (y(def.longT) - y(def.shortT)) * 100;
+}
+
+// Shared base path (2s10s, bps) + recession ranges (fractional years).
+const S2S10_KNOTS: [number, number][] = [
+  [1976, 60], [1978, -40], [1980, -180], [1982, 30], [1985, 90], [1988, -20], [1989, -40],
+  [1990, 10], [1992, 180], [1994, 50], [1998, 30], [2000, -50], [2001, 40], [2003, 200],
+  [2006, -15], [2007, 5], [2009, 270], [2011, 200], [2013, 230], [2015, 130], [2018, 25],
+  [2019, -5], [2020, 50], [2021, 120], [2022, -55], [2023, -48], [2024, -10], [2025, 25], [2026.45, 37],
+];
+const RECESSIONS: [number, number][] = [
+  [1980, 1980.5], [1981.5, 1982.9], [1990.5, 1991.2], [2001.2, 2001.9], [2007.95, 2009.45], [2020.15, 2020.45],
+];
+// Per-spread transform of the 2s10s base path: value = base*factor + offset.
+const SPREAD_TX: Record<string, { factor: number; offset: number }> = {
+  "10Y2Y": { factor: 1, offset: 0 },
+  "10Y3M": { factor: 1.18, offset: -22 },
+  "30Y5Y": { factor: 0.7, offset: 70 },
+  "10Y1Y": { factor: 1.1, offset: -8 },
+  "5Y2Y": { factor: 0.55, offset: 8 },
+  "2Y3M": { factor: 0.85, offset: -14 },
+  "30Y10Y": { factor: 0.45, offset: 42 },
+};
+
+function baseAt(t: number): number {
+  let v = S2S10_KNOTS[S2S10_KNOTS.length - 1][1];
+  for (let k = 0; k < S2S10_KNOTS.length - 1; k++) {
+    if (t >= S2S10_KNOTS[k][0] && t <= S2S10_KNOTS[k + 1][0]) {
+      const f = (t - S2S10_KNOTS[k][0]) / (S2S10_KNOTS[k + 1][0] - S2S10_KNOTS[k][0]);
+      v = S2S10_KNOTS[k][1] + f * (S2S10_KNOTS[k + 1][1] - S2S10_KNOTS[k][1]);
+      break;
+    }
+  }
+  return v;
+}
+
+function fracToLabel(t: number): { label: string; monthLabel: string } {
+  const year = Math.floor(t);
+  const q = Math.floor((t - year) * 4) + 1;
+  const m = Math.min(11, Math.floor((t - year) * 12));
+  const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m];
+  return { label: `${year}Q${q}`, monthLabel: `${mon} ${year}` };
+}
+
+/** Quarterly history of any spread (bps) with recession flags. */
+export function getSpreadSeriesFor(spreadId: string, years = 50): { date: string; value: number; recession: boolean }[] {
+  const tx = SPREAD_TX[spreadId] ?? SPREAD_TX["10Y2Y"];
+  const rng = new Rng(`spread-${spreadId}`);
+  const out: { date: string; value: number; recession: boolean }[] = [];
+  for (let t = 2026.45 - years; t <= 2026.45; t += 0.25) {
+    const value = Math.round(baseAt(t) * tx.factor + tx.offset + rng.normal(0, 6));
+    out.push({ date: fracToLabel(t).label, value, recession: RECESSIONS.some(([a, b]) => t >= a && t <= b) });
+  }
+  return out;
+}
+
+/** Inversions of a chosen spread with recession lead-times. 10Y-2Y uses the curated record. */
+export function getInversionsForSpread(spreadId: string): Inversion[] {
+  if (spreadId === "10Y2Y") return getInversionHistory();
+  const tx = SPREAD_TX[spreadId] ?? SPREAD_TX["10Y2Y"];
+  const step = 1 / 12;
+  const pts: { t: number; v: number }[] = [];
+  const rng = new Rng(`inv-${spreadId}`);
+  for (let t = 1976; t <= 2026.45; t += step) pts.push({ t, v: baseAt(t) * tx.factor + tx.offset + rng.normal(0, 3) });
+  const out: Inversion[] = [];
+  let i = 0;
+  while (i < pts.length) {
+    if (pts[i].v < 0) {
+      const start = i;
+      let depth = pts[i].v;
+      while (i < pts.length && pts[i].v < 0) {
+        depth = Math.min(depth, pts[i].v);
+        i++;
+      }
+      const startT = pts[start].t;
+      const endT = pts[Math.min(i, pts.length - 1)].t;
+      const durMonths = Math.round((endT - startT) * 12);
+      if (durMonths < 2) continue; // ignore single-month noise dips
+      const rec = RECESSIONS.find(([a]) => a >= startT);
+      const lead = rec ? Math.round((rec[0] - startT) * 12) : null;
+      out.push({
+        id: `${Math.floor(startT)}`,
+        invertedDate: fracToLabel(startT).monthLabel,
+        unInvertedDate: fracToLabel(endT).monthLabel,
+        durationMonths: durMonths,
+        maxDepthBps: Math.round(depth),
+        recessionFollowed: lead !== null && lead >= 0 && lead <= 36,
+        recessionStart: rec && lead !== null && lead <= 36 ? fracToLabel(rec[0]).monthLabel : null,
+        leadTimeMonths: rec && lead !== null && lead >= 0 && lead <= 36 ? lead : null,
+        note: spreadId === "10Y3M" ? "Fed-model signal" : `${spreadDef(spreadId).label} inversion`,
+      });
+    } else i++;
+  }
+  return out;
 }

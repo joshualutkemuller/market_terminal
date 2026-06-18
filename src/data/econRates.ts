@@ -60,6 +60,51 @@ export function getImpliedPath(): { label: string; rate: number }[] {
   return [{ label: "Now", rate: CURRENT_TARGET.mid }, ...m.map((x) => ({ label: x.label, rate: x.impliedRate }))];
 }
 
+export interface PathSnapshot {
+  asOf: string; // ISO date the path was priced
+  label: string;
+  startRate: number;
+  terminalRate: number;
+  cutsImplied: number; // 25bp-equivalent cuts to terminal
+  path: { label: string; rate: number }[];
+  color: string;
+}
+
+const PATH_HORIZONS = ["Spot", "+3M", "+6M", "+9M", "+12M", "+18M", "+24M"];
+
+/**
+ * How the market-implied policy path has evolved. Each snapshot is the forward
+ * fed-funds path as priced on its `asOf` date, so users can see the path drift
+ * (hawkish/dovish repricing) over time with the exact generation date surfaced.
+ */
+export function getPolicyPathHistory(): PathSnapshot[] {
+  // asOf, label, then-current rate, then-priced terminal, color
+  const defs: [string, string, number, number, string][] = [
+    ["2026-06-17", "Today", 4.125, 3.35, "#FF8C00"],
+    ["2026-06-10", "1 Week Ago", 4.125, 3.4, "#3B9DFF"],
+    ["2026-05-17", "1 Month Ago", 4.125, 3.28, "#2ECC71"],
+    ["2026-04-29", "Last FOMC (Apr 29)", 4.375, 3.42, "#A78BFA"],
+    ["2026-03-17", "3 Months Ago", 4.375, 3.55, "#22D3EE"],
+    ["2026-01-02", "Year Start", 4.625, 3.5, "#EC4899"],
+    ["2025-12-17", "6 Months Ago", 4.625, 3.15, "#FFB400"],
+  ];
+  return defs.map(([asOf, label, startRate, terminalRate, color]) => {
+    const path = PATH_HORIZONS.map((h, i) => {
+      // smooth ease from start toward terminal across the horizon
+      const f = i / (PATH_HORIZONS.length - 1);
+      const ease = 1 - Math.pow(1 - f, 1.7);
+      return { label: h, rate: Number((startRate + (terminalRate - startRate) * ease).toFixed(3)) };
+    });
+    return {
+      asOf, label, startRate, terminalRate,
+      cutsImplied: Number(((startRate - terminalRate) / 0.25).toFixed(1)),
+      path, color,
+    };
+  });
+}
+
+export const POLICY_PATH_HORIZONS = PATH_HORIZONS;
+
 export interface DotPlotDot {
   year: string;
   rate: number;
