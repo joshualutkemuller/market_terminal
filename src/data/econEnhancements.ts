@@ -69,6 +69,25 @@ export interface CreditSubstitution {
   rationale: string;
 }
 
+export interface TermFundingCarry {
+  tenor: string;
+  fundingBps: number;
+  reinvestYieldBps: number;
+  carryBps: number;
+  cut25CarryBps: number;
+  balanceSheetCostBps: number;
+  monthlyPnl: number;
+}
+
+export interface PolicyTransmission {
+  module: "REINV" | "CASH" | "COLL" | "OPT";
+  pathInput: string;
+  currentImpact: string;
+  shock25bp: number;
+  shock100bp: number;
+  action: string;
+}
+
 export function getSfeFactorLinks(): SfeFactorLink[] {
   return [
     { metric: "Cash reinvestment yield", macroFactorId: "SOFR", factorLabel: "SOFR", source: "FRED", sensitivityBps: 82, confidence: 89, deskUse: "Reset ladder yield and rebate economics" },
@@ -196,5 +215,28 @@ export function getCreditSubstitutions(): CreditSubstitution[] {
     { fromAsset: "Equity Index Collateral", toAsset: "UST 2Y-5Y", notional: 1.2e9, haircutSavings: 37e6, eligibilityGain: 18, rationale: "Reduce equity beta before risk-off transition probability rises." },
     { fromAsset: "BBB Credit", toAsset: "Agency MBS", notional: 640e6, haircutSavings: 13e6, eligibilityGain: 11, rationale: "Improve eligibility breadth while preserving yield pickup." },
     { fromAsset: "Bank CP", toAsset: "Tri-Party GC", notional: 420e6, haircutSavings: 8e6, eligibilityGain: 9, rationale: "Move term liquidity risk into secured overnight profile." },
+  ];
+}
+
+export function getTermFundingCarry(): TermFundingCarry[] {
+  const notionals = [6.5e9, 4.8e9, 3.6e9, 2.2e9];
+  const rows: Omit<TermFundingCarry, "monthlyPnl">[] = [
+    { tenor: "O/N", fundingBps: 431, reinvestYieldBps: 434, carryBps: 3, cut25CarryBps: 1, balanceSheetCostBps: 8 },
+    { tenor: "1M", fundingBps: 438, reinvestYieldBps: 448, carryBps: 10, cut25CarryBps: 8, balanceSheetCostBps: 10 },
+    { tenor: "3M", fundingBps: 426, reinvestYieldBps: 454, carryBps: 28, cut25CarryBps: 25, balanceSheetCostBps: 13 },
+    { tenor: "6M", fundingBps: 412, reinvestYieldBps: 462, carryBps: 50, cut25CarryBps: 44, balanceSheetCostBps: 18 },
+  ];
+  return rows.map((r, i) => ({
+    ...r,
+    monthlyPnl: (notionals[i] * (r.carryBps - r.balanceSheetCostBps)) / 10000 / 12,
+  }));
+}
+
+export function getPolicyTransmission(): PolicyTransmission[] {
+  return [
+    { module: "REINV", pathInput: "Implied EFFR path", currentImpact: "Cash collateral carry reprices lower as cuts arrive.", shock25bp: -2.1e6, shock100bp: -8.4e6, action: "Shorten reset profile and protect T+0 liquidity." },
+    { module: "CASH", pathInput: "SOFR funding curve", currentImpact: "Funding cost falls, but repo squeeze basis can offset cuts.", shock25bp: 2.8e6, shock100bp: 10.6e6, action: "Keep term repo capacity for event windows." },
+    { module: "COLL", pathInput: "Curve plus credit OAS", currentImpact: "Lower rates help HQLA carry; credit widening raises haircut drag.", shock25bp: 0.9e6, shock100bp: 2.7e6, action: "Prefer HQLA substitutions when OAS widens." },
+    { module: "OPT", pathInput: "Forward rates and shadow prices", currentImpact: "Solver should reprice funding, liquidity and balance-sheet penalties.", shock25bp: 3.2e6, shock100bp: 11.8e6, action: "Run policy-path scenario before allocation approval." },
   ];
 }
