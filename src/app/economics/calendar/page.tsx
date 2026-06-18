@@ -3,11 +3,14 @@
 import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { BarChart } from "@/components/charts/BarChart";
 import { SourceBadge } from "@/components/econ/SourceBadge";
+import { getCalendarSensitivity, getReleaseMoveSummaries, type CalendarSensitivityTag, type ReleaseMoveSummary } from "@/data/econEnhancements";
 import { useEconCalendar } from "@/lib/useEcon";
 import { useTick } from "@/lib/hooks";
 import type { EconEvent, EventImportance } from "@/data/econRates";
+import { fmtSigned } from "@/lib/format";
 
 const IMPORTANCES: (EventImportance | "ALL")[] = ["ALL", "HIGH", "MEDIUM", "LOW"];
 
@@ -21,6 +24,14 @@ function importanceDot(imp: EventImportance): string {
   if (imp === "HIGH") return "#FF8C00";
   if (imp === "MEDIUM") return "#3B9DFF";
   return "#5E5E66";
+}
+
+function sensitivityTone(tag: CalendarSensitivityTag): "up" | "down" | "amber" | "blue" | "violet" {
+  if (tag === "Rates P&L") return "amber";
+  if (tag === "Haircut Risk") return "down";
+  if (tag === "Borrow Demand") return "up";
+  if (tag === "Funding Liquidity") return "blue";
+  return "violet";
 }
 
 /** Parse a percent-ish string ("0.3%", "145k", "4.3%") to a number for beat/miss. */
@@ -46,6 +57,7 @@ function surprise(actual: string | null, consensus: string): { label: string; to
 
 export default function EconomicCalendarPage() {
   const { data: events, source } = useEconCalendar();
+  const moveSummaries = getReleaseMoveSummaries();
   const tick = useTick(2000);
   const [impFilter, setImpFilter] = useState<EventImportance | "ALL">("ALL");
   const [catFilter, setCatFilter] = useState<string>("ALL");
@@ -83,6 +95,14 @@ export default function EconomicCalendarPage() {
   const catCounts = categories
     .map((c) => ({ label: c, value: events.filter((e) => e.category === c).length, color: "#FF8C00" }))
     .sort((a, b) => b.value - a.value);
+
+  const moveCols: Column<ReleaseMoveSummary>[] = [
+    { key: "release", header: "Release", render: (r) => <span className="font-semibold text-term-text">{r.release}</span>, sortVal: (r) => r.release },
+    { key: "factor", header: "Factor", render: (r) => <span className="text-term-amber">{r.factor}</span>, sortVal: (r) => r.factor },
+    { key: "pre", header: "Pre", align: "right", render: (r) => <span className="text-term-text-dim">{fmtSigned(r.preMoveBps, 0)}</span>, sortVal: (r) => r.preMoveBps },
+    { key: "post", header: "Post", align: "right", render: (r) => <span className={r.postMoveBps >= 0 ? "text-term-up" : "text-term-down"}>{fmtSigned(r.postMoveBps, 0)}</span>, sortVal: (r) => r.postMoveBps },
+    { key: "impact", header: "Impact", align: "center", render: (r) => <Tag tone={sensitivityTone(r.deskImpact)}>{r.deskImpact}</Tag>, sortVal: (r) => r.deskImpact },
+  ];
 
   return (
     <div className="flex min-h-full flex-col">
@@ -140,6 +160,7 @@ export default function EconomicCalendarPage() {
                         const released = e.actual != null;
                         const isNext = nextEvent != null && e.id === nextEvent.id;
                         const sup = surprise(e.actual, e.consensus);
+                        const sensitivities = getCalendarSensitivity(e.name, e.category);
                         return (
                           <div
                             key={e.id}
@@ -169,6 +190,11 @@ export default function EconomicCalendarPage() {
                                   Actual <span className={`tnum ${released ? "text-term-amber" : "text-term-text-mute"}`}>{e.actual ?? "—"}</span>
                                 </span>
                                 {sup && <Tag tone={sup.tone}>{sup.label}</Tag>}
+                              </div>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {sensitivities.map((tag) => (
+                                  <Tag key={tag} tone={sensitivityTone(tag)}>{tag}</Tag>
+                                ))}
                               </div>
                             </div>
                           </div>
@@ -211,6 +237,10 @@ export default function EconomicCalendarPage() {
             <div className="p-2">
               <BarChart horizontal data={catCounts} fmt={(n) => `${n.toFixed(0)}`} />
             </div>
+          </Panel>
+
+          <Panel title="Pre/Post Release Factor Moves" code="MOVE" accent>
+            <DataGrid columns={moveCols} rows={moveSummaries} rowKey={(r) => `${r.release}-${r.factor}`} maxHeight="260px" initialSort={{ key: "post", dir: "desc" }} zebra />
           </Panel>
         </div>
       </div>

@@ -22,7 +22,8 @@ import {
   type CurvePoint,
   type Inversion,
 } from "@/data/econCurve";
-import { fmtNum, fmtSigned, fmtBps, pnlClass } from "@/lib/format";
+import { getTermFundingCarry, type TermFundingCarry } from "@/data/econEnhancements";
+import { fmtNum, fmtSigned, fmtBps, fmtUsdAbbr, pnlClass } from "@/lib/format";
 
 const PALETTE = ["#3B9DFF", "#2ECC71", "#A78BFA", "#22D3EE", "#EC4899", "#FFB400"];
 
@@ -108,6 +109,7 @@ export default function TreasuryCurveLab() {
   const spreadHist = getSpreadSeriesFor(spreadId);
   const recessionQuarters = spreadHist.filter((d) => d.recession).map((d) => d.date);
   const currentSpread = currentSpreadBps(spreadId, live.data);
+  const termCarry = getTermFundingCarry();
 
   // Historical inversions of the selected spread.
   const inversions = getInversionsForSpread(spreadId);
@@ -134,6 +136,16 @@ export default function TreasuryCurveLab() {
       sortVal: (r) => r.leadTimeMonths ?? -1,
     },
     { key: "note", header: "Note", render: (r) => <span className="text-2xs text-term-text-mute">{r.note}</span> },
+  ];
+
+  const carryCols: Column<TermFundingCarry>[] = [
+    { key: "tenor", header: "Tenor", align: "center", render: (r) => <Tag tone={r.tenor === "O/N" ? "up" : r.tenor === "6M" ? "amber" : "blue"}>{r.tenor}</Tag>, sortVal: (r) => r.tenor },
+    { key: "funding", header: "Funding", align: "right", render: (r) => <span className="text-term-text-dim">{fmtBps(r.fundingBps, 0)}</span>, sortVal: (r) => r.fundingBps },
+    { key: "yield", header: "Reinvest", align: "right", render: (r) => <span className="text-term-amber">{fmtBps(r.reinvestYieldBps, 0)}</span>, sortVal: (r) => r.reinvestYieldBps },
+    { key: "carry", header: "Carry", align: "right", render: (r) => <span className={pnlClass(r.carryBps)}>{fmtSigned(r.carryBps, 0)}</span>, sortVal: (r) => r.carryBps },
+    { key: "cut", header: "After -25", align: "right", render: (r) => <span className={pnlClass(r.cut25CarryBps)}>{fmtSigned(r.cut25CarryBps, 0)}</span>, sortVal: (r) => r.cut25CarryBps },
+    { key: "bs", header: "BS Cost", align: "right", render: (r) => <span className="text-term-down">{fmtBps(r.balanceSheetCostBps, 0)}</span>, sortVal: (r) => r.balanceSheetCostBps },
+    { key: "pnl", header: "Monthly P&L", align: "right", render: (r) => <span className={pnlClass(r.monthlyPnl)}>{fmtUsdAbbr(r.monthlyPnl)}</span>, sortVal: (r) => r.monthlyPnl },
   ];
 
   const leadBars = inversions
@@ -356,6 +368,16 @@ export default function TreasuryCurveLab() {
               </span>
             </li>
           </ul>
+        </Panel>
+
+        <Panel title="Term Funding Carry - O/N vs 1M/3M/6M" code="CARRY" accent className="xl:col-span-2">
+          <div className="grid grid-cols-1 gap-2 p-2 lg:grid-cols-[1.2fr_0.8fr]">
+            <DataGrid columns={carryCols} rows={termCarry} rowKey={(r) => r.tenor} maxHeight="220px" initialSort={{ key: "pnl", dir: "desc" }} zebra />
+            <BarChart horizontal data={termCarry.map((r) => ({ label: r.tenor, value: r.monthlyPnl, color: r.monthlyPnl >= 0 ? "#2ECC71" : "#FF3B3B" }))} fmt={(n) => fmtUsdAbbr(n)} />
+          </div>
+          <div className="border-t border-term-border px-2 py-1.5 text-2xs text-term-text-mute">
+            Carry = reinvestment yield minus funding and balance-sheet charge. This feeds REINV ladder choices and CASH funding path costs.
+          </div>
         </Panel>
       </div>
     </div>
