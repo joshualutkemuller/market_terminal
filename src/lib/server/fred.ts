@@ -10,27 +10,33 @@
  */
 
 const BASE = "https://api.stlouisfed.org/fred";
-const TTL_MS = 10 * 60 * 1000; // 10 minutes
+const DEFAULT_REVALIDATE = 600; // 10 minutes
 
-type CacheEntry = { at: number; data: unknown };
+type CacheEntry = { at: number; ttlMs: number; data: unknown };
 const cache = new Map<string, CacheEntry>();
 
 export function fredEnabled(): boolean {
   return Boolean(process.env.FRED_API_KEY);
 }
 
-async function fredGet<T>(path: string, params: Record<string, string>): Promise<T> {
+/**
+ * `revalidateSec` controls both the Next Data Cache and our in-memory TTL.
+ * Deep daily history (e.g. the curve point-in-time) only changes at its recent
+ * tail once a day, so callers pass a long window to cache it over time and avoid
+ * re-pulling decades of observations on every request.
+ */
+async function fredGet<T>(path: string, params: Record<string, string>, revalidateSec = DEFAULT_REVALIDATE): Promise<T> {
   const key = process.env.FRED_API_KEY;
   if (!key) throw new Error("FRED_API_KEY not configured");
   const qs = new URLSearchParams({ ...params, api_key: key, file_type: "json" }).toString();
   const url = `${BASE}${path}?${qs}`;
   const cached = cache.get(url);
-  if (cached && Date.now() - cached.at < TTL_MS) return cached.data as T;
+  if (cached && Date.now() - cached.at < cached.ttlMs) return cached.data as T;
 
-  const res = await fetch(url, { next: { revalidate: 600 } } as RequestInit);
+  const res = await fetch(url, { next: { revalidate: revalidateSec } } as RequestInit);
   if (!res.ok) throw new Error(`FRED ${res.status}: ${await res.text().catch(() => res.statusText)}`);
   const data = (await res.json()) as T;
-  cache.set(url, { at: Date.now(), data });
+  cache.set(url, { at: Date.now(), ttlMs: revalidateSec * 1000, data });
   return data;
 }
 
@@ -47,7 +53,7 @@ export interface FredObservation {
  */
 export async function fredSeries(
   seriesId: string,
-  opts: { start?: string; end?: string; limit?: number; units?: string; scale?: number } = {}
+  opts: { start?: string; end?: string; limit?: number; units?: string; scale?: number; revalidateSec?: number } = {}
 ): Promise<FredObservation[]> {
   const params: Record<string, string> = { series_id: seriesId, sort_order: "asc" };
   if (opts.start) params.observation_start = opts.start;
@@ -58,7 +64,7 @@ export async function fredSeries(
     params.limit = String(opts.limit + (opts.units && opts.units !== "lin" ? 14 : 1));
     params.sort_order = "desc";
   }
-  const json = await fredGet<{ observations: { date: string; value: string }[] }>("/series/observations", params);
+  const json = await fredGet<{ observations: { date: string; value: string }[] }>("/series/observations", params, opts.revalidateSec);
   const scale = opts.scale ?? 1;
   let obs = json.observations.map((o) => ({ date: o.date, value: o.value === "." ? null : Number(o.value) * scale }));
   if (opts.limit) obs = obs.reverse();

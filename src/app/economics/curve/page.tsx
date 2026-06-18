@@ -8,9 +8,8 @@ import { YieldCurve, type CurveLine } from "@/components/charts/YieldCurve";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { SourceBadge } from "@/components/econ/SourceBadge";
-import { useLiveCurve } from "@/lib/useEcon";
+import { useCurveSnapshots } from "@/lib/useEcon";
 import {
-  getCurveSnapshots,
   getCurveMetrics,
   getInversionStats,
   getSpreadSeriesFor,
@@ -42,13 +41,14 @@ function shapeTone(shape: string): "up" | "down" | "amber" | "neutral" | "blue" 
 }
 
 export default function TreasuryCurveLab() {
-  const live = useLiveCurve();
-  const snapshots = getCurveSnapshots();
+  // Real point-in-time snapshots (Today + historical) from each tenor's FRED
+  // daily history; falls back to the simulated presets without a key.
+  const { data: snapshots, source } = useCurveSnapshots();
   const today = snapshots.find((s) => s.id === "now") ?? snapshots[0];
   const todayY = (t: string) => today.points.find((p) => p.tenor === t)?.yield ?? 0;
 
-  // Live "now" curve metrics drive the KPI strip.
-  const liveMetrics = getCurveMetrics(live.data);
+  // The live "now" curve drives the KPI strip.
+  const liveMetrics = getCurveMetrics(today);
 
   const [overlay, setOverlay] = useState<Set<string>>(new Set(["now", "1y", "2y"]));
   const [focusedId, setFocusedId] = useState<string>("now");
@@ -108,7 +108,7 @@ export default function TreasuryCurveLab() {
   const def = spreadDef(spreadId);
   const spreadHist = getSpreadSeriesFor(spreadId);
   const recessionQuarters = spreadHist.filter((d) => d.recession).map((d) => d.date);
-  const currentSpread = currentSpreadBps(spreadId, live.data);
+  const currentSpread = currentSpreadBps(spreadId, today);
   const termCarry = getTermFundingCarry();
 
   // Historical inversions of the selected spread.
@@ -173,13 +173,13 @@ export default function TreasuryCurveLab() {
         code="CURV"
         title="Treasury Curve Lab"
         desc="Curve shape, history & inversions"
-        asOf={live.data.date}
-        right={<SourceBadge source={live.source} />}
+        asOf={today.date}
+        right={<SourceBadge source={source} />}
       />
 
       <KpiStrip>
-        <Stat label="10Y" value={`${fmtNum(live.data.points.find((p) => p.tenor === "10Y")?.yield ?? 0, 2)}%`} sub="DGS10" tone="amber" />
-        <Stat label="2Y" value={`${fmtNum(live.data.points.find((p) => p.tenor === "2Y")?.yield ?? 0, 2)}%`} sub="DGS2" />
+        <Stat label="10Y" value={`${fmtNum(todayY("10Y"), 2)}%`} sub="DGS10" tone="amber" />
+        <Stat label="2Y" value={`${fmtNum(todayY("2Y"), 2)}%`} sub="DGS2" />
         <Stat
           label="2s10s"
           value={fmtBps(liveMetrics.s2s10, 0)}
@@ -249,7 +249,14 @@ export default function TreasuryCurveLab() {
           title="Curve At A Point In Time"
           code="SCRB"
           className="xl:col-span-2"
-          right={<span className="text-3xs text-term-text-mute">{focused.regime}</span>}
+          right={
+            <span className="flex items-center gap-2 text-3xs text-term-text-mute">
+              <span className="tnum rounded-sm border border-term-border bg-term-panel-2 px-1.5 py-px font-semibold uppercase tracking-wide text-term-text-dim">
+                AS OF {focused.date}
+              </span>
+              <span className="hidden md:inline">{focused.regime}</span>
+            </span>
+          }
         >
           <div className="flex flex-wrap gap-1 border-b border-term-border px-2 py-2">
             {snapshots.map((s) => (

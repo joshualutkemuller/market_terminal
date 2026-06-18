@@ -63,6 +63,63 @@ export function getCurrentCurve(): CurveSnapshot {
   return getCurveSnapshots()[0];
 }
 
+/** Tenor definitions (label, months, FRED id) — used by the live history route. */
+export const CURVE_TENORS = TENORS;
+
+/** Month offsets (back from the latest data date) for the "recent" anchors.
+ *  Presets without an entry (preHike, gfc) resolve at their absolute date. */
+const ANCHOR_MONTHS: Record<string, number> = { now: 0, "1m": 1, "3m": 3, "6m": 6, "1y": 12, "2y": 24 };
+
+export type CurveHistory = Record<string, { date: string; value: number }[]>; // fredId -> ascending daily
+
+function shiftMonths(iso: string, months: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() - months);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Latest observation on/before `asOf` in an ascending series. */
+function valueAsOf(series: { date: string; value: number }[], asOf: string): { date: string; value: number } | null {
+  for (let i = series.length - 1; i >= 0; i--) if (series[i].date <= asOf) return series[i];
+  return null;
+}
+
+/**
+ * Build real point-in-time curve snapshots from per-tenor FRED daily history.
+ * Each preset's yields/date are overwritten with the actual values as-of the
+ * anchor date (relative offsets for now…2Y, absolute dates for the deep
+ * reference curves). Tenors with no data in the window keep their curated
+ * value, so the curve is always complete. Falls back to the presets when the
+ * history map is empty (no key / fetch failed).
+ */
+export function buildLiveSnapshots(history: CurveHistory): CurveSnapshot[] {
+  const presets = getCurveSnapshots();
+  const lastDates = Object.values(history)
+    .map((s) => (s.length ? s[s.length - 1].date : ""))
+    .filter(Boolean)
+    .sort();
+  if (!lastDates.length) return presets;
+  const latest = lastDates[lastDates.length - 1];
+
+  return presets.map((snap) => {
+    const months = ANCHOR_MONTHS[snap.id];
+    const anchor = months !== undefined ? shiftMonths(latest, months) : snap.date;
+    let refDate = months === 0 ? latest : anchor;
+    let matched = false;
+    const points = snap.points.map((p) => {
+      const series = history[p.fredId];
+      const hit = series ? valueAsOf(series, anchor) : null;
+      if (hit) {
+        matched = true;
+        if (p.tenor === "10Y") refDate = hit.date;
+        return { ...p, yield: Number(hit.value.toFixed(2)) };
+      }
+      return p; // keep curated value for tenors with no data in the window
+    });
+    return { ...snap, date: matched ? refDate : snap.date, points };
+  });
+}
+
 export interface CurveMetrics {
   s2s10: number; // 10Y - 2Y, bps
   s3m10: number; // 10Y - 3M, bps

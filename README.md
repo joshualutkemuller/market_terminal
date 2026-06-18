@@ -69,12 +69,16 @@ Client hooks render the simulation instantly, then transparently upgrade to live
 when the API reports it — so the UI never blocks or breaks.
 
 **Data as-of dates.** Rates/macro modules show a **`DATA AS OF <date>`** pill in the header
-so freshness is never ambiguous. The **Treasury Curve Lab** pulls the latest observation for
-every tenor (`DGS3MO…DGS30`) and stamps the header with the actual FRED observation date
-(its historical curve overlays and inversion history remain curated/computed). The **Macro
-Dashboard** shows the most recent observation date across its live indicators, and **Rate
-Probabilities** shows the Fed-funds-futures pricing date the FedWatch odds were derived from.
-Without a key, the pill reflects the simulation's anchor date alongside the amber `SIM` badge.
+so freshness is never ambiguous. The **Treasury Curve Lab** assembles **real point-in-time
+curves** — it pulls each tenor's full daily history (`DGS1MO…DGS30`) from FRED via
+`/api/econ/curve-history`, then builds the curve as-of Today and 1M/3M/6M/1Y/2Y ago from the
+actual observations (the point-in-time scrubber shows each curve's real `AS OF` date). The
+deep reference curves (Pre-Hiking 2021, GFC 2009), inversion history and term carry remain
+curated. That history fetch is cached for 6h (FRED serves decades of daily data directly, so
+no slow accumulation is needed — it's fetched once and reused). The **Macro Dashboard** shows
+the most recent observation date across its live indicators, and **Rate Probabilities** shows
+the Fed-funds-futures pricing date the FedWatch odds were derived from. Without a key, the
+pills reflect the simulation's anchor dates alongside the amber `SIM` badge.
 
 ```bash
 # Get a free key: https://fred.stlouisfed.org/docs/api/api_key.html
@@ -90,7 +94,7 @@ analytics/model modules are computed layers. Honest per-module status:
 | Module | Card values | Drill-down (24m) | Notes |
 |--------|-------------|------------------|-------|
 | Macro Dashboard | 🟢 Live (FRED, units-corrected) | 🟢 Live | `/api/econ/indicators` |
-| Treasury Curve Lab | 🟢 Live (today's curve) | 🟢 Live tenors | history, inversions, and term funding carry are curated/computed |
+| Treasury Curve Lab | 🟢 Live (today + point-in-time) | 🟢 Live tenors | real curves as-of Today/1M/3M/6M/1Y/2Y from FRED daily history (`/api/econ/curve-history`); deep reference curves (2021/2009), inversions & term carry are curated/computed |
 | Economic Calendar | 🟢 Live (FRED release dates) | — | `/api/econ/calendar`; release sensitivities and factor moves are computed |
 | Inflation Explorer | 🟢 Live (index → derived MoM/YoY/accel) | 🟢 Live | CPI/PCE component FRED ids; per-item fallback to sim |
 | Global Inflation | 🟢 Live (most countries) | 🟢 Live | OECD-on-FRED CPI; per-country fallback to sim |
