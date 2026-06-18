@@ -96,6 +96,24 @@ def test_manifest(client):
     assert len(r.json()["manifest"]) > 0
 
 
+def test_serving_table_has_all_views(client):
+    """The pipeline materializes all 6 terminal views into analytics_api_views
+    so the UI can read the DB/file directly instead of the FastAPI service."""
+    import json as _json
+
+    import market_data_pipeline.src.api.app as app_mod
+    from market_data_pipeline.src.storage.duckdb_store import DuckDBStore
+
+    with DuckDBStore(app_mod.service.db_path) as s:
+        rows = s.query("SELECT view, payload_json FROM analytics_api_views")
+    views = set(rows["view"].to_list())
+    assert views == {"market", "cross-asset", "rates", "inflation", "regime", "bilello"}
+    # every payload is valid JSON matching the API shape
+    payloads = {r["view"]: _json.loads(r["payload_json"]) for r in rows.to_dicts()}
+    assert len(payloads["market"]["cards"]) > 0
+    assert -100 <= payloads["regime"]["composite"]["score"] <= 100
+
+
 def test_no_nan_in_payloads(client):
     import math
 

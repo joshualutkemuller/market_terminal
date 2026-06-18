@@ -9,6 +9,8 @@ tables are rebuilt from the normalized layer at the end of a run.
 
 from __future__ import annotations
 
+import json
+import math
 import uuid
 from datetime import date, datetime, timezone
 
@@ -32,6 +34,28 @@ from market_data_pipeline.src.transforms.normalize import normalize_macro, norma
 
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _json_clean(obj):
+    """Recursively coerce NaN/Inf → None so payloads are valid JSON."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _json_clean(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_json_clean(v) for v in obj]
+    return obj
+
+
+def _extract_asof(payload: dict) -> date | None:
+    """Best-effort as-of date from a view payload."""
+    val = payload.get("asof")
+    if not val and isinstance(payload.get("cards"), list) and payload["cards"]:
+        val = payload["cards"][0].get("asof")
+    try:
+        return date.fromisoformat(str(val)[:10]) if val else None
+    except ValueError:
+        return None
 
 
 class Pipeline:
@@ -224,6 +248,93 @@ class Pipeline:
         # inflation
         infl = analytics.inflation_dashboard(macro)
         self.store.replace_table("analytics_inflation_dashboard", _cards_to_frame(infl, run_id))
+
+        # serving table — full JSON payloads the UI can read straight from the DB
+        self.materialize_api_views(run_id, prices=prices, macro=macro)
+
+    # ------------------------------------------------------------------
+    # Serving views (read directly by the terminal — DB or file)
+    # ------------------------------------------------------------------
+
+    def build_api_views(
+        self, prices: pl.DataFrame, macro: pl.DataFrame
+    ) -> dict[str, dict]:
+        """Build the 6 terminal view payloads (identical to the FastAPI shapes)."""
+        ca = analytics.cross_asset_dashboard(prices)
+        return _json_clean({
+            "market": {"cards": analytics.market_snapshot(prices)},
+            "cross-asset": ca,
+            "rates": analytics.rates_dashboard(macro),
+            "inflation": {"cards": analytics.inflation_dashboard(macro)},
+            "regime": analytics.regime_dashboard(prices, macro),
+            "bilello": {
+                "best_worst_ytd": analytics.best_worst_ytd(prices),
+                "asset_class_returns_by_year": analytics.asset_class_returns_by_year(prices),
+                "current_drawdowns": analytics.current_drawdowns(prices),
+                "rate_moves_ranked": analytics.rate_moves_ranked(macro),
+                "inflation_vs_policy_gap": analytics.inflation_vs_policy_gap(macro),
+                "unemployment_vs_longrun": analytics.unemployment_vs_longrun(macro),
+            },
+        })
+
+    def materialize_api_views(
+        self,
+        run_id: str,
+        prices: pl.DataFrame | None = None,
+        macro: pl.DataFrame | None = None,
+    ) -> dict[str, dict]:
+        """Compute and upsert all terminal views into ``analytics_api_views``.
+
+        The terminal can then read a single table (``SELECT payload_json FROM
+        analytics_api_views WHERE view = ?``) from the DuckDB/Postgres file
+        instead of calling the FastAPI service.
+        """
+        if prices is None or macro is None:
+            df = self.store.normalized()
+            prices = df.filter(pl.col("asset_class").is_in(
+                ["EQUITY", "BOND", "COMMODITY", "CREDIT", "VOLATILITY", "CURRENCY"]))
+            macro = df.filter(pl.col("asset_class").str.starts_with("MACRO"))
+        views = self.build_api_views(prices, macro)
+        now = _now()
+        rows = []
+        for view, payload in views.items():
+            asof = _extract_asof(payload)
+            rows.append({
+                "view": view,
+                "payload_json": json.dumps(payload, default=str),
+                "as_of": asof,
+                "ingestion_run_id": run_id,
+                "updated_at": now,
+            })
+        frame = pl.DataFrame(rows, schema_overrides={"as_of": pl.Date})
+        self.store.upsert("analytics_api_views", frame, ["view"])
+        return views
+
+    def export_api_views(self, out_dir, run_id: str = "export") -> list:
+        """Write the 6 view payloads as JSON files (for the file-cache path).
+
+        Filenames match the terminal's committed snapshot so MARKET_DATA_DIR can
+        point straight at the output dir.
+        """
+        from pathlib import Path
+
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        df = self.store.normalized()
+        prices = df.filter(pl.col("asset_class").is_in(
+            ["EQUITY", "BOND", "COMMODITY", "CREDIT", "VOLATILITY", "CURRENCY"]))
+        macro = df.filter(pl.col("asset_class").str.starts_with("MACRO"))
+        views = self.build_api_views(prices, macro)
+        name_map = {
+            "market": "market_snapshot", "cross-asset": "cross_asset", "rates": "rates",
+            "inflation": "inflation", "regime": "regime", "bilello": "bilello",
+        }
+        written = []
+        for view, payload in views.items():
+            path = out / f"{name_map[view]}.json"
+            path.write_text(json.dumps(payload, default=str))
+            written.append(path)
+        return written
 
 
 def _cards_to_frame(cards: list[dict], run_id: str) -> pl.DataFrame:

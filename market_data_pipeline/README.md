@@ -71,7 +71,7 @@ optional SQLAlchemy loader.)
 
 ---
 
-## Tables (12)
+## Tables (13)
 
 | Layer | Table | Purpose |
 |-------|-------|---------|
@@ -85,10 +85,26 @@ optional SQLAlchemy loader.)
 | gold | `analytics_drawdowns` | current drawdowns |
 | gold | `analytics_rate_dashboard` | curve + rate-change table |
 | gold | `analytics_inflation_dashboard` | CPI/PCE YoY + trend |
+| serve | `analytics_api_views` | **one row per terminal view** holding the full JSON payload — the UI reads this directly from the DB file (or via the API) |
 | ops | `ingestion_manifest` | full lineage per extraction (source, params, rows, dates, checksum, version, status) |
 | ops | `data_quality_results` | per-check pass/fail with severity |
 
 Canonical schemas live in `src/storage/schemas.py` (DuckDB DDL + Polars schemas).
+
+### Serving the terminal without the API
+
+The pipeline materializes every terminal view into `analytics_api_views` and can
+export them to JSON, so the **terminal can read a local cached database or file
+directly** — no FastAPI process required:
+
+```bash
+mdp run --offline                       # populates analytics_api_views in DuckDB
+mdp export-views --out ./data/export    # writes market_snapshot.json, regime.json, …
+
+# terminal then reads either:
+MARKET_DB_URL=$PWD/data/market.duckdb   ...   # DuckDB file (or postgres://…)
+MARKET_DATA_DIR=$PWD/data/export        ...   # exported-file cache
+```
 
 ---
 
@@ -114,9 +130,10 @@ python -m market_data_pipeline.cli serve --port 8000      # http://localhost:800
 python -m market_data_pipeline.cli status                 # table row counts
 python -m market_data_pipeline.cli backfill 2000-01-01    # historical backfill
 python -m market_data_pipeline.cli rebuild-analytics      # gold rebuild from silver
+python -m market_data_pipeline.cli export-views --out DIR  # write view JSON for the terminal file-cache
 python -m market_data_pipeline.cli schedule               # APScheduler refresh loop
 
-pytest                                                     # 58 tests, no network needed
+pytest                                                     # 59 tests, no network needed
 ```
 
 ### Docker
@@ -170,14 +187,14 @@ market_data_pipeline/
 ├── src/
 │   ├── config/                         # settings (env) + catalog loader
 │   ├── connectors/                     # base adapters, fred, yahoo, synthetic
-│   ├── storage/                        # schemas (12 tables), duckdb_store, parquet_archive
+│   ├── storage/                        # schemas (13 tables), duckdb_store, parquet_archive
 │   ├── transforms/                     # normalize raw → canonical (Polars)
 │   ├── analytics/                      # snapshot, cross_asset, rates, inflation, drawdowns, regime, bilello
 │   ├── quality/                        # checks → data_quality_results
 │   ├── ingestion/                      # manifest + pipeline orchestration
 │   ├── api/                            # FastAPI app, service, Pydantic models
 │   └── scheduler/                      # APScheduler cadences
-├── tests/                              # 58 tests (connectors, analytics, storage, transforms, quality, api)
+├── tests/                              # 59 tests (connectors, analytics, storage, transforms, quality, api)
 ├── notebooks/prototypes/
 ├── docs/example_payloads.json
 └── data/ raw/ bronze/ silver/ gold/    # parquet archive + duckdb

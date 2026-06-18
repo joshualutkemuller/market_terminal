@@ -246,6 +246,16 @@ DDL: dict[str, str] = {
             checked_at       TIMESTAMP
         )
     """,
+    # 6. serving table — one row per terminal view (UI reads this directly) -
+    "analytics_api_views": """
+        CREATE TABLE IF NOT EXISTS analytics_api_views (
+            view             VARCHAR PRIMARY KEY,
+            payload_json     VARCHAR,
+            as_of            DATE,
+            ingestion_run_id VARCHAR,
+            updated_at       TIMESTAMP
+        )
+    """,
 }
 
 ANALYTICS_TABLES = [

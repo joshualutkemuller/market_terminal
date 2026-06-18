@@ -27,29 +27,31 @@ function Pct({ v, dp = 2 }: { v: number | null; dp?: number }) {
   return <span className={pnlClass(v)}>{fmtSignedPct(v * 100, dp)}</span>;
 }
 
+const BADGE: Record<MarketSource, { text: string; live: boolean; title: string }> = {
+  LIVE: { text: "LIVE · PIPELINE", live: true, title: "Live from the market_data_pipeline FastAPI service (MARKET_PIPELINE_URL)" },
+  DB: { text: "LIVE · DB", live: true, title: "Read from a local market_data_pipeline database — analytics_api_views (MARKET_DB_URL: DuckDB file or Postgres)" },
+  FILE: { text: "LIVE · FILE", live: true, title: "Read from a local exported-file cache (MARKET_DATA_DIR — `mdp export-views`)" },
+  SNAPSHOT: { text: "PIPELINE · SNAPSHOT", live: false, title: "Committed gold snapshot from market_data_pipeline (FRED · Yahoo). Set MARKET_DB_URL / MARKET_DATA_DIR / MARKET_PIPELINE_URL for fresh data." },
+  LOADING: { text: "SYNC", live: false, title: "Fetching…" },
+};
+
 function PipeBadge({ source }: { source: MarketSource }) {
-  const live = source === "LIVE";
+  const b = BADGE[source];
   const loading = source === "LOADING";
   return (
     <span
       className={clsx(
         "inline-flex items-center gap-1 rounded-sm border px-1.5 py-px text-3xs font-semibold uppercase tracking-wide",
-        live
+        b.live
           ? "border-term-up/40 bg-term-up/10 text-term-up"
           : loading
           ? "border-term-border bg-term-panel-3 text-term-text-mute"
           : "border-violet-400/40 bg-violet-400/10 text-violet-300"
       )}
-      title={
-        live
-          ? "Live from the market_data_pipeline FastAPI service (MARKET_PIPELINE_URL)"
-          : loading
-          ? "Fetching…"
-          : "Committed gold snapshot from market_data_pipeline (FRED · Yahoo). Point MARKET_PIPELINE_URL at the service for live data."
-      }
+      title={b.title}
     >
-      <span className={clsx("h-1.5 w-1.5 rounded-full", live ? "bg-term-up animate-blink" : loading ? "bg-term-text-mute" : "bg-violet-400")} />
-      {live ? "LIVE · PIPELINE" : loading ? "SYNC" : "PIPELINE · SNAPSHOT"}
+      <span className={clsx("h-1.5 w-1.5 rounded-full", b.live ? "bg-term-up animate-blink" : loading ? "bg-term-text-mute" : "bg-violet-400")} />
+      {b.text}
     </span>
   );
 }
