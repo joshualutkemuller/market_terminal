@@ -1,35 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
-import { getSeriesHistory, seriesById } from "@/data/econSeries";
+import { getSeriesHistory, seriesById, resolveFred } from "@/data/econSeries";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/econ/series?id=DGS10&n=120
- * Returns observations for a FRED series. Uses live FRED when FRED_API_KEY is set,
- * otherwise returns the deterministic simulation. Always responds 200 with a
- * `source` field so the client can render uniformly and flag LIVE vs SIM.
+ * GET /api/econ/series?id=CPIAUCSL&n=24&units=pc1
+ * Observations for a FRED series with correct unit handling. If `units` is
+ * omitted the series' resolved display transform is used (e.g. CPI -> % YoY).
+ * Always 200 with a `source` field (FRED | SIM) so clients render uniformly.
  */
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id") ?? "DGS10";
-  const n = Number(req.nextUrl.searchParams.get("n") ?? 120);
+  const n = Number(req.nextUrl.searchParams.get("n") ?? 24);
+  const reqUnits = req.nextUrl.searchParams.get("units") ?? undefined;
   const meta = seriesById(id);
+  const resolved = resolveFred(id);
+  const units = reqUnits ?? resolved.units;
 
-  if (fredEnabled()) {
+  if (fredEnabled() && !resolved.simOnly) {
     try {
-      const obs = (await fredSeries(id, { limit: n })).filter((o) => o.value !== null);
-      return NextResponse.json({ source: "FRED", id, label: meta?.label ?? id, observations: obs });
-    } catch (err) {
-      // fall through to simulation on any FRED error
-      return NextResponse.json({
-        source: "SIM",
-        id,
-        label: meta?.label ?? id,
-        note: err instanceof Error ? err.message : "FRED error",
-        observations: getSeriesHistory(id, n),
-      });
+      const obs = await fredSeries(id, { limit: n, units, scale: resolved.scale });
+      if (obs.length) {
+        return NextResponse.json({ source: "FRED", id, label: meta?.label ?? id, units, observations: obs });
+      }
+    } catch {
+      // fall through to simulation
     }
   }
 
-  return NextResponse.json({ source: "SIM", id, label: meta?.label ?? id, observations: getSeriesHistory(id, n) });
+  return NextResponse.json({ source: "SIM", id, label: meta?.label ?? id, units, observations: getSeriesHistory(id, n) });
 }

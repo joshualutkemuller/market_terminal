@@ -39,22 +39,37 @@ export interface FredObservation {
   value: number | null;
 }
 
-/** Series observations between dates (defaults to recent window). */
-export async function fredSeries(seriesId: string, opts: { start?: string; limit?: number } = {}): Promise<FredObservation[]> {
+/**
+ * Series observations between dates (defaults to recent window).
+ * `units` applies a FRED transform (pc1 = % YoY, pch = % MoM, chg = change,
+ * pca = compounded annual rate, lin = level). `scale` rescales the result for
+ * display (e.g. spreads pp -> bps, $ millions -> $ trillions).
+ */
+export async function fredSeries(
+  seriesId: string,
+  opts: { start?: string; limit?: number; units?: string; scale?: number } = {}
+): Promise<FredObservation[]> {
   const params: Record<string, string> = { series_id: seriesId, sort_order: "asc" };
   if (opts.start) params.observation_start = opts.start;
+  if (opts.units && opts.units !== "lin") params.units = opts.units;
   if (opts.limit) {
-    params.limit = String(opts.limit);
+    // pull extra so a YoY/MoM transform still yields `limit` populated points
+    params.limit = String(opts.limit + (opts.units && opts.units !== "lin" ? 14 : 1));
     params.sort_order = "desc";
   }
   const json = await fredGet<{ observations: { date: string; value: string }[] }>("/series/observations", params);
-  const obs = json.observations.map((o) => ({ date: o.date, value: o.value === "." ? null : Number(o.value) }));
-  return opts.limit ? obs.reverse() : obs;
+  const scale = opts.scale ?? 1;
+  let obs = json.observations.map((o) => ({ date: o.date, value: o.value === "." ? null : Number(o.value) * scale }));
+  if (opts.limit) obs = obs.reverse();
+  // trim leading nulls produced by transforms, then cap to the requested count
+  obs = obs.filter((o) => o.value !== null);
+  if (opts.limit && obs.length > opts.limit) obs = obs.slice(obs.length - opts.limit);
+  return obs;
 }
 
-/** Latest non-missing value for a series. */
-export async function fredLatest(seriesId: string): Promise<FredObservation | null> {
-  const obs = await fredSeries(seriesId, { limit: 12 });
+/** Latest non-missing value for a series, with optional units transform. */
+export async function fredLatest(seriesId: string, opts: { units?: string; scale?: number } = {}): Promise<FredObservation | null> {
+  const obs = await fredSeries(seriesId, { limit: 6, ...opts });
   for (let i = obs.length - 1; i >= 0; i--) if (obs[i].value !== null) return obs[i];
   return null;
 }

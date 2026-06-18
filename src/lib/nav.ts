@@ -17,6 +17,9 @@ import {
   Sigma,
   BrainCircuit,
   Banknote,
+  Flame,
+  Globe2,
+  Gavel,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,6 +45,9 @@ export const NAV: NavItem[] = [
   { code: "DESK", label: "Trading Desk", href: "/trading-desk", icon: LineChart, desc: "Scorecards & execution analytics", group: "DESK" },
   { code: "ECON", label: "Macro Dashboard", href: "/economics", icon: Globe, desc: "FRED-connected economic analytics", group: "ECONOMICS" },
   { code: "CURV", label: "Treasury Curve Lab", href: "/economics/curve", icon: Spline, desc: "Curve shape, history & inversions", group: "ECONOMICS" },
+  { code: "INFL", label: "Inflation Explorer", href: "/economics/inflation", icon: Flame, desc: "CPI/PCE to item level, MoM & YoY", group: "ECONOMICS" },
+  { code: "GCPI", label: "Global Inflation", href: "/economics/global-cpi", icon: Globe2, desc: "CPI by country, trend & streaks", group: "ECONOMICS" },
+  { code: "GPOL", label: "Global Policy Rates", href: "/economics/policy-rates", icon: Gavel, desc: "Central-bank rates & cycles", group: "ECONOMICS" },
   { code: "FOMC", label: "Rate Probabilities", href: "/economics/rates", icon: Percent, desc: "Fed path & hike/cut odds", group: "ECONOMICS" },
   { code: "CAL", label: "Economic Calendar", href: "/economics/calendar", icon: CalendarClock, desc: "Releases & events", group: "ECONOMICS" },
   { code: "STAT", label: "Statistical Analysis", href: "/economics/stats", icon: Sigma, desc: "Correlations, regressions, regimes", group: "ECONOMICS" },

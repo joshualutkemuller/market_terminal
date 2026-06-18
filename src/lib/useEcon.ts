@@ -50,3 +50,24 @@ export function useLiveCurve(): { data: CurveSnapshot; source: DataSource } {
 export function useEconCalendar(): { data: EconEvent[]; source: DataSource } {
   return useEconResource<EconEvent[]>(`/api/econ/calendar`, getEconEvents(), (j) => j.events ?? []);
 }
+
+export interface LiveIndicator {
+  id: string;
+  value: number;
+  prior: number;
+  change: number;
+  yoy: number | null;
+  asOf: string;
+  history: number[];
+  source: "FRED" | "SIM";
+}
+
+/** All indicators with live current value + 24m history, keyed by series id. */
+export function useLiveIndicators(): { data: Record<string, LiveIndicator>; source: DataSource } {
+  const { data, source } = useEconResource<Record<string, LiveIndicator>>(
+    `/api/econ/indicators`,
+    {},
+    (j) => Object.fromEntries((j.indicators ?? []).map((i: LiveIndicator) => [i.id, i]))
+  );
+  return { data, source };
+}

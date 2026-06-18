@@ -1,0 +1,403 @@
+"use client";
+
+import { useState } from "react";
+import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
+import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { DataGrid, type Column } from "@/components/ui/DataGrid";
+import { BarChart } from "@/components/charts/BarChart";
+import { useDrill } from "@/components/econ/DrillProvider";
+import {
+  getInflationHeadlines,
+  getInflationComponents,
+  getInflationSummary,
+  type InflationItem,
+} from "@/data/inflation";
+import { fmtNum, fmtSigned, fmtSignedPct } from "@/lib/format";
+
+// Metric the user is viewing — drives emphasis + drill units.
+type Metric = "index" | "mom" | "yoy" | "momAccel" | "yoyAccel";
+const METRICS: { key: Metric; label: string }[] = [
+  { key: "index", label: "Index reading" },
+  { key: "mom", label: "MoM %" },
+  { key: "yoy", label: "YoY %" },
+  { key: "momAccel", label: "ΔMoM" },
+  { key: "yoyAccel", label: "ΔYoY" },
+];
+
+type Basket = "CPI" | "PCE";
+
+/** Drill units/label per the global metric toggle. ΔMoM/ΔYoY drill to the
+ *  underlying rate series (MoM / YoY) since acceleration has no FRED transform. */
+function drillUnits(m: Metric): { units: string; unitLabel: string; decimals: number } {
+  switch (m) {
+    case "index":
+      return { units: "lin", unitLabel: "Index", decimals: 2 };
+    case "mom":
+    case "momAccel":
+      return { units: "pch", unitLabel: "% MoM", decimals: 2 };
+    case "yoy":
+    case "yoyAccel":
+    default:
+      return { units: "pc1", unitLabel: "% YoY", decimals: 2 };
+  }
+}
+
+/** Inflation sense: hotter/rising prices read red (down tone), cooling reads green (up). */
+function inflClass(n: number): string {
+  if (n > 0) return "text-term-down";
+  if (n < 0) return "text-term-up";
+  return "text-term-text-dim";
+}
+
+export default function InflationExplorer() {
+  const { open } = useDrill();
+
+  const [metric, setMetric] = useState<Metric>("yoy");
+  const [basket, setBasket] = useState<Basket>("CPI");
+
+  const headlines = getInflationHeadlines();
+  const components = getInflationComponents(basket);
+  const summary = getInflationSummary();
+
+  const drillItem = (it: InflationItem) => {
+    const u = drillUnits(metric);
+    open({ id: it.id, label: it.label, units: u.units, unitLabel: u.unitLabel, decimals: u.decimals });
+  };
+
+  // KPI tone: high/rising inflation reads down/red, cooling reads up/green.
+  const yoyTone = (yoy: number, accel: number): "up" | "down" =>
+    accel > 0 || yoy >= 2.5 ? "down" : "up";
+  const cpiH = headlines.find((h) => h.group === "CPI");
+  const coreCpiH = headlines.find((h) => h.group === "CORE_CPI");
+  const pceH = headlines.find((h) => h.group === "PCE");
+  const corePceH = headlines.find((h) => h.group === "CORE_PCE");
+
+  // Headline grid.
+  const headCols: Column<InflationItem>[] = [
+    {
+      key: "label",
+      header: "Series",
+      render: (r) => <span className="font-semibold text-term-text">{r.label}</span>,
+      sortVal: (r) => r.label,
+    },
+    {
+      key: "id",
+      header: "FRED",
+      render: (r) => <span className="text-term-text-mute">{r.id}</span>,
+    },
+    {
+      key: "index",
+      header: "Index",
+      align: "right",
+      render: (r) => <span className="text-term-text">{fmtNum(r.index, 2)}</span>,
+      sortVal: (r) => r.index,
+      className: () => (metric === "index" ? "bg-term-amber/5" : ""),
+    },
+    {
+      key: "mom",
+      header: "MoM %",
+      align: "right",
+      render: (r) => <span className={inflClass(r.mom)}>{fmtSignedPct(r.mom)}</span>,
+      sortVal: (r) => r.mom,
+      className: () => (metric === "mom" ? "bg-term-amber/5" : ""),
+    },
+    {
+      key: "yoy",
+      header: "YoY %",
+      align: "right",
+      render: (r) => <span className={inflClass(r.yoy)}>{fmtSignedPct(r.yoy)}</span>,
+      sortVal: (r) => r.yoy,
+      className: () => (metric === "yoy" ? "bg-term-amber/5" : ""),
+    },
+    {
+      key: "momAccel",
+      header: "ΔMoM",
+      align: "right",
+      render: (r) => <span className={inflClass(r.momAccel)}>{fmtSigned(r.momAccel, 2)}</span>,
+      sortVal: (r) => r.momAccel,
+      className: () => (metric === "momAccel" ? "bg-term-amber/5" : ""),
+    },
+    {
+      key: "yoyAccel",
+      header: "ΔYoY",
+      align: "right",
+      render: (r) => <span className={inflClass(r.yoyAccel)}>{fmtSigned(r.yoyAccel, 2)}</span>,
+      sortVal: (r) => r.yoyAccel,
+      className: () => (metric === "yoyAccel" ? "bg-term-amber/5" : ""),
+    },
+  ];
+
+  // Component table.
+  const compCols: Column<InflationItem>[] = [
+    {
+      key: "label",
+      header: "Component",
+      render: (r) => <span className="font-semibold text-term-text">{r.label}</span>,
+      sortVal: (r) => r.label,
+    },
+    {
+      key: "weight",
+      header: "Weight %",
+      align: "right",
+      render: (r) => <span className="text-term-text-dim">{fmtNum(r.weight, 1)}</span>,
+      sortVal: (r) => r.weight,
+    },
+    {
+      key: "index",
+      header: "Index",
+      align: "right",
+      render: (r) => <span className="text-term-text">{fmtNum(r.index, 2)}</span>,
+      sortVal: (r) => r.index,
+      className: () => (metric === "index" ? "bg-term-amber/5" : ""),
+    },
+    {
+      key: "mom",
+      header: "MoM %",
+      align: "right",
+      render: (r) => <span className={inflClass(r.mom)}>{fmtSignedPct(r.mom)}</span>,
+      sortVal: (r) => r.mom,
+      className: () => (metric === "mom" ? "bg-term-amber/5" : ""),
+    },
+    {
+      key: "yoy",
+      header: "YoY %",
+      align: "right",
+      render: (r) => <span className={inflClass(r.yoy)}>{fmtSignedPct(r.yoy)}</span>,
+      sortVal: (r) => r.yoy,
+      className: () => (metric === "yoy" ? "bg-term-amber/5" : ""),
+    },
+    {
+      key: "momAccel",
+      header: "ΔMoM",
+      align: "right",
+      render: (r) => <span className={inflClass(r.momAccel)}>{fmtSigned(r.momAccel, 2)}</span>,
+      sortVal: (r) => r.momAccel,
+      className: () => (metric === "momAccel" ? "bg-term-amber/5" : ""),
+    },
+    {
+      key: "yoyAccel",
+      header: "ΔYoY",
+      align: "right",
+      render: (r) => <span className={inflClass(r.yoyAccel)}>{fmtSigned(r.yoyAccel, 2)}</span>,
+      sortVal: (r) => r.yoyAccel,
+      className: () => (metric === "yoyAccel" ? "bg-term-amber/5" : ""),
+    },
+    {
+      key: "contribution",
+      header: "Contrib pp",
+      align: "right",
+      render: (r) => <span className={inflClass(r.contribution)}>{fmtSigned(r.contribution, 2)}</span>,
+      sortVal: (r) => r.contribution,
+    },
+  ];
+
+  // Contribution bars (weighted YoY pp) sorted desc.
+  const contribBars = [...components]
+    .sort((a, b) => b.contribution - a.contribution)
+    .map((c) => ({
+      label: c.label,
+      value: c.contribution,
+      color: c.contribution >= 0 ? "#FF3B3B" : "#2ECC71",
+    }));
+
+  // Hot / cool lists by yoyAccel.
+  const byAccel = [...components].sort((a, b) => b.yoyAccel - a.yoyAccel);
+  const accelerating = byAccel.slice(0, 6);
+  const decelerating = [...byAccel].reverse().slice(0, 6);
+
+  return (
+    <div className="flex min-h-full flex-col">
+      <PageHeader
+        code="INFL"
+        title="Inflation Explorer"
+        desc="CPI · Core CPI · PCE · Core PCE to item level"
+      />
+
+      <KpiStrip>
+        <Stat
+          label="CPI YoY"
+          value={`${fmtNum(summary.cpiYoY, 1)}%`}
+          sub={cpiH ? <span className={inflClass(cpiH.yoyAccel)}>{fmtSigned(cpiH.yoyAccel, 2)} ΔYoY</span> : undefined}
+          tone={yoyTone(summary.cpiYoY, cpiH?.yoyAccel ?? 0)}
+        />
+        <Stat
+          label="Core CPI YoY"
+          value={`${fmtNum(summary.coreCpiYoY, 1)}%`}
+          sub={coreCpiH ? <span className={inflClass(coreCpiH.yoyAccel)}>{fmtSigned(coreCpiH.yoyAccel, 2)} ΔYoY</span> : undefined}
+          tone={yoyTone(summary.coreCpiYoY, coreCpiH?.yoyAccel ?? 0)}
+        />
+        <Stat
+          label="PCE YoY"
+          value={`${fmtNum(summary.pceYoY, 1)}%`}
+          sub={pceH ? <span className={inflClass(pceH.yoyAccel)}>{fmtSigned(pceH.yoyAccel, 2)} ΔYoY</span> : undefined}
+          tone={yoyTone(summary.pceYoY, pceH?.yoyAccel ?? 0)}
+        />
+        <Stat
+          label="Core PCE YoY"
+          value={`${fmtNum(summary.corePceYoY, 1)}%`}
+          sub={corePceH ? <span className={inflClass(corePceH.yoyAccel)}>{fmtSigned(corePceH.yoyAccel, 2)} ΔYoY</span> : undefined}
+          tone={yoyTone(summary.corePceYoY, corePceH?.yoyAccel ?? 0)}
+        />
+        <Stat
+          label="CPI MoM"
+          value={fmtSignedPct(summary.cpiMoM)}
+          sub={`Core ${fmtSignedPct(summary.coreCpiMoM)}`}
+          tone={summary.cpiMoM > 0 ? "down" : "up"}
+        />
+        <Stat
+          label="Accelerating"
+          value={String(summary.acceleratingCount)}
+          sub={<span className="text-term-up">{summary.deceleratingCount} decelerating</span>}
+          tone={summary.acceleratingCount > summary.deceleratingCount ? "down" : "up"}
+        />
+      </KpiStrip>
+
+      <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-3">
+        {/* HEADLINES */}
+        <Panel
+          title="Headline Aggregates"
+          code="HEAD"
+          accent
+          className="xl:col-span-2"
+          right={<span className="text-3xs text-term-text-mute">click a row → drill 24m</span>}
+        >
+          <DataGrid
+            columns={headCols}
+            rows={headlines}
+            rowKey={(r) => r.id}
+            onRowClick={drillItem}
+            initialSort={{ key: "yoy", dir: "desc" }}
+          />
+        </Panel>
+
+        {/* TOGGLES */}
+        <Panel title="View Controls" code="VIEW">
+          <div className="space-y-3 px-3 py-3">
+            <div>
+              <div className="term-label mb-1.5">Primary Metric</div>
+              <div className="flex flex-wrap gap-1">
+                {METRICS.map((m) => (
+                  <button
+                    key={m.key}
+                    onClick={() => setMetric(m.key)}
+                    className={`term-btn ${metric === m.key ? "term-btn-active" : ""}`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="term-label mb-1.5">Basket</div>
+              <div className="flex gap-1">
+                {(["CPI", "PCE"] as Basket[]).map((b) => (
+                  <button
+                    key={b}
+                    onClick={() => setBasket(b)}
+                    className={`term-btn ${basket === b ? "term-btn-active" : ""}`}
+                  >
+                    {b}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1 border-t border-term-border pt-2 text-3xs text-term-text-mute">
+              <p>
+                <span className="text-term-amber">ΔMoM / ΔYoY</span> = change in the % print vs the prior
+                month (acceleration). Positive = hotter.
+              </p>
+              <p>
+                Click any item to drill to its rolling 24 months — drill units follow the selected metric (
+                <span className="text-term-amber">{drillUnits(metric).unitLabel}</span>).
+              </p>
+            </div>
+          </div>
+        </Panel>
+
+        {/* COMPONENT TABLE */}
+        <Panel
+          title={`${basket} Components — Item Level`}
+          code="COMP"
+          accent
+          className="xl:col-span-2"
+          right={
+            <div className="flex items-center gap-2">
+              <Tag tone="blue">{components.length} items</Tag>
+              <span className="text-3xs text-term-text-mute">{METRICS.find((m) => m.key === metric)?.label}</span>
+            </div>
+          }
+        >
+          <DataGrid
+            columns={compCols}
+            rows={components}
+            rowKey={(r) => r.id}
+            onRowClick={drillItem}
+            maxHeight="420px"
+            initialSort={{ key: "weight", dir: "desc" }}
+          />
+        </Panel>
+
+        {/* CONTRIBUTION */}
+        <Panel title="YoY Contribution" code="CTRB" right={<span className="text-3xs text-term-text-mute">weighted pp</span>}>
+          <div className="px-2 py-2">
+            <BarChart data={contribBars} horizontal fmt={(n) => fmtSigned(n, 2)} />
+            <div className="mt-2 px-1 text-3xs text-term-text-mute">
+              Weight × YoY = contribution to headline {basket}. <span className="text-term-down">Red</span> adds to
+              inflation, <span className="text-term-up">green</span> subtracts.
+            </div>
+          </div>
+        </Panel>
+
+        {/* HOT / COOL */}
+        <Panel title="Acceleration Leaders" code="ACCL" className="xl:col-span-3">
+          <div className="grid grid-cols-1 gap-px bg-term-border sm:grid-cols-2">
+            <div className="bg-term-panel">
+              <div className="term-label flex items-center gap-2 px-3 py-1.5">
+                <Tag tone="down">HOTTEST</Tag> Top Accelerating (ΔYoY desc)
+              </div>
+              <div className="divide-y divide-term-border-soft">
+                {accelerating.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => drillItem(c)}
+                    className="flex w-full items-center justify-between px-3 py-1 text-left text-2xs hover:bg-term-panel-2"
+                  >
+                    <span className="text-term-text">{c.label}</span>
+                    <span className="flex items-center gap-3">
+                      <span className="tnum text-term-text-dim">{fmtSignedPct(c.yoy)} YoY</span>
+                      <span className={`tnum w-12 text-right ${inflClass(c.yoyAccel)}`}>{fmtSigned(c.yoyAccel, 2)}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="bg-term-panel">
+              <div className="term-label flex items-center gap-2 px-3 py-1.5">
+                <Tag tone="up">COOLEST</Tag> Top Decelerating (ΔYoY asc)
+              </div>
+              <div className="divide-y divide-term-border-soft">
+                {decelerating.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => drillItem(c)}
+                    className="flex w-full items-center justify-between px-3 py-1 text-left text-2xs hover:bg-term-panel-2"
+                  >
+                    <span className="text-term-text">{c.label}</span>
+                    <span className="flex items-center gap-3">
+                      <span className="tnum text-term-text-dim">{fmtSignedPct(c.yoy)} YoY</span>
+                      <span className={`tnum w-12 text-right ${inflClass(c.yoyAccel)}`}>{fmtSigned(c.yoyAccel, 2)}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-term-border px-3 py-1.5 text-3xs text-term-text-mute">
+            ΔMoM / ΔYoY measure the change in the % print vs the prior month (acceleration / deceleration). Click any
+            item to drill into its rolling 24-month live history.
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}

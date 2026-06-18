@@ -68,6 +68,58 @@ export function seriesById(id: string): FredSeries | undefined {
   return FRED_CATALOG.find((s) => s.id === id);
 }
 
+/**
+ * FRED unit correction. Raw FRED series are often index levels or totals, while
+ * the terminal displays YoY %, MoM %, changes, bps, $T, etc. `resolveFred` maps
+ * each series to the FRED `units` transform (pc1 = % YoY, pch = % MoM, chg =
+ * level change, pca = compounded annual rate, lin = as-is) plus a display scale
+ * factor. `simOnly` series have no usable FRED source (e.g. ISM PMIs were pulled
+ * from FRED for licensing) and always render from the simulation.
+ */
+export interface FredResolved {
+  units: string;
+  scale: number;
+  simOnly: boolean;
+}
+
+const FRED_OVERRIDE: Record<string, Partial<FredResolved>> = {
+  // spreads: FRED returns percentage points, we display bps
+  T10Y2Y: { units: "lin", scale: 100 },
+  T10Y3M: { units: "lin", scale: 100 },
+  BAMLH0A0HYM2: { units: "lin", scale: 100 },
+  // growth as compounded annual rate
+  GDPC1: { units: "pca" },
+  GDPNOW: { units: "lin" }, // GDPNow is already an annualized %
+  // level changes — FRED PAYEMS is already in thousands; chg yields the k m/m change
+  PAYEMS: { units: "chg", scale: 1 },
+  // rescaled levels
+  ICSA: { units: "lin", scale: 0.001 }, // persons -> thousands
+  JTSJOL: { units: "lin", scale: 0.001 }, // thousands -> millions
+  HOUST: { units: "lin", scale: 0.001 }, // thousands -> millions
+  WALCL: { units: "lin", scale: 1e-6 }, // $ millions -> $ trillions
+  // percent-change transforms
+  M2SL: { units: "pc1" },
+  RSAFS: { units: "pch" },
+  INDPRO: { units: "pch" },
+  CES0500000003: { units: "pc1" },
+  // licensing-restricted / synthetic ids -> simulation only
+  "ISM-MFG": { simOnly: true },
+  "ISM-SVC": { simOnly: true },
+  SOFR: { units: "lin" },
+};
+
+export function resolveFred(id: string): FredResolved {
+  const s = seriesById(id);
+  const o = FRED_OVERRIDE[id] ?? {};
+  let units = o.units;
+  if (!units) {
+    if (s?.unit.includes("y/y")) units = "pc1";
+    else if (s?.unit.includes("m/m")) units = "pch";
+    else units = "lin";
+  }
+  return { units, scale: o.scale ?? 1, simOnly: o.simOnly ?? false };
+}
+
 export interface Observation {
   date: string; // ISO yyyy-mm-dd
   value: number;

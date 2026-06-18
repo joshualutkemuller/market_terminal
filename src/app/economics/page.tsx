@@ -7,10 +7,13 @@ import { Sparkline } from "@/components/charts/Sparkline";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { SourceBadge } from "@/components/econ/SourceBadge";
-import { useEconSeries } from "@/lib/useEcon";
+import { useDrill } from "@/components/econ/DrillProvider";
+import { useEconSeries, useLiveIndicators, type LiveIndicator } from "@/lib/useEcon";
 import {
   getIndicators,
   getSeriesHistory,
+  resolveFred,
+  seriesById,
   ECON_CATEGORY_LABEL,
   type IndicatorRow,
   type EconCategory,
@@ -67,14 +70,31 @@ const CATEGORY_ORDER: EconCategory[] = [
   "ACTIVITY",
 ];
 
+/** Merged display values: live FRED data overlaid on the simulation fallback. */
+function effective(r: IndicatorRow, L: LiveIndicator | undefined) {
+  return {
+    value: L ? L.value : r.value,
+    change: L ? L.change : r.change,
+    spark: L && L.history.length ? L.history : r.spark,
+    asOf: L ? L.asOf : r.asOf,
+  };
+}
+
 export default function MacroDashboard() {
-  // Unconditional, fixed-id live hook — drives header provenance + featured live chart.
+  // Unconditional, fixed-id live hook — drives the featured live chart.
   const live = useEconSeries("DGS10", 120);
+  // All-indicator live feed (FRED, unit-corrected server-side) keyed by series id.
+  const { data: liveInd, source: indSource } = useLiveIndicators();
+  const { open } = useDrill();
 
   const [selectedId, setSelectedId] = useState<string>("DGS2");
 
   const indicators = getIndicators();
   const byId = (id: string): IndicatorRow | undefined => indicators.find((i) => i.id === id);
+
+  /** Open the 24-month drill-down for an indicator row. */
+  const drill = (r: IndicatorRow) =>
+    open({ id: r.id, label: r.label, units: resolveFred(r.id).units, unitLabel: r.unit, decimals: r.decimals });
 
   const liveValues = live.data.map((o) => o.value);
   const liveLabels = live.data.map((o) => o.date);
@@ -111,7 +131,8 @@ export default function MacroDashboard() {
     let improving = 0;
     let deteriorating = 0;
     for (const r of rows) {
-      const t = toneFor(r.bullish, r.change);
+      const { change } = effective(r, liveInd[r.id]);
+      const t = toneFor(r.bullish, change);
       if (t === "up") improving++;
       else if (t === "down") deteriorating++;
     }
@@ -124,26 +145,28 @@ export default function MacroDashboard() {
         code="ECON"
         title="Macro Dashboard"
         desc="FRED-connected economic analytics"
-        right={<SourceBadge source={live.source} />}
+        right={<SourceBadge source={indSource} />}
       />
 
       <KpiStrip>
         {KPI_IDS.map((id) => {
           const r = byId(id);
           if (!r) return <Stat key={id} label={KPI_LABEL[id]} value="—" />;
-          const tone = toneFor(r.bullish, r.change);
+          const { value, change, asOf } = effective(r, liveInd[r.id]);
+          const tone = toneFor(r.bullish, change);
           return (
-            <Stat
-              key={id}
-              label={KPI_LABEL[id]}
-              value={fmtVal(r.value, r.decimals, r.unit)}
-              sub={
-                <span className={pnlClass(r.change)}>
-                  {fmtSigned(r.change, r.decimals)} vs prior
-                </span>
-              }
-              tone={tone}
-            />
+            <div key={id} onClick={() => drill(r)} className="cursor-pointer transition-colors hover:bg-term-panel-2">
+              <Stat
+                label={KPI_LABEL[id]}
+                value={fmtVal(value, r.decimals, r.unit)}
+                sub={
+                  <span className={pnlClass(change)}>
+                    {fmtSigned(change, r.decimals)} · {asOf}
+                  </span>
+                }
+                tone={tone}
+              />
+            </div>
           );
         })}
       </KpiStrip>
