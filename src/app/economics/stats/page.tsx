@@ -9,9 +9,10 @@ import { ScatterPlot } from "@/components/charts/ScatterPlot";
 import { BarChart } from "@/components/charts/BarChart";
 import { LineChart } from "@/components/charts/LineChart";
 import { SourceBadge } from "@/components/econ/SourceBadge";
+import { getStatStudyPacks, type StatStudyPack } from "@/data/econEnhancements";
 import { useStatsData } from "@/lib/useStats";
 import { buildStatsPayload, ols, histogram, moments, rollingCorr, acf, alignPair, type Obs } from "@/lib/stats";
-import { fmtNum, pnlClass } from "@/lib/format";
+import { fmtNum, fmtPct, pnlClass } from "@/lib/format";
 
 type Transform = "level" | "chg" | "yoy";
 
@@ -54,6 +55,8 @@ export default function StatisticalAnalysis() {
   const [rAL, setRAL] = useState("10Y");
   const [rBL, setRBL] = useState("EFFR");
   const [acfL, setAcfL] = useState("CPI");
+  const studyPacks = getStatStudyPacks();
+  const [activeStudyId, setActiveStudyId] = useState(studyPacks[0]?.id ?? "");
 
   // transform + filter → active analysis set
   const tSeries = series.map((s) => ({ label: s.label, obs: transformObs(s.points, transform) }));
@@ -83,6 +86,22 @@ export default function StatisticalAnalysis() {
   const al2 = alignPair(byLabel(rx(rAL)).obs, byLabel(rx(rBL)).obs);
   const roll = rollingCorr(al2.x, al2.y, win);
   const ac = acf(byLabel(rx(acfL)).obs.map((o) => o.value), 12);
+  const activeStudy = studyPacks.find((s) => s.id === activeStudyId) ?? studyPacks[0];
+
+  function applyStudy(pack: StatStudyPack) {
+    const allLabels = tSeries.map((s) => s.label);
+    setActiveStudyId(pack.id);
+    setTransform(pack.transform);
+    setLag(pack.lag);
+    setWin(pack.rollingWindow);
+    setXL(allLabels.includes(pack.driver) ? pack.driver : allLabels[0] ?? "");
+    setYL(allLabels.includes(pack.target) ? pack.target : allLabels[1] ?? allLabels[0] ?? "");
+    setRAL(allLabels.includes(pack.driver) ? pack.driver : allLabels[0] ?? "");
+    setRBL(allLabels.includes(pack.target) ? pack.target : allLabels[1] ?? allLabels[0] ?? "");
+    setDistL(pack.series.find((l) => allLabels.includes(l)) ?? allLabels[0] ?? "");
+    setAcfL(pack.series.find((l) => allLabels.includes(l)) ?? allLabels[0] ?? "");
+    setExcluded(new Set(allLabels.filter((l) => !pack.series.includes(l))));
+  }
 
   const statCols: Column<(typeof p.descstats)[number]>[] = [
     { key: "label", header: "Series", render: (r) => <span className="text-term-text">{r.label}</span> },
@@ -126,6 +145,30 @@ export default function StatisticalAnalysis() {
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-3">
         <div className="flex flex-col gap-2">
+          <Panel title="Desk Study Packs" code="PACK" accent right={<Tag tone="amber">{activeStudy?.name ?? "Study"}</Tag>}>
+            <div className="grid grid-cols-1 gap-px bg-term-border">
+              {studyPacks.map((pack) => (
+                <button
+                  key={pack.id}
+                  onClick={() => applyStudy(pack)}
+                  className={`bg-term-panel px-2 py-1.5 text-left transition-colors hover:bg-term-panel-2 ${activeStudyId === pack.id ? "outline outline-1 outline-term-amber" : ""}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-2xs font-semibold text-term-text">{pack.name}</span>
+                    <Tag tone={pack.confidence >= 80 ? "up" : pack.confidence >= 70 ? "amber" : "neutral"}>{fmtPct(pack.confidence, 0)}</Tag>
+                  </div>
+                  <div className="mt-0.5 text-3xs text-term-text-mute">{pack.question}</div>
+                  <div className="mt-1 flex items-center justify-between gap-2 text-3xs">
+                    <span className="text-term-blue">{pack.driver}</span>
+                    <span className="text-term-text-mute">to</span>
+                    <span className="text-term-amber">{pack.target}</span>
+                    <span className="ml-auto text-term-text-dim">{pack.deskUse}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Panel>
+
           <Panel title="Correlation Matrix" code="CORR">
             <div className="p-2">
               <CorrelationMatrix labels={labels} values={p.corr} height={240} />
