@@ -16,9 +16,10 @@ import {
   POLICY_PATH_HORIZONS,
   type FomcMeeting,
 } from "@/data/econRates";
+import { getPolicyTransmission, type PolicyTransmission } from "@/data/econEnhancements";
 import { fomcFromEtl, impliedPathFromEtl, hasEtlFedData, etlFedSource } from "@/data/etlMacro";
 import { SourceBadge } from "@/components/econ/SourceBadge";
-import { fmtNum, fmtSigned } from "@/lib/format";
+import { fmtNum, fmtSigned, fmtUsdAbbr, pnlClass } from "@/lib/format";
 
 const CUT_COLOR = "#2ECC71";
 const HOLD_COLOR = "#5E5E66";
@@ -58,6 +59,7 @@ export default function RateProbabilitiesPage() {
   const fedIsLiveCme = useEtl && etlFedSource() === "cme";
   const dot = getDotPlot();
   const pathHistory = getPolicyPathHistory();
+  const transmissions = getPolicyTransmission();
   const [selPaths, setSelPaths] = useState<Set<string>>(new Set([pathHistory[0].asOf, "2026-05-17", "2025-12-17"]));
   const togglePath = (asOf: string) =>
     setSelPaths((s) => {
@@ -94,6 +96,15 @@ export default function RateProbabilitiesPage() {
     { key: "h25", header: "P(+25)", align: "right", render: (m) => <span className="text-term-down">{(probOf(m, 25) * 100).toFixed(0)}%</span>, sortVal: (m) => probOf(m, 25) },
     { key: "implied", header: "Implied Rate", align: "right", render: (m) => <span className="text-term-amber">{fmtNum(m.impliedRate, 2)}%</span>, sortVal: (m) => m.impliedRate },
     { key: "ml", header: "Most Likely", align: "right", render: (m) => <Tag tone={moveTone(m.mostLikely)}>{m.mostLikely}</Tag>, sortVal: (m) => m.mostLikely },
+  ];
+
+  const transmissionCols: Column<PolicyTransmission>[] = [
+    { key: "module", header: "Module", align: "center", render: (r) => <Tag tone="blue">{r.module}</Tag>, sortVal: (r) => r.module },
+    { key: "input", header: "Path Input", render: (r) => <span className="text-term-amber">{r.pathInput}</span>, sortVal: (r) => r.pathInput },
+    { key: "impact", header: "Current Impact", render: (r) => <span className="text-term-text-dim">{r.currentImpact}</span>, sortVal: (r) => r.currentImpact },
+    { key: "s25", header: "-25bp", align: "right", render: (r) => <span className={pnlClass(r.shock25bp)}>{fmtUsdAbbr(r.shock25bp)}</span>, sortVal: (r) => r.shock25bp },
+    { key: "s100", header: "-100bp", align: "right", render: (r) => <span className={pnlClass(r.shock100bp)}>{fmtUsdAbbr(r.shock100bp)}</span>, sortVal: (r) => r.shock100bp },
+    { key: "action", header: "Action", render: (r) => <span className="text-term-text-dim">{r.action}</span>, sortVal: (r) => r.action },
   ];
 
   return (
@@ -320,6 +331,10 @@ export default function RateProbabilitiesPage() {
                 data={dot.years.map((y) => ({ label: y, value: dot.median[y], color: "#FF8C00" }))}
               />
             </div>
+          </Panel>
+
+          <Panel title="Policy Path Transmission" code="XMIT" accent>
+            <DataGrid columns={transmissionCols} rows={transmissions} rowKey={(r) => r.module} maxHeight="280px" initialSort={{ key: "s100", dir: "desc" }} zebra />
           </Panel>
         </div>
       </div>
