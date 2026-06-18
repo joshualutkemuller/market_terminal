@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSeriesHistory, type Observation } from "@/data/econSeries";
-import { getCurrentCurve, type CurveSnapshot } from "@/data/econCurve";
+import { getCurrentCurve, getCurveSnapshots, type CurveSnapshot } from "@/data/econCurve";
 import { getEconEvents, type EconEvent } from "@/data/econRates";
 
 export type DataSource = "FRED" | "SIM" | "LOADING" | "ETL";
@@ -45,6 +45,19 @@ export function useEconSeries(id: string, n = 120): { data: Observation[]; sourc
 
 export function useLiveCurve(): { data: CurveSnapshot; source: DataSource } {
   return useEconResource<CurveSnapshot>(`/api/econ/curve`, getCurrentCurve(), (j) => j.curve);
+}
+
+/**
+ * Real point-in-time curve snapshots (Today + 1M/3M/6M/1Y/2Y ago + deep
+ * reference curves), assembled server-side from each tenor's FRED daily
+ * history. Falls back to the simulated presets without a key.
+ */
+export function useCurveSnapshots(years = 7): { data: CurveSnapshot[]; source: DataSource } {
+  return useEconResource<CurveSnapshot[]>(
+    `/api/econ/curve-history?years=${years}`,
+    getCurveSnapshots(),
+    (j) => (Array.isArray(j.snapshots) && j.snapshots.length ? j.snapshots : getCurveSnapshots())
+  );
 }
 
 export function useEconCalendar(): { data: EconEvent[]; source: DataSource } {
