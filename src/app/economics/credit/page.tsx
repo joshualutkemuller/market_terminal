@@ -13,7 +13,15 @@ import {
   getCreditCurve, getCreditSummary, getSpreadHistory, getSectorSpreads, getStressEpisodes, getCreditLinkages, liveRung,
   type CreditRung, type SectorSpread, type CreditStress,
 } from "@/data/creditSpreads";
-import { fmtNum, fmtSigned, fmtInt, pnlClass } from "@/lib/format";
+import {
+  getCounterpartyCreditOverlays,
+  getCreditHaircutImpacts,
+  getCreditSubstitutions,
+  type CounterpartyCreditOverlay,
+  type CreditHaircutImpact,
+  type CreditSubstitution,
+} from "@/data/econEnhancements";
+import { fmtNum, fmtSigned, fmtInt, fmtPct, fmtUsdAbbr, pnlClass } from "@/lib/format";
 
 const REGIME_TONE: Record<string, "up" | "down" | "amber" | "blue"> = { TIGHT: "up", NEUTRAL: "blue", WIDE: "amber", STRESS: "down" };
 
@@ -46,6 +54,9 @@ export default function CreditSpreadsPage() {
   const sectors = getSectorSpreads();
   const stress = getStressEpisodes();
   const links = getCreditLinkages();
+  const haircutImpacts = getCreditHaircutImpacts();
+  const counterpartyOverlays = getCounterpartyCreditOverlays();
+  const substitutions = getCreditSubstitutions();
   const { open } = useDrill();
 
   const drill = (r: CreditRung) => open({ id: r.fredId, label: `${r.rating} OAS`, units: "lin", unitLabel: "bps", decimals: 0 });
@@ -75,6 +86,33 @@ export default function CreditSpreadsPage() {
     { key: "peakHy", header: "Peak HY", align: "right", render: (s) => <span className="text-term-down">{fmtInt(s.peakHy)}</span>, sortVal: (s) => s.peakHy },
     { key: "dd", header: "HY Drawdown", align: "right", render: (s) => <span className="text-term-down">{fmtNum(s.drawdownPct, 1)}%</span>, sortVal: (s) => s.drawdownPct },
     { key: "def", header: "Default Pk", align: "right", render: (s) => <span className="text-term-text">{fmtNum(s.defaultPeak, 1)}%</span>, sortVal: (s) => s.defaultPeak },
+  ];
+
+  const haircutCols: Column<CreditHaircutImpact>[] = [
+    { key: "type", header: "Collateral", render: (r) => <span className="font-semibold text-term-text">{r.collateralType}</span>, sortVal: (r) => r.collateralType },
+    { key: "base", header: "Base", align: "right", render: (r) => <span className="text-term-text-dim">{fmtPct(r.baseHaircut, 1)}</span>, sortVal: (r) => r.baseHaircut },
+    { key: "stress", header: "Stress", align: "right", render: (r) => <span className="text-term-down">{fmtPct(r.stressedHaircut, 1)}</span>, sortVal: (r) => r.stressedHaircut },
+    { key: "driver", header: "Driver", render: (r) => <span className="text-term-amber">{r.oasDriver}</span>, sortVal: (r) => r.oasDriver },
+    { key: "drag", header: "Liq Drag", align: "right", render: (r) => <span className="text-term-text">{fmtSigned(r.liquidityDrag, 0)}</span>, sortVal: (r) => r.liquidityDrag },
+    { key: "cost", header: "Opt Cost", align: "right", render: (r) => <span className="text-term-down">{fmtUsdAbbr(r.optimizationCost)}</span>, sortVal: (r) => r.optimizationCost },
+  ];
+
+  const overlayCols: Column<CounterpartyCreditOverlay>[] = [
+    { key: "cp", header: "Counterparty", render: (r) => <span className="font-semibold text-term-text">{r.counterparty}</span>, sortVal: (r) => r.counterparty },
+    { key: "rating", header: "Rating", align: "center", render: (r) => <span className="text-term-text-dim">{r.rating}</span>, sortVal: (r) => r.rating },
+    { key: "score", header: "Stress", align: "right", render: (r) => <span className={r.stressScore > 70 ? "text-term-down" : r.stressScore > 60 ? "text-term-amber" : "text-term-text"}>{fmtNum(r.stressScore, 0)}</span>, sortVal: (r) => r.stressScore },
+    { key: "uplift", header: "Margin+", align: "right", render: (r) => <span className="text-term-amber">{fmtPct(r.marginUplift, 1)}</span>, sortVal: (r) => r.marginUplift },
+    { key: "www", header: "Wrong-Way", align: "center", render: (r) => <Tag tone={r.wrongWayFlag === "YES" ? "down" : "up"}>{r.wrongWayFlag}</Tag>, sortVal: (r) => r.wrongWayFlag },
+    { key: "action", header: "Action", render: (r) => <span className="text-term-text-dim">{r.action}</span>, sortVal: (r) => r.action },
+  ];
+
+  const substitutionCols: Column<CreditSubstitution>[] = [
+    { key: "from", header: "From", render: (r) => <span className="text-term-down">{r.fromAsset}</span>, sortVal: (r) => r.fromAsset },
+    { key: "to", header: "To", render: (r) => <span className="text-term-up">{r.toAsset}</span>, sortVal: (r) => r.toAsset },
+    { key: "notional", header: "Notional", align: "right", render: (r) => <span className="text-term-text">{fmtUsdAbbr(r.notional)}</span>, sortVal: (r) => r.notional },
+    { key: "savings", header: "Haircut Save", align: "right", render: (r) => <span className="text-term-up">{fmtUsdAbbr(r.haircutSavings)}</span>, sortVal: (r) => r.haircutSavings },
+    { key: "elig", header: "Elig+", align: "right", render: (r) => <span className="text-term-amber">{fmtSigned(r.eligibilityGain, 0)}%</span>, sortVal: (r) => r.eligibilityGain },
+    { key: "why", header: "Rationale", render: (r) => <span className="text-term-text-dim">{r.rationale}</span>, sortVal: (r) => r.rationale },
   ];
 
   const cv = (r: string) => curve.find((x) => x.rating === r) ?? baseCurve.find((x) => x.rating === r)!;
@@ -180,7 +218,20 @@ export default function CreditSpreadsPage() {
               ))}
             </div>
           </Panel>
+
+          <Panel title="Haircut Impact From Spread Widening" code="HCT" accent>
+            <DataGrid columns={haircutCols} rows={haircutImpacts} rowKey={(r) => r.collateralType} maxHeight="230px" initialSort={{ key: "cost", dir: "desc" }} zebra />
+          </Panel>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 px-2 pb-2 xl:grid-cols-2">
+        <Panel title="Counterparty Credit Overlay" code="CPST">
+          <DataGrid columns={overlayCols} rows={counterpartyOverlays} rowKey={(r) => r.counterparty} maxHeight="260px" initialSort={{ key: "score", dir: "desc" }} zebra />
+        </Panel>
+        <Panel title="Credit Collateral Substitutions" code="SUBS" accent>
+          <DataGrid columns={substitutionCols} rows={substitutions} rowKey={(r) => `${r.fromAsset}-${r.toAsset}`} maxHeight="260px" initialSort={{ key: "savings", dir: "desc" }} zebra />
+        </Panel>
       </div>
     </div>
   );

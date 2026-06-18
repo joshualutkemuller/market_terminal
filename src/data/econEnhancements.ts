@@ -42,6 +42,33 @@ export interface StatStudyPack {
   confidence: number;
 }
 
+export interface CreditHaircutImpact {
+  collateralType: string;
+  baseHaircut: number;
+  stressedHaircut: number;
+  oasDriver: string;
+  liquidityDrag: number;
+  optimizationCost: number;
+}
+
+export interface CounterpartyCreditOverlay {
+  counterparty: string;
+  rating: string;
+  stressScore: number;
+  marginUplift: number;
+  wrongWayFlag: "YES" | "NO";
+  action: string;
+}
+
+export interface CreditSubstitution {
+  fromAsset: string;
+  toAsset: string;
+  notional: number;
+  haircutSavings: number;
+  eligibilityGain: number;
+  rationale: string;
+}
+
 export function getSfeFactorLinks(): SfeFactorLink[] {
   return [
     { metric: "Cash reinvestment yield", macroFactorId: "SOFR", factorLabel: "SOFR", source: "FRED", sensitivityBps: 82, confidence: 89, deskUse: "Reset ladder yield and rebate economics" },
@@ -140,5 +167,34 @@ export function getStatStudyPacks(): StatStudyPack[] {
       deskUse: "Feed LIQ and CASH early-warning rules.",
       confidence: 71,
     },
+  ];
+}
+
+export function getCreditHaircutImpacts(): CreditHaircutImpact[] {
+  return [
+    { collateralType: "UST", baseHaircut: 0.8, stressedHaircut: 1.0, oasDriver: "IG OAS", liquidityDrag: 2, optimizationCost: 0.4e6 },
+    { collateralType: "Agency MBS", baseHaircut: 2.4, stressedHaircut: 3.2, oasDriver: "IG OAS", liquidityDrag: 7, optimizationCost: 1.1e6 },
+    { collateralType: "Corp IG", baseHaircut: 5.2, stressedHaircut: 7.4, oasDriver: "BBB OAS", liquidityDrag: 18, optimizationCost: 3.8e6 },
+    { collateralType: "Corp HY", baseHaircut: 12.5, stressedHaircut: 18.7, oasDriver: "HY OAS", liquidityDrag: 42, optimizationCost: 7.6e6 },
+    { collateralType: "Equity Index", baseHaircut: 15.0, stressedHaircut: 19.5, oasDriver: "HY OAS/VIX", liquidityDrag: 31, optimizationCost: 4.9e6 },
+  ];
+}
+
+export function getCounterpartyCreditOverlays(): CounterpartyCreditOverlay[] {
+  return [
+    { counterparty: "Citadel", rating: "A", stressScore: 42, marginUplift: 1.8, wrongWayFlag: "NO", action: "Keep standard schedule" },
+    { counterparty: "Millennium", rating: "A-", stressScore: 55, marginUplift: 2.4, wrongWayFlag: "NO", action: "Monitor HY collateral mix" },
+    { counterparty: "Point72", rating: "BBB+", stressScore: 64, marginUplift: 3.2, wrongWayFlag: "YES", action: "Cap lower-grade credit collateral" },
+    { counterparty: "Marshall Wace", rating: "BBB", stressScore: 71, marginUplift: 4.1, wrongWayFlag: "YES", action: "Prefer cash or UST substitutions" },
+    { counterparty: "BlueCrest", rating: "BBB-", stressScore: 78, marginUplift: 5.6, wrongWayFlag: "YES", action: "Escalate haircut override" },
+  ];
+}
+
+export function getCreditSubstitutions(): CreditSubstitution[] {
+  return [
+    { fromAsset: "Corp HY Bonds", toAsset: "T-Bills 1-3M", notional: 850e6, haircutSavings: 42e6, eligibilityGain: 26, rationale: "HY OAS widening makes HQLA substitution cheaper after funding charge." },
+    { fromAsset: "Equity Index Collateral", toAsset: "UST 2Y-5Y", notional: 1.2e9, haircutSavings: 37e6, eligibilityGain: 18, rationale: "Reduce equity beta before risk-off transition probability rises." },
+    { fromAsset: "BBB Credit", toAsset: "Agency MBS", notional: 640e6, haircutSavings: 13e6, eligibilityGain: 11, rationale: "Improve eligibility breadth while preserving yield pickup." },
+    { fromAsset: "Bank CP", toAsset: "Tri-Party GC", notional: 420e6, haircutSavings: 8e6, eligibilityGain: 9, rationale: "Move term liquidity risk into secured overnight profile." },
   ];
 }
