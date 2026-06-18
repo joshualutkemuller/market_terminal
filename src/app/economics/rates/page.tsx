@@ -17,7 +17,7 @@ import {
   type FomcMeeting,
 } from "@/data/econRates";
 import { getPolicyTransmission, type PolicyTransmission } from "@/data/econEnhancements";
-import { fomcFromEtl, impliedPathFromEtl, hasEtlFedData, etlFedSource } from "@/data/etlMacro";
+import { fomcFromEtl, impliedPathFromEtl, hasEtlFedData, etlFedSource, etlFedAsOf } from "@/data/etlMacro";
 import { SourceBadge } from "@/components/econ/SourceBadge";
 import { fmtNum, fmtSigned, fmtUsdAbbr, pnlClass } from "@/lib/format";
 
@@ -109,7 +109,7 @@ export default function RateProbabilitiesPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="FOMC" title="Rate Probabilities" desc="Fed path & hike/cut odds" right={<SourceBadge source={fedSource} />} />
+      <PageHeader code="FOMC" title="Rate Probabilities" desc="Fed path & hike/cut odds" asOf={useEtl ? etlFedAsOf() : null} right={<SourceBadge source={fedSource} />} />
 
       <KpiStrip>
         <Stat label="Current Target" value={targetStr} sub={`mid ${fmtNum(CURRENT_TARGET.mid, 3)}%`} tone="amber" />

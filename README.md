@@ -68,6 +68,14 @@ The connection is real but **optional and resilient**:
 Client hooks render the simulation instantly, then transparently upgrade to live FRED data
 when the API reports it — so the UI never blocks or breaks.
 
+**Data as-of dates.** Rates/macro modules show a **`DATA AS OF <date>`** pill in the header
+so freshness is never ambiguous. The **Treasury Curve Lab** pulls the latest observation for
+every tenor (`DGS3MO…DGS30`) and stamps the header with the actual FRED observation date
+(its historical curve overlays and inversion history remain curated/computed). The **Macro
+Dashboard** shows the most recent observation date across its live indicators, and **Rate
+Probabilities** shows the Fed-funds-futures pricing date the FedWatch odds were derived from.
+Without a key, the pill reflects the simulation's anchor date alongside the amber `SIM` badge.
+
 ```bash
 # Get a free key: https://fred.stlouisfed.org/docs/api/api_key.html
 FRED_API_KEY=your_key_here npm run dev

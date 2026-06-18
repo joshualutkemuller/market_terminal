@@ -96,6 +96,14 @@ export default function MacroDashboard() {
   const drill = (r: IndicatorRow) =>
     open({ id: r.id, label: r.label, units: resolveFred(r.id).units, unitLabel: r.unit, decimals: r.decimals });
 
+  // Latest data date across all live indicators (the dashboard's "as of").
+  const dashAsOf =
+    Object.values(liveInd)
+      .map((i) => i.asOf)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? null;
+
   const liveValues = live.data.map((o) => o.value);
   const liveLabels = live.data.map((o) => o.date);
 
@@ -145,6 +153,7 @@ export default function MacroDashboard() {
         code="ECON"
         title="Macro Dashboard"
         desc="FRED-connected economic analytics"
+        asOf={dashAsOf}
         right={<SourceBadge source={indSource} />}
       />
 

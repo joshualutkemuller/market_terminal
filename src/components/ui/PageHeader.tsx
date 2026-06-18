@@ -5,7 +5,7 @@ import { useTick } from "@/lib/hooks";
 import { Tag } from "./Panel";
 
 /** Consistent module header: code, title, live badge, right-aligned actions. */
-export function PageHeader({ code, title, desc, right }: { code: string; title: string; desc?: string; right?: ReactNode }) {
+export function PageHeader({ code, title, desc, right, asOf }: { code: string; title: string; desc?: string; right?: ReactNode; asOf?: string | null }) {
   const tick = useTick(3000);
   return (
     <div className="flex items-center justify-between border-b border-term-border bg-term-panel px-3 py-2">
@@ -15,6 +15,14 @@ export function PageHeader({ code, title, desc, right }: { code: string; title: 
         {desc && <span className="hidden text-2xs text-term-text-mute md:inline">{desc}</span>}
       </div>
       <div className="flex items-center gap-2">
+        {asOf && (
+          <span
+            className="tnum rounded-sm border border-term-border bg-term-panel-2 px-1.5 py-px text-3xs font-semibold uppercase tracking-wide text-term-text-dim"
+            title="As-of date of the latest underlying data point"
+          >
+            DATA AS OF {asOf}
+          </span>
+        )}
         {right}
         <Tag tone="up">
           <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-term-up animate-blink align-middle" />

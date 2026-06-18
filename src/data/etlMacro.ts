@@ -29,6 +29,7 @@ export interface EtlFedProbability {
   implied_move_bps: number;
   outcomes_json: string;
   price_source: "cme" | "sim";
+  as_of?: string;
 }
 
 export interface EtlCountryMacro {
@@ -137,4 +138,9 @@ export function impliedPathFromEtl(): { label: string; rate: number }[] {
 /** Price source of the ETL FedWatch snapshot ("cme" live, or "sim" fallback). */
 export function etlFedSource(): "cme" | "sim" | null {
   return etlFedProbabilities[0]?.price_source ?? null;
+}
+
+/** Futures-pricing date the FedWatch probabilities were derived from. */
+export function etlFedAsOf(): string | null {
+  return etlFedProbabilities[0]?.as_of ?? null;
 }

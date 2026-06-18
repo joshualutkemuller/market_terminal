@@ -226,10 +226,15 @@ class FedProbabilityEngine:
     # Serialization
     # ------------------------------------------------------------------
 
-    def to_dataframe(self, results: list[MeetingProbability]):
-        """Convert results to a Polars DataFrame for the gold layer."""
+    def to_dataframe(self, results: list[MeetingProbability], as_of: date | None = None):
+        """Convert results to a Polars DataFrame for the gold layer.
+
+        ``as_of`` stamps the futures-pricing date the probabilities were derived
+        from (defaults to today) so the terminal can show a clear data-as-of.
+        """
         import polars as pl
 
+        stamp = (as_of or date.today()).isoformat()
         rows = [
             {
                 "meeting_date": r.meeting_date,
@@ -239,6 +244,7 @@ class FedProbabilityEngine:
                 "hike_prob": r.hike_prob,
                 "implied_move_bps": r.implied_move_bps,
                 "outcomes_json": json.dumps({f"{k:.2f}": v for k, v in r.outcomes.items()}),
+                "as_of": stamp,
             }
             for r in results
         ]
