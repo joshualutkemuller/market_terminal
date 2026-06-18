@@ -61,6 +61,7 @@ export const NAV: NavItem[] = [
   { code: "EML", label: "ML Applications", href: "/economics/ml", icon: BrainCircuit, desc: "Recession, nowcast & rate models", group: "ECONOMICS" },
   { code: "SFE", label: "Sec-Finance Economics", href: "/economics/sec-finance", icon: Banknote, desc: "Rates → repo, funding & lending", group: "ECONOMICS" },
   { code: "AI", label: "AI Copilot", href: "/copilot", icon: Bot, desc: "Natural-language intelligence", group: "INTELLIGENCE" },
+  { code: "DATAOPS", label: "Data Ops", href: "/dataops", icon: Cpu, desc: "Provider health and lineage", group: "INTELLIGENCE" },
   { code: "ALRT", label: "Alert Center", href: "/alerts", icon: BellRing, desc: "Streaming risk & ops alerts", group: "INTELLIGENCE" },
 ];
 
