@@ -33,7 +33,7 @@ BlackRock.
 | `GCPI` | **Global Inflation** | CPI YoY/MoM by country with trend-vs-prior, consecutive-print streaks, vs-target, heat map |
 | `GPOL` | **Global Policy Rates** | Central-bank rates, cycles, real rates, streaks and next meetings by country |
 | `CRDT` | **Credit Spreads** | IG/HY OAS deep dive — credit curve by rating (drillable), 18y IG-vs-HY history with stress episodes, sector spreads, valuation percentiles, stress table, credit→sec-finance linkage |
-| `FOMC` | **Rate Probabilities** | CME-FedWatch-style meeting hike/cut odds, **Policy Path Evolution** overlay (prior as-of dates showing how cuts have been re-priced), implied path, FOMC dot plot |
+| `FOMC` | **Rate Probabilities** | CME-FedWatch meeting hike/cut odds computed by the **`macro_data_etl` FedProbabilityEngine** (Fed Funds futures → day-weighted FOMC probabilities), **Policy Path Evolution** overlay (prior as-of dates showing how cuts have been re-priced), implied path, FOMC dot plot |
 | `CAL`  | **Economic Calendar** | Release stream (FRED release dates) with importance/category filters and beat/miss vs consensus |
 | `STAT` | **Statistical Analysis** | **Live FRED, up to 20y** — adjustable lookback (5/10/20Y/Max), transform (levels/Δ/YoY), Granger lag, rolling window & series selection; correlation matrix, **Granger causality** (F-test), OLS regression, ADF stationarity, rolling correlation, ACF, distributions & moments. Incrementally cached — changing settings recomputes locally, only older windows fetch a delta |
 | `EML`  | **ML Applications** | Recession probit (AUC 0.89), inflation nowcast, rate-path BVAR+LSTM, regime HMM, feature importances, model registry |
@@ -82,10 +82,10 @@ analytics/model modules are computed layers. Honest per-module status:
 | Statistical Analysis | 🟢 Live | — | up to 20y FRED history; customizable & incrementally cached |
 | Sec-Finance Economics | 🟡 Partial live | 🟢 Live | SOFR/EFFR/IORB/RRP + Fed-funds backdrop live; GC/specials/sensitivities curated |
 | Global Policy Rates | 🟡 Partial live | 🟡 Live (most) | FRED OECD/ECB central-bank-rate series where available |
-| Rate Probabilities | 🔴 Sim / model | — | no free fed-funds-futures / CME FedWatch API |
+| Rate Probabilities | 🔵 ETL (FedWatch) | — | `macro_data_etl` gold `fed_probabilities`; live CME with network, else deterministic fallback curve |
 | ML Applications | 🔴 Sim / model | — | model outputs, not a feed |
 
-🟢 fully live with a key · 🔴 simulation/model. The live modules batch-fetch raw index/OAS
+🟢 fully live with a key · 🔵 fed by the `macro_data_etl` pipeline · 🔴 simulation/model. The live modules batch-fetch raw index/OAS
 series via `/api/econ/batch` and derive the displayed metrics (MoM/YoY/acceleration, streaks,
 1d/1m changes) client-side, falling back to the simulation per-series when a FRED id is missing
 or no key is set. Every drillable card also calls `/api/econ/series` for its 24-month history —
@@ -95,6 +95,39 @@ The **FRED units correction** (`resolveFred`) maps each series to the right tran
 
 > FRED does not send CORS headers, so it is only ever called server-side from the route
 > handlers — the key is never exposed to the browser.
+
+---
+
+## Global macro pipeline (`macro_data_etl`)
+
+The **Rate Probabilities** module is fed by a companion **Python ETL** (in the
+`rl_hub` repo under `/macro_data_etl`) that ingests global macro data from free
+public sources and lands it through a raw → bronze → silver → gold medallion
+architecture:
+
+- **World Bank** — Global Inflation (CPI YoY by country)
+- **BIS** — `WS_CBPOL` central-bank policy rates
+- **IMF** — DataMapper fallback for gaps
+- **CME** — 30-Day Fed Funds futures → **FOMC hike/cut probabilities** via a
+  `FedProbabilityEngine` that replicates the CME FedWatch day-weighting
+  methodology (with the standard next-month switchover for late-month meetings)
+
+The ETL exports its gold tables to JSON (`macro-etl export`); a snapshot lives in
+`src/data/etl/` and is imported at build time, so the terminal renders it with
+**zero configuration and no hydration drift**. Panels show a blue **ETL · MACRO**
+badge. CME blocks non-browser clients, so when the engine can't reach live
+settlements it uses a deterministic fallback futures curve (flagged in the
+tooltip) — run `macro-etl run --source all && macro-etl fedwatch` with network
+access to refresh with live values. The shapes are identical, so no terminal
+code changes when the data goes live.
+
+```bash
+# in the rl_hub repo
+cd macro_data_etl && pip install -e .
+macro-etl run --source all          # World Bank + BIS → gold
+macro-etl fedwatch                  # CME futures → FOMC probabilities
+macro-etl export fed_probabilities  # JSON for the terminal
+```
 
 ---
 
