@@ -1,0 +1,418 @@
+# ─────────────────────────────────────────────────────────────────────
+# Series catalog — the master definition of every asset & macro series.
+# Drives ingestion (what to pull), the asset_master / macro_series_master
+# tables, and analytics bucketing. Each entry maps a canonical series_id to
+# its vendor symbol, source, asset_class, unit and display metadata.
+# ─────────────────────────────────────────────────────────────────────
+
+# ════════════════ MARKET ASSETS (source: YAHOO, prototype-grade) ════════════════
+# series_id == vendor_symbol for market assets (the ETF/index ticker).
+assets:
+  # --- Broad equity indices / factor ETFs ---
+  - series_id: SPY
+    vendor_symbol: SPY
+    display_name: "S&P 500 (SPY)"
+    asset_class: EQUITY
+    sub_class: US_LARGE_CAP
+    unit: USD
+    currency: USD
+  - series_id: QQQ
+    vendor_symbol: QQQ
+    display_name: "Nasdaq 100 (QQQ)"
+    asset_class: EQUITY
+    sub_class: US_TECH
+    unit: USD
+    currency: USD
+  - series_id: IWM
+    vendor_symbol: IWM
+    display_name: "Russell 2000 (IWM)"
+    asset_class: EQUITY
+    sub_class: US_SMALL_CAP
+    unit: USD
+    currency: USD
+  - series_id: DIA
+    vendor_symbol: DIA
+    display_name: "Dow Jones (DIA)"
+    asset_class: EQUITY
+    sub_class: US_LARGE_CAP
+    unit: USD
+    currency: USD
+
+  # --- S&P sectors ---
+  - series_id: XLK
+    vendor_symbol: XLK
+    display_name: "Technology (XLK)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+  - series_id: XLF
+    vendor_symbol: XLF
+    display_name: "Financials (XLF)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+  - series_id: XLE
+    vendor_symbol: XLE
+    display_name: "Energy (XLE)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+  - series_id: XLV
+    vendor_symbol: XLV
+    display_name: "Health Care (XLV)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+  - series_id: XLI
+    vendor_symbol: XLI
+    display_name: "Industrials (XLI)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+  - series_id: XLY
+    vendor_symbol: XLY
+    display_name: "Consumer Discr. (XLY)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+  - series_id: XLP
+    vendor_symbol: XLP
+    display_name: "Consumer Staples (XLP)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+  - series_id: XLU
+    vendor_symbol: XLU
+    display_name: "Utilities (XLU)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+  - series_id: XLB
+    vendor_symbol: XLB
+    display_name: "Materials (XLB)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+  - series_id: XLRE
+    vendor_symbol: XLRE
+    display_name: "Real Estate (XLRE)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+  - series_id: XLC
+    vendor_symbol: XLC
+    display_name: "Communication (XLC)"
+    asset_class: EQUITY
+    sub_class: SECTOR
+    unit: USD
+    currency: USD
+
+  # --- Commodities ---
+  - series_id: GLD
+    vendor_symbol: GLD
+    display_name: "Gold (GLD)"
+    asset_class: COMMODITY
+    sub_class: METALS
+    unit: USD
+    currency: USD
+  - series_id: SLV
+    vendor_symbol: SLV
+    display_name: "Silver (SLV)"
+    asset_class: COMMODITY
+    sub_class: METALS
+    unit: USD
+    currency: USD
+  - series_id: USO
+    vendor_symbol: USO
+    display_name: "Crude Oil (USO)"
+    asset_class: COMMODITY
+    sub_class: ENERGY
+    unit: USD
+    currency: USD
+
+  # --- Bonds / rates ETFs ---
+  - series_id: TLT
+    vendor_symbol: TLT
+    display_name: "20+Y Treasuries (TLT)"
+    asset_class: BOND
+    sub_class: GOVT_LONG
+    unit: USD
+    currency: USD
+  - series_id: IEF
+    vendor_symbol: IEF
+    display_name: "7-10Y Treasuries (IEF)"
+    asset_class: BOND
+    sub_class: GOVT_INT
+    unit: USD
+    currency: USD
+  - series_id: SHY
+    vendor_symbol: SHY
+    display_name: "1-3Y Treasuries (SHY)"
+    asset_class: BOND
+    sub_class: GOVT_SHORT
+    unit: USD
+    currency: USD
+
+  # --- Credit ETFs ---
+  - series_id: HYG
+    vendor_symbol: HYG
+    display_name: "High Yield (HYG)"
+    asset_class: CREDIT
+    sub_class: HIGH_YIELD
+    unit: USD
+    currency: USD
+  - series_id: LQD
+    vendor_symbol: LQD
+    display_name: "Inv. Grade (LQD)"
+    asset_class: CREDIT
+    sub_class: INV_GRADE
+    unit: USD
+    currency: USD
+
+  # --- Volatility ---
+  - series_id: VIXY
+    vendor_symbol: VIXY
+    display_name: "VIX Futures (VIXY)"
+    asset_class: VOLATILITY
+    sub_class: VOL
+    unit: USD
+    currency: USD
+
+  # --- Currency / dollar proxy ---
+  - series_id: UUP
+    vendor_symbol: UUP
+    display_name: "US Dollar Index (UUP)"
+    asset_class: CURRENCY
+    sub_class: USD_PROXY
+    unit: USD
+    currency: USD
+
+  # --- International equity ETFs ---
+  - series_id: EFA
+    vendor_symbol: EFA
+    display_name: "Developed ex-US (EFA)"
+    asset_class: EQUITY
+    sub_class: INTL_DM
+    unit: USD
+    currency: USD
+  - series_id: EEM
+    vendor_symbol: EEM
+    display_name: "Emerging Markets (EEM)"
+    asset_class: EQUITY
+    sub_class: INTL_EM
+    unit: USD
+    currency: USD
+  - series_id: VGK
+    vendor_symbol: VGK
+    display_name: "Europe (VGK)"
+    asset_class: EQUITY
+    sub_class: INTL_DM
+    unit: USD
+    currency: USD
+  - series_id: EWJ
+    vendor_symbol: EWJ
+    display_name: "Japan (EWJ)"
+    asset_class: EQUITY
+    sub_class: INTL_DM
+    unit: USD
+    currency: USD
+
+# ════════════════ MACRO SERIES (source: FRED, official) ════════════════
+# fred_units: API transform — lin (level), pc1 (YoY%), pch (MoM%), chg (change).
+macro:
+  # --- Policy / money-market rates ---
+  - series_id: DFF
+    fred_id: DFF
+    display_name: "Fed Funds Effective Rate"
+    asset_class: MACRO_RATE
+    category: RATES
+    unit: percent
+    fred_units: lin
+    frequency: D
+  - series_id: SOFR
+    fred_id: SOFR
+    display_name: "SOFR"
+    asset_class: MACRO_RATE
+    category: RATES
+    unit: percent
+    fred_units: lin
+    frequency: D
+
+  # --- Treasury curve ---
+  - series_id: DGS3MO
+    fred_id: DGS3MO
+    display_name: "3M Treasury"
+    asset_class: MACRO_RATE
+    category: CURVE
+    unit: percent
+    fred_units: lin
+    frequency: D
+    tenor: "3M"
+  - series_id: DGS2
+    fred_id: DGS2
+    display_name: "2Y Treasury"
+    asset_class: MACRO_RATE
+    category: CURVE
+    unit: percent
+    fred_units: lin
+    frequency: D
+    tenor: "2Y"
+  - series_id: DGS5
+    fred_id: DGS5
+    display_name: "5Y Treasury"
+    asset_class: MACRO_RATE
+    category: CURVE
+    unit: percent
+    fred_units: lin
+    frequency: D
+    tenor: "5Y"
+  - series_id: DGS10
+    fred_id: DGS10
+    display_name: "10Y Treasury"
+    asset_class: MACRO_RATE
+    category: CURVE
+    unit: percent
+    fred_units: lin
+    frequency: D
+    tenor: "10Y"
+  - series_id: DGS30
+    fred_id: DGS30
+    display_name: "30Y Treasury"
+    asset_class: MACRO_RATE
+    category: CURVE
+    unit: percent
+    fred_units: lin
+    frequency: D
+    tenor: "30Y"
+
+  # --- Inflation (index levels; analytics derive YoY/MoM) ---
+  - series_id: CPIAUCSL
+    fred_id: CPIAUCSL
+    display_name: "CPI"
+    asset_class: MACRO_INFLATION
+    category: INFLATION
+    unit: index
+    fred_units: lin
+    frequency: M
+  - series_id: CPILFESL
+    fred_id: CPILFESL
+    display_name: "Core CPI"
+    asset_class: MACRO_INFLATION
+    category: INFLATION
+    unit: index
+    fred_units: lin
+    frequency: M
+  - series_id: PCEPI
+    fred_id: PCEPI
+    display_name: "PCE"
+    asset_class: MACRO_INFLATION
+    category: INFLATION
+    unit: index
+    fred_units: lin
+    frequency: M
+  - series_id: PCEPILFE
+    fred_id: PCEPILFE
+    display_name: "Core PCE"
+    asset_class: MACRO_INFLATION
+    category: INFLATION
+    unit: index
+    fred_units: lin
+    frequency: M
+
+  # --- Labor ---
+  - series_id: UNRATE
+    fred_id: UNRATE
+    display_name: "Unemployment Rate"
+    asset_class: MACRO_LABOR
+    category: LABOR
+    unit: percent
+    fred_units: lin
+    frequency: M
+  - series_id: PAYEMS
+    fred_id: PAYEMS
+    display_name: "Nonfarm Payrolls"
+    asset_class: MACRO_LABOR
+    category: LABOR
+    unit: thousands
+    fred_units: chg
+    frequency: M
+  - series_id: ICSA
+    fred_id: ICSA
+    display_name: "Initial Jobless Claims"
+    asset_class: MACRO_LABOR
+    category: LABOR
+    unit: count
+    fred_units: lin
+    frequency: W
+
+  # --- Growth / activity ---
+  - series_id: GDPC1
+    fred_id: GDPC1
+    display_name: "Real GDP"
+    asset_class: MACRO_GROWTH
+    category: GROWTH
+    unit: billions_chained
+    fred_units: lin
+    frequency: Q
+  - series_id: INDPRO
+    fred_id: INDPRO
+    display_name: "Industrial Production"
+    asset_class: MACRO_GROWTH
+    category: GROWTH
+    unit: index
+    fred_units: lin
+    frequency: M
+  - series_id: RSAFS
+    fred_id: RSAFS
+    display_name: "Retail Sales"
+    asset_class: MACRO_GROWTH
+    category: GROWTH
+    unit: millions
+    fred_units: lin
+    frequency: M
+  - series_id: HOUST
+    fred_id: HOUST
+    display_name: "Housing Starts"
+    asset_class: MACRO_GROWTH
+    category: HOUSING
+    unit: thousands
+    fred_units: lin
+    frequency: M
+
+  # --- Liquidity / money ---
+  - series_id: M2SL
+    fred_id: M2SL
+    display_name: "M2 Money Supply"
+    asset_class: MACRO_LIQUIDITY
+    category: LIQUIDITY
+    unit: billions
+    fred_units: lin
+    frequency: M
+
+  # --- Credit spreads ---
+  - series_id: BAMLH0A0HYM2
+    fred_id: BAMLH0A0HYM2
+    display_name: "High Yield OAS"
+    asset_class: MACRO_CREDIT
+    category: CREDIT
+    unit: percent
+    fred_units: lin
+    frequency: D
+  - series_id: BAMLC0A0CM
+    fred_id: BAMLC0A0CM
+    display_name: "IG Corporate OAS"
+    asset_class: MACRO_CREDIT
+    category: CREDIT
+    unit: percent
+    fred_units: lin
+    frequency: D

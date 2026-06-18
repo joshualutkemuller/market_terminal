@@ -1,0 +1,72 @@
+"""Storage + transform + manifest integration tests (no network)."""
+
+from __future__ import annotations
+
+from datetime import date
+
+import polars as pl
+import pytest
+
+from market_data_pipeline.src.storage.duckdb_store import DuckDBStore
+from market_data_pipeline.src.storage.parquet_archive import ParquetArchive
+
+
+@pytest.fixture()
+def store(tmp_path):
+    s = DuckDBStore(tmp_path / "t.duckdb")
+    yield s
+    s.close()
+
+
+def _norm_row(series_id, d, v, run="r1"):
+    return {
+        "series_id": series_id, "source": "SYNTHETIC", "vendor_symbol": series_id,
+        "display_name": series_id, "asset_class": "EQUITY", "frequency": "D",
+        "date": d, "value": float(v), "unit": "USD", "currency": "USD",
+        "adjustment_type": "ADJ_CLOSE", "revision_timestamp": None, "vintage_date": None,
+        "ingested_at": None, "ingestion_run_id": run,
+    }
+
+
+def test_schema_creates_12_tables(store):
+    assert len(store.table_counts()) == 12
+
+
+def test_upsert_is_idempotent(store):
+    df = pl.DataFrame([_norm_row("SPY", date(2026, 1, 1), 100), _norm_row("SPY", date(2026, 1, 2), 101)])
+    assert store.upsert("normalized_time_series", df, ["series_id", "date", "source"]) == 2
+    store.upsert("normalized_time_series", df, ["series_id", "date", "source"])
+    assert store.query("SELECT count(*) c FROM normalized_time_series")["c"][0] == 2
+
+
+def test_upsert_updates_value_not_duplicate(store):
+    store.upsert("normalized_time_series", pl.DataFrame([_norm_row("SPY", date(2026, 1, 1), 100)]),
+                 ["series_id", "date", "source"])
+    store.upsert("normalized_time_series", pl.DataFrame([_norm_row("SPY", date(2026, 1, 1), 200)]),
+                 ["series_id", "date", "source"])
+    out = store.query("SELECT value FROM normalized_time_series")
+    assert out.height == 1 and out["value"][0] == 200.0
+
+
+def test_replace_table(store):
+    df = pl.DataFrame([_norm_row("SPY", date(2026, 1, 1), 100)])
+    store.replace_table("normalized_time_series", df)
+    store.replace_table("normalized_time_series", df)
+    assert store.query("SELECT count(*) c FROM normalized_time_series")["c"][0] == 1
+
+
+def test_normalized_filter_by_asset_class(store):
+    store.upsert("normalized_time_series", pl.DataFrame([_norm_row("SPY", date(2026, 1, 1), 100)]),
+                 ["series_id", "date", "source"])
+    assert store.normalized(asset_classes=["EQUITY"]).height == 1
+    assert store.normalized(asset_classes=["BOND"]).height == 0
+
+
+def test_parquet_archive_roundtrip(tmp_path):
+    arch = ParquetArchive(tmp_path)
+    df = pl.DataFrame([_norm_row("SPY", date(2026, 1, 1), 100)])
+    p = arch.write(df, "silver", "normalized", "SYNTHETIC", "r1")
+    assert p is not None and p.exists()
+    back = arch.read_dataset("silver", "normalized")
+    assert back.height == 1
+    assert arch.write(pl.DataFrame(), "silver", "normalized", "X", "r2") is None

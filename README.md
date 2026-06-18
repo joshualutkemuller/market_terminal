@@ -167,16 +167,52 @@ degrades gracefully to simulation when no key is present.
 
 ## Run locally
 
+The terminal is a standard Next.js app — **zero config, no database, no keys**.
+All 22 modules (including Rate Probabilities, which renders the committed ETL
+FedWatch snapshot) work fully offline.
+
 ```bash
-npm install
-npm run dev      # http://localhost:3000
+npm install                 # first time only
+npm run dev                 # → http://localhost:3000
 ```
+
+Requirements: **Node 18+**.
 
 Production build:
 
 ```bash
-npm run build && npm start
+npm run build && npm start  # → http://localhost:3000
 ```
+
+**Optional — live FRED data.** Set `FRED_API_KEY` and the economics modules
+switch from amber `SIM` to green `LIVE · FRED`; without it they use the
+deterministic simulation:
+
+```bash
+FRED_API_KEY=your_key_here npm run dev
+# free key: https://fred.stlouisfed.org/docs/api/api_key.html
+```
+
+### Optional — refresh the macro pipeline
+
+You **do not** need this to run the terminal; the gold JSON is already committed
+under `src/data/etl/`. Run the Python ETL only to regenerate the global-macro /
+FedWatch data. It is fully decoupled (Node terminal ↔ Python batch job; the only
+link is the JSON in `src/data/etl/`).
+
+```bash
+cd macro_data_etl
+pip install -e .                                          # polars, duckdb, httpx, typer…
+macro-etl run --source all                                # World Bank + BIS → gold
+macro-etl fedwatch                                        # CME futures → FOMC probabilities
+macro-etl export fed_probabilities --out ../src/data/etl  # write JSON the terminal reads
+pytest                                                    # 22 tests, no network needed
+```
+
+Requirements: **Python 3.11+**. On a networked machine World Bank and BIS return
+live data; CME blocks non-browser clients, so FedWatch falls back to a
+deterministic futures curve (flagged in the page tooltip). Refresh the browser
+after exporting.
 
 ## Deploy free
 
