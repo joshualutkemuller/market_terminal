@@ -120,8 +120,11 @@ pip install -e .            # or: pip install polars duckdb pyarrow httpx tenaci
 # 1) Run the full ETL. Offline = deterministic synthetic sources (no network/keys):
 python -m market_data_pipeline.cli run --offline
 
-# With live data: set FRED_API_KEY (official macro) and leave Yahoo enabled:
+# With live data: set FRED_API_KEY (official macro) and leave Yahoo enabled.
+# This pulls ~10y of daily history per symbol from Yahoo (yfinance if installed,
+# else the public chart endpoint) + FRED macro, and upserts/refreshes the DuckDB:
 FRED_API_KEY=your_key python -m market_data_pipeline.cli run --start 2010-01-01
+pip install -e ".[yahoo]"        # optional: the yfinance library (more robust than the raw endpoint)
 
 # 2) Serve the API:
 python -m market_data_pipeline.cli serve --port 8000      # http://localhost:8000/docs
