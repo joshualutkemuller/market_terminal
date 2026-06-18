@@ -21,6 +21,7 @@ import {
   Globe2,
   Gavel,
   SquareStack,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +38,7 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { code: "HOME", label: "Command Center", href: "/", icon: LayoutDashboard, desc: "Cross-desk overview & KPIs", group: "MARKETS" },
   { code: "MKT", label: "Live Markets", href: "/markets", icon: Activity, desc: "Real-time multi-asset monitor", group: "MARKETS" },
+  { code: "SNAP", label: "Market Snapshot", href: "/market-snapshot", icon: Gauge, desc: "Cross-asset returns, drawdowns & regime", group: "MARKETS" },
   { code: "SLAB", label: "Securities Lending", href: "/securities-lending", icon: Landmark, desc: "Inventory, loan book & revenue", group: "FINANCE" },
   { code: "PB", label: "Prime Finance", href: "/prime-finance", icon: Briefcase, desc: "Hedge fund financing & risk", group: "FINANCE" },
   { code: "COLL", label: "Collateral Mgmt", href: "/collateral", icon: Layers, desc: "Margin & collateral optimization", group: "OPTIMIZATION" },

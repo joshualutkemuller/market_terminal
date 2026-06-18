@@ -20,6 +20,7 @@ BlackRock.
 |------|--------|--------------|
 | `HOME` | **Command Center** | Cross-desk KPIs, revenue, heat map, live alert stream, module launchpad |
 | `MKT`  | **Live Markets** | Multi-asset monitor — equities, ETFs, fixed income, futures, FX, commodities, crypto, vol. Quotes grid, candlesticks + VWAP, order flow, treemap heat map, movers |
+| `SNAP` | **Market Snapshot** | Cross-asset "state of the market" served by the **`market_data_pipeline`** (FRED · Yahoo · pluggable vendors): returns/drawdown table (1D…5Y CAGR, 52w distance), Treasury curve + 2s10s/3m10y, regime scores (risk-on/off · growth · inflation · liquidity), cross-asset dashboard, best/worst YTD |
 | `SLAB` | **Securities Lending** | Inventory (internal / beneficial owner / prime), loan book, borrow demand, HTB & specials, revenue analytics (waterfall, Sankey, by borrower/security/asset class) |
 | `PB`   | **Prime Finance** | Gross/net/long/short exposure, top hedge-fund clients, financing revenue & RoA, VaR / stress testing, financing optimization opportunities |
 | `COLL` | **Collateral Management** | IM/VM, excess/deficits, current vs optimized allocation, shadow prices, eligibility/concentration/haircut constraints, interactive what-if |
@@ -128,6 +129,38 @@ macro-etl run --source all          # World Bank + BIS → gold
 macro-etl fedwatch                  # CME futures → FOMC probabilities
 macro-etl export fed_probabilities  # JSON for the terminal
 ```
+
+---
+
+## Market data pipeline (`market_data_pipeline`)
+
+The **Market Snapshot** module (`SNAP`) is served by a second Python service (in
+this repo under `/market_data_pipeline`): a production market + macro pipeline
+that ingests **FRED** (official macro) and **Yahoo/yfinance** (prototype-grade
+market, replaceable vendor interface), lands a raw → bronze → silver → gold
+medallion warehouse (DuckDB + Parquet, Polars transforms), validates it, and
+serves terminal "cards" over **FastAPI**.
+
+The pipeline's gold views are exported to JSON and committed under
+`src/data/market/`, imported at build time so the module renders with **zero
+config**. At runtime, `/api/market/[view]` transparently upgrades to the **live
+FastAPI service** when `MARKET_PIPELINE_URL` is set (blue `LIVE · PIPELINE`
+badge); otherwise it serves the committed snapshot (`PIPELINE · SNAPSHOT`).
+Identical shapes either way.
+
+```bash
+# in this repo
+cd market_data_pipeline && pip install -e .
+python -m market_data_pipeline.cli run --offline   # synthetic, no keys/network
+FRED_API_KEY=… python -m market_data_pipeline.cli run   # live FRED + Yahoo
+python -m market_data_pipeline.cli serve --port 8000    # FastAPI → /docs
+
+# point the terminal at the live service:
+MARKET_PIPELINE_URL=http://localhost:8000 npm run dev
+```
+
+See `market_data_pipeline/README.md` for the full architecture, the 12-table
+schema, the endpoint list, and `docs/example_payloads.json`.
 
 ---
 
