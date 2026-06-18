@@ -28,8 +28,12 @@ BlackRock.
 | `OPT`  | **Optimization Center** | Flagship — solver runs (Gurobi / OR-Tools / Pyomo), objective/runtime/status/duals, before-after comparison, recommended trades |
 | `DESK` | **Trading Desk** | Trader scorecards, execution analytics (slippage / VWAP / TWAP / fill rates), risk analytics, position concentration |
 | `ECON` | **Macro Dashboard** | FRED-connected economic indicators grouped by category, surprise index, breadth, live series explorer |
-| `CURV` | **Treasury Curve Lab** | Multi-snapshot curve overlay (today vs 1M/3M/6M/1Y/2Y/pre-hiking/GFC), level/slope/curvature, point-in-time scrubber, 2s10s inversion timeline, full historical inversion → recession lead-time analysis |
-| `FOMC` | **Rate Probabilities** | CME-FedWatch-style meeting hike/cut odds, implied policy path, FOMC dot plot |
+| `CURV` | **Treasury Curve Lab** | Multi-snapshot curve overlay (today vs 1M/3M/6M/1Y/2Y/pre-hiking/GFC), level/slope/curvature, point-in-time scrubber, **user-selectable spread** (10Y-2Y default + 10Y-3M, 30Y-5Y, 10Y-1Y, 5Y-2Y, 2Y-3M, 30Y-10Y) driving the inversion timeline and full historical inversion → recession lead-time analysis |
+| `INFL` | **Inflation Explorer** | CPI / Core CPI / PCE / Core PCE to item level — index reading, MoM %, YoY %, and ΔMoM/ΔYoY acceleration; contribution waterfall; CPI/PCE basket toggle; every item drills to 24m |
+| `GCPI` | **Global Inflation** | CPI YoY/MoM by country with trend-vs-prior, consecutive-print streaks, vs-target, heat map |
+| `GPOL` | **Global Policy Rates** | Central-bank rates, cycles, real rates, streaks and next meetings by country |
+| `CRDT` | **Credit Spreads** | IG/HY OAS deep dive — credit curve by rating (drillable), 18y IG-vs-HY history with stress episodes, sector spreads, valuation percentiles, stress table, credit→sec-finance linkage |
+| `FOMC` | **Rate Probabilities** | CME-FedWatch-style meeting hike/cut odds, **Policy Path Evolution** overlay (prior as-of dates showing how cuts have been re-priced), implied path, FOMC dot plot |
 | `CAL`  | **Economic Calendar** | Release stream (FRED release dates) with importance/category filters and beat/miss vs consensus |
 | `STAT` | **Statistical Analysis** | Correlation matrix, interactive OLS regression, change distributions / z-scores, regime map |
 | `EML`  | **ML Applications** | Recession probit (AUC 0.89), inflation nowcast, rate-path BVAR+LSTM, regime HMM, feature importances, model registry |
@@ -45,9 +49,10 @@ The **Economics & Macro** modules are wired to **FRED** (Federal Reserve Economi
 The connection is real but **optional and resilient**:
 
 - **With a key** — set `FRED_API_KEY` in the environment. Server-side route handlers
-  (`/api/econ/series`, `/api/econ/curve`, `/api/econ/calendar`) fetch live observations,
-  yield-curve tenors (`DGS1MO…DGS30`), and release dates from `api.stlouisfed.org`
-  (cached 10 min). Panels show a green **LIVE · FRED** badge.
+  (`/api/econ/series`, `/api/econ/indicators`, `/api/econ/curve`, `/api/econ/calendar`) fetch
+  live observations, all dashboard indicators (units-corrected), yield-curve tenors
+  (`DGS1MO…DGS30`), and release dates from `api.stlouisfed.org` (cached 10 min). Panels show a
+  green **LIVE · FRED** badge.
 - **Without a key** — every module renders a **deterministic, seeded simulation** anchored
   to a plausible mid-2026 macro regime. Panels show an amber **SIM** badge. No setup, no
   hydration drift, fully functional offline.
@@ -60,6 +65,31 @@ when the API reports it — so the UI never blocks or breaks.
 FRED_API_KEY=your_key_here npm run dev
 # On Vercel/Netlify: add FRED_API_KEY as a project environment variable.
 ```
+
+### Data provenance — what's live vs. simulated
+
+Live wiring is **deliberately partial** — some modules have no free upstream API, and the
+analytics/model modules are computed layers. Honest per-module status:
+
+| Module | Card values | Drill-down (24m) | Notes |
+|--------|-------------|------------------|-------|
+| Macro Dashboard | 🟢 Live (FRED, units-corrected) | 🟢 Live | `/api/econ/indicators` |
+| Treasury Curve Lab | 🟢 Live (today's curve) | 🟢 Live tenors | history & inversions are curated/computed |
+| Economic Calendar | 🟢 Live (FRED release dates) | — | `/api/econ/calendar` |
+| Inflation Explorer | 🟡 Sim face | 🟢 Live | CPI/PCE component FRED ids are real |
+| Global Inflation | 🟡 Sim face | 🟢 Live (most) | OECD-on-FRED CPI ids; a few fall back to sim |
+| Credit Spreads | 🟡 Sim face | 🟢 Live | ICE BofA OAS FRED ids are real |
+| Global Policy Rates | 🔴 Sim | 🔴 Sim | drill keys are bank names, not FRED series |
+| Rate Probabilities | 🔴 Sim / model | — | no free fed-funds-futures / CME FedWatch API |
+| Statistical Analysis | 🔴 Sim | — | computed over the simulation history |
+| ML Applications | 🔴 Sim / model | — | model outputs, not a feed |
+| Sec-Finance Economics | 🔴 Sim / curated | — | repo/specials not freely on FRED |
+
+🟢 fully live with a key · 🟡 simulated values but **live on drill-down** · 🔴 simulation/model.
+Every drillable card calls `/api/econ/series`, which returns live FRED (units-corrected) when
+the clicked series has a real FRED id, otherwise the simulation — flagged by the LIVE/SIM badge.
+The **FRED units correction** (`resolveFred`) maps each series to the right transform
+(CPI → YoY `pc1`, retail → MoM `pch`, payrolls → `chg`, OAS/spreads → bps ×100, Fed B/S → $T).
 
 > FRED does not send CORS headers, so it is only ever called server-side from the route
 > handlers — the key is never exposed to the browser.
@@ -80,7 +110,7 @@ FRED_API_KEY=your_key_here npm run dev
 ## Tech stack
 
 **This build** is fully client-rendered Next.js over **deterministic, seeded data
-generators**, so all 18 modules run with **zero configuration** — no database, no required
+generators**, so all 22 modules run with **zero configuration** — no database, no required
 keys — and stay reproducible across server/client renders. The only live integration is the
 **optional** FRED connection (see above), which runs through serverless route handlers and
 degrades gracefully to simulation when no key is present.
@@ -132,7 +162,8 @@ src/
 ├── app/                     # one route per module
 │   ├── (HOME, markets, securities-lending, prime-finance, collateral, cash-optimizer,
 │   │    sources-uses, optimization, trading-desk, copilot, alerts)
-│   ├── economics/           # ECON + curve, rates, calendar, stats, ml, sec-finance
+│   ├── economics/           # ECON + curve, inflation, global-cpi, policy-rates, credit,
+│   │                         #   rates, calendar, stats, ml, sec-finance (+ shared drill layout)
 │   └── api/econ/            # FRED route handlers (series, curve, calendar)
 ├── components/
 │   ├── shell/               # command bar, sidebar, status bar, ticker, command palette
@@ -142,7 +173,8 @@ src/
 │                            #   Sankey, NetworkGraph, Waterfall, Matrix, Radial, YieldCurve, ScatterPlot)
 ├── data/                    # deterministic domain generators (universe, markets, securitiesLending,
 │                            #   primeFinance, collateral, cash, sourcesUses, optimization, trading,
-│                            #   alerts, econSeries, econCurve, econRates, econModels)
+│                            #   alerts, econSeries, econCurve, econRates, econModels, inflation,
+│                            #   globalMacro, creditSpreads)
 └── lib/                     # rng (seeded), format, hooks, nav, useEcon, server/fred.ts
 ```
 
