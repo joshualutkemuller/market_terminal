@@ -173,6 +173,7 @@ export default function TreasuryCurveLab() {
         code="CURV"
         title="Treasury Curve Lab"
         desc="Curve shape, history & inversions"
+        asOf={live.data.date}
         right={<SourceBadge source={live.source} />}
       />
 

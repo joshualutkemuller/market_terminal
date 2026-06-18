@@ -118,7 +118,7 @@ export default function MarketSnapshotPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="SNAP" title="Market Snapshot" desc="Cross-asset state of the market — market_data_pipeline" right={<PipeBadge source={source} />} />
+      <PageHeader code="SNAP" title="Market Snapshot" desc="Cross-asset state of the market — market_data_pipeline" asOf={rv.asof ?? cross.asof ?? null} right={<PipeBadge source={source} />} />
 
       <KpiStrip>
         <Stat label="Regime" value={reg.composite.label} sub={`score ${fmtNum(reg.composite.score, 0)}`} tone={regimeTone(reg.composite.label)} />
