@@ -5,7 +5,7 @@ import { getSeriesHistory, type Observation } from "@/data/econSeries";
 import { getCurrentCurve, type CurveSnapshot } from "@/data/econCurve";
 import { getEconEvents, type EconEvent } from "@/data/econRates";
 
-export type DataSource = "FRED" | "SIM" | "LOADING";
+export type DataSource = "FRED" | "SIM" | "LOADING" | "ETL";
 
 /**
  * Resilient econ data hooks. Each returns the deterministic simulation value

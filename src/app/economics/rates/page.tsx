@@ -16,6 +16,8 @@ import {
   POLICY_PATH_HORIZONS,
   type FomcMeeting,
 } from "@/data/econRates";
+import { fomcFromEtl, impliedPathFromEtl, hasEtlFedData, etlFedSource } from "@/data/etlMacro";
+import { SourceBadge } from "@/components/econ/SourceBadge";
 import { fmtNum, fmtSigned } from "@/lib/format";
 
 const CUT_COLOR = "#2ECC71";
@@ -46,8 +48,14 @@ function probOf(m: FomcMeeting, move: number): number {
 }
 
 export default function RateProbabilitiesPage() {
-  const meetings = getFomcMeetings();
-  const path = getImpliedPath();
+  // Prefer the macro_data_etl FedWatch gold table (CME Fed Funds futures →
+  // FOMC probabilities) when its snapshot is present; fall back to the
+  // built-in deterministic easing path otherwise.
+  const useEtl = hasEtlFedData();
+  const meetings = useEtl ? fomcFromEtl() : getFomcMeetings();
+  const path = useEtl ? impliedPathFromEtl() : getImpliedPath();
+  const fedSource: "ETL" | "SIM" = useEtl ? "ETL" : "SIM";
+  const fedIsLiveCme = useEtl && etlFedSource() === "cme";
   const dot = getDotPlot();
   const pathHistory = getPolicyPathHistory();
   const [selPaths, setSelPaths] = useState<Set<string>>(new Set([pathHistory[0].asOf, "2026-05-17", "2025-12-17"]));
@@ -90,7 +98,7 @@ export default function RateProbabilitiesPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="FOMC" title="Rate Probabilities" desc="Fed path & hike/cut odds" />
+      <PageHeader code="FOMC" title="Rate Probabilities" desc="Fed path & hike/cut odds" right={<SourceBadge source={fedSource} />} />
 
       <KpiStrip>
         <Stat label="Current Target" value={targetStr} sub={`mid ${fmtNum(CURRENT_TARGET.mid, 3)}%`} tone="amber" />
@@ -102,13 +110,19 @@ export default function RateProbabilitiesPage() {
       </KpiStrip>
 
       <div className="px-3 pt-1.5 text-3xs text-term-text-mute">
-        Probabilities use CME FedWatch methodology — implied from 30-day fed funds futures (CME: ZQ).
+        Probabilities use CME FedWatch methodology — implied from 30-day fed funds futures (CME: ZQ).{" "}
+        {useEtl ? (
+          <span className="text-sky-300">
+            Computed by the macro_data_etl FedProbabilityEngine
+            {fedIsLiveCme ? " from live CME settlements." : " (deterministic fallback futures curve — run the ETL with network access for live CME data)."}
+          </span>
+        ) : null}
       </div>
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-3">
         {/* Left + middle: FedWatch grid + path */}
         <div className="flex flex-col gap-2 xl:col-span-2">
-          <Panel title="FOMC Meeting Probabilities" code="FEDWATCH" accent right={<Tag tone="amber">CME ZQ IMPLIED</Tag>}>
+          <Panel title="FOMC Meeting Probabilities" code="FEDWATCH" accent right={<Tag tone={useEtl ? "neutral" : "amber"}>{useEtl ? "ETL · FEDWATCH" : "CME ZQ IMPLIED"}</Tag>}>
             <div className="divide-y divide-term-border-soft">
               {meetings.map((m) => {
                 const segs = [...m.outcomes].sort((a, b) => a.move - b.move);
