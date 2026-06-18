@@ -13,11 +13,14 @@ import {
   getRateSensitivities,
   getReinvestmentLadder,
   getMacroLinkages,
+  liveRepoRow,
   type RepoRow,
   type RateSensitivity,
   type ReinvestmentTier,
 } from "@/data/econModels";
 import { getSeriesHistory } from "@/data/econSeries";
+import { SourceBadge } from "@/components/econ/SourceBadge";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import { fmtNum, fmtSigned, fmtBps, pnlClass } from "@/lib/format";
 
 const DONUT_COLORS = ["#FF8C00", "#3B9DFF", "#2ECC71", "#A78BFA", "#22D3EE", "#EC4899"];
@@ -48,10 +51,22 @@ const MAG_TONE: Record<"HIGH" | "MED" | "LOW", "amber" | "blue" | "neutral"> = {
 };
 
 export default function SecFinanceEconomics() {
-  const repo = getRepoRates();
+  const baseRepo = getRepoRates();
   const sens = getRateSensitivities();
   const ladder = getReinvestmentLadder();
   const links = getMacroLinkages();
+
+  // Live FRED for the policy/repo rates that have real series, plus the backdrop.
+  const liveIds = [...baseRepo.map((r) => r.fredId).filter(Boolean) as string[], "FEDFUNDS"];
+  const { data: liveMap, source } = useLiveSeriesSet(liveIds, "lin", 60);
+  const liveSofr = (() => {
+    const L = liveMap["SOFR"];
+    return L && L.source === "FRED" && L.observations.length ? L.observations[L.observations.length - 1].value : baseRepo.find((r) => r.rate === "SOFR")!.level;
+  })();
+  const repo = baseRepo.map((r) => {
+    const L = r.fredId ? liveMap[r.fredId] : undefined;
+    return L && L.source === "FRED" && L.observations.length ? liveRepoRow(r, L.observations, liveSofr) : r;
+  });
 
   // ── Scenario control: number of 25bp Fed cuts (0 → −4) ────────────────
   const [cuts, setCuts] = useState(0);
@@ -140,8 +155,14 @@ export default function SecFinanceEconomics() {
   );
 
   // ── Funding backdrop series ───────────────────────────────────────────
-  const fedFunds = useMemo(() => getSeriesHistory("FEDFUNDS", 60).map((o) => o.value), []);
-  const sofrHist = useMemo(() => getSeriesHistory("SOFR", 60).map((o) => o.value), []);
+  const fedFunds = useMemo(() => {
+    const L = liveMap["FEDFUNDS"];
+    return L && L.source === "FRED" && L.observations.length ? L.observations.map((o) => o.value) : getSeriesHistory("FEDFUNDS", 60).map((o) => o.value);
+  }, [liveMap]);
+  const sofrHist = useMemo(() => {
+    const L = liveMap["SOFR"];
+    return L && L.source === "FRED" && L.observations.length ? L.observations.map((o) => o.value) : getSeriesHistory("SOFR", 60).map((o) => o.value);
+  }, [liveMap]);
 
   // ── Column defs ───────────────────────────────────────────────────────
   const repoCols: Column<RepoRow>[] = [
@@ -208,7 +229,7 @@ export default function SecFinanceEconomics() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="SFE" title="Sec-Finance Economics" desc="How rates flow into repo, funding, collateral & lending" />
+      <PageHeader code="SFE" title="Sec-Finance Economics" desc="How rates flow into repo, funding, collateral & lending" right={<SourceBadge source={source} />} />
 
       <KpiStrip>
         <Stat label="SOFR" value={`${fmtNum(sofr, 2)}%`} sub="secured O/N" tone="amber" />

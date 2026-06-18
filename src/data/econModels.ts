@@ -165,18 +165,33 @@ export interface RepoRow {
   level: number;
   vsSofr: number; // bps
   spark: number[];
+  fredId?: string; // set where a real FRED series exists (live-wireable)
 }
 
 export function getRepoRates(): RepoRow[] {
-  const rng = new Rng("repo");
-  const defs: [string, number][] = [
-    ["SOFR", 4.31], ["EFFR", 4.08], ["Tri-Party GC Repo", 4.33], ["Bilateral GC", 4.35],
-    ["Specials (avg)", 3.85], ["IORB", 4.15], ["O/N RRP Rate", 4.0], ["Term Repo 1M", 4.38],
+  // rate label, level, FRED id (undefined => simulation/desk construct)
+  const defs: [string, number, string | undefined][] = [
+    ["SOFR", 4.31, "SOFR"],
+    ["EFFR", 4.08, "EFFR"],
+    ["Tri-Party GC Repo", 4.33, undefined],
+    ["Bilateral GC", 4.35, undefined],
+    ["Specials (avg)", 3.85, undefined],
+    ["IORB", 4.15, "IORB"],
+    ["O/N RRP Rate", 4.0, "RRPONTSYAWARD"],
+    ["Term Repo 1M", 4.38, undefined],
   ];
-  return defs.map(([rate, level]) => ({
-    rate, level, vsSofr: Number(((level - 4.31) * 100).toFixed(0)),
+  return defs.map(([rate, level, fredId]) => ({
+    rate, level, fredId,
+    vsSofr: Number(((level - 4.31) * 100).toFixed(0)),
     spark: new Rng(`repo-${rate}`).walk(40, level, 0.004, 0).map((x) => Number(x.toFixed(3))),
   }));
+}
+
+/** Recompute a repo row from a live FRED rate series (units lin, %). */
+export function liveRepoRow(base: RepoRow, obs: { date: string; value: number }[], sofr: number): RepoRow {
+  if (!obs.length) return base;
+  const level = Number(obs[obs.length - 1].value.toFixed(3));
+  return { ...base, level, vsSofr: Number(((level - sofr) * 100).toFixed(0)), spark: obs.map((o) => o.value) };
 }
 
 export interface RateSensitivity {

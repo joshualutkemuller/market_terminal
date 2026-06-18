@@ -35,7 +35,7 @@ BlackRock.
 | `CRDT` | **Credit Spreads** | IG/HY OAS deep dive — credit curve by rating (drillable), 18y IG-vs-HY history with stress episodes, sector spreads, valuation percentiles, stress table, credit→sec-finance linkage |
 | `FOMC` | **Rate Probabilities** | CME-FedWatch-style meeting hike/cut odds, **Policy Path Evolution** overlay (prior as-of dates showing how cuts have been re-priced), implied path, FOMC dot plot |
 | `CAL`  | **Economic Calendar** | Release stream (FRED release dates) with importance/category filters and beat/miss vs consensus |
-| `STAT` | **Statistical Analysis** | Correlation matrix, interactive OLS regression, change distributions / z-scores, regime map |
+| `STAT` | **Statistical Analysis** | **Live FRED** — correlation matrix, **Granger causality** (F-test), interactive OLS regression, ADF stationarity, rolling correlation, autocorrelation (ACF), distributions & descriptive moments |
 | `EML`  | **ML Applications** | Recession probit (AUC 0.89), inflation nowcast, rate-path BVAR+LSTM, regime HMM, feature importances, model registry |
 | `SFE`  | **Sec-Finance Economics** | Differentiator — repo complex, rate sensitivities ("greeks for the book") with a Fed-cut scenario stepper, cash-collateral reinvestment ladder, macro→business linkage |
 | `AI`   | **AI Copilot** | Built-in "Bloomberg GPT" — natural-language Q&A over every dataset, with narratives, tables, charts, and recommended actions |
@@ -79,11 +79,11 @@ analytics/model modules are computed layers. Honest per-module status:
 | Inflation Explorer | 🟢 Live (index → derived MoM/YoY/accel) | 🟢 Live | CPI/PCE component FRED ids; per-item fallback to sim |
 | Global Inflation | 🟢 Live (most countries) | 🟢 Live | OECD-on-FRED CPI; per-country fallback to sim |
 | Credit Spreads | 🟢 Live (rating curve + IG/HY) | 🟢 Live | ICE BofA OAS FRED ids are real |
+| Statistical Analysis | 🟢 Live | — | computed server-side over live FRED macro series |
+| Sec-Finance Economics | 🟡 Partial live | 🟢 Live | SOFR/EFFR/IORB/RRP + Fed-funds backdrop live; GC/specials/sensitivities curated |
 | Global Policy Rates | 🔴 Sim | 🔴 Sim | drill keys are bank names, not FRED series |
 | Rate Probabilities | 🔴 Sim / model | — | no free fed-funds-futures / CME FedWatch API |
-| Statistical Analysis | 🔴 Sim | — | computed over the simulation history |
 | ML Applications | 🔴 Sim / model | — | model outputs, not a feed |
-| Sec-Finance Economics | 🔴 Sim / curated | — | repo/specials not freely on FRED |
 
 🟢 fully live with a key · 🔴 simulation/model. The live modules batch-fetch raw index/OAS
 series via `/api/econ/batch` and derive the displayed metrics (MoM/YoY/acceleration, streaks,
