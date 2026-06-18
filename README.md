@@ -2,8 +2,9 @@
 
 A **Bloomberg-style operating system** for the securities finance business — unifying
 **Securities Lending, Prime Finance, Collateral Optimization, Cash Optimization,
-Sources & Uses Matching, Treasury Analytics, and AI-driven decision support** into a
-single dense, keyboard-driven, multi-monitor terminal.
+Cash Collateral Reinvestment, Liquidity & Funding Stress, Sources & Uses Matching,
+Treasury Analytics, Macro Regime Playbooks, DataOps/Lineage, and AI-driven decision
+support** into a single dense, keyboard-driven, multi-monitor terminal.
 
 Built to look and feel like the software that runs a multi-trillion-dollar book at
 State Street, Goldman Sachs, Morgan Stanley, J.P. Morgan, BNY Mellon, Citi, UBS, or
@@ -25,21 +26,25 @@ BlackRock.
 | `PB`   | **Prime Finance** | Gross/net/long/short exposure, top hedge-fund clients, financing revenue & RoA, VaR / stress testing, financing optimization opportunities |
 | `COLL` | **Collateral Management** | IM/VM, excess/deficits, current vs optimized allocation, shadow prices, eligibility/concentration/haircut constraints, interactive what-if |
 | `CASH` | **Cash Optimizer** | Treasury funding sources & uses, cheapest funding path, Sankey flow, LCR/NSFR, intraday liquidity stress |
+| `REINV` | **Cash Collateral Reinvestment** | Reinvestment ladder, spread carry, WAL/tenor buckets, liquidity buffers, policy-path sensitivity, and collateral cash deployment scenarios |
+| `LIQ`  | **Liquidity & Funding Stress** | Funding ladder, stress outflows, liquidity survival horizon, desk exposure heat map, scenario console, and escalation signals |
 | `SXU`  | **Sources & Uses** | Matching engine network graph, internalization opportunities, funding savings, allocation heat map |
 | `OPT`  | **Optimization Center** | Flagship — solver runs (Gurobi / OR-Tools / Pyomo), objective/runtime/status/duals, before-after comparison, recommended trades |
 | `DESK` | **Trading Desk** | Trader scorecards, execution analytics (slippage / VWAP / TWAP / fill rates), risk analytics, position concentration |
 | `ECON` | **Macro Dashboard** | FRED-connected economic indicators grouped by category, surprise index, breadth, live series explorer |
-| `CURV` | **Treasury Curve Lab** | Multi-snapshot curve overlay (today vs 1M/3M/6M/1Y/2Y/pre-hiking/GFC), level/slope/curvature, point-in-time scrubber, **user-selectable spread** (10Y-2Y default + 10Y-3M, 30Y-5Y, 10Y-1Y, 5Y-2Y, 2Y-3M, 30Y-10Y) driving the inversion timeline and full historical inversion → recession lead-time analysis |
+| `CURV` | **Treasury Curve Lab** | Multi-snapshot curve overlay (today vs 1M/3M/6M/1Y/2Y/pre-hiking/GFC), level/slope/curvature, point-in-time scrubber, **user-selectable spread** (10Y-2Y default + 10Y-3M, 30Y-5Y, 10Y-1Y, 5Y-2Y, 2Y-3M, 30Y-10Y), inversion → recession lead-time analysis, and term funding carry |
 | `INFL` | **Inflation Explorer** | CPI / Core CPI / PCE / Core PCE to item level — index reading, MoM %, YoY %, and ΔMoM/ΔYoY acceleration; contribution waterfall; CPI/PCE basket toggle; every item drills to 24m |
 | `GCPI` | **Global Inflation** | CPI YoY/MoM by country with trend-vs-prior, consecutive-print streaks, vs-target, heat map |
 | `GPOL` | **Global Policy Rates** | Central-bank rates, cycles, real rates, streaks and next meetings by country |
-| `CRDT` | **Credit Spreads** | IG/HY OAS deep dive — credit curve by rating (drillable), 18y IG-vs-HY history with stress episodes, sector spreads, valuation percentiles, stress table, credit→sec-finance linkage |
-| `FOMC` | **Rate Probabilities** | CME-FedWatch meeting hike/cut odds computed by the **`macro_data_etl` FedProbabilityEngine** (Fed Funds futures → day-weighted FOMC probabilities), **Policy Path Evolution** overlay (prior as-of dates showing how cuts have been re-priced), implied path, FOMC dot plot |
-| `CAL`  | **Economic Calendar** | Release stream (FRED release dates) with importance/category filters and beat/miss vs consensus |
-| `STAT` | **Statistical Analysis** | **Live FRED, up to 20y** — adjustable lookback (5/10/20Y/Max), transform (levels/Δ/YoY), Granger lag, rolling window & series selection; correlation matrix, **Granger causality** (F-test), OLS regression, ADF stationarity, rolling correlation, ACF, distributions & moments. Incrementally cached — changing settings recomputes locally, only older windows fetch a delta |
+| `CRDT` | **Credit Spreads** | IG/HY OAS deep dive — credit curve by rating (drillable), 18y IG-vs-HY history with stress episodes, sector spreads, valuation percentiles, stress table, collateral haircut impact, counterparty stress overlay, credit substitutions, and credit→sec-finance linkage |
+| `FOMC` | **Rate Probabilities** | CME-FedWatch meeting hike/cut odds computed by the **`macro_data_etl` FedProbabilityEngine** (Fed Funds futures → day-weighted FOMC probabilities), **Policy Path Evolution** overlay, implied path, FOMC dot plot, and policy-path transmission into REINV/CASH/COLL/OPT |
+| `CAL`  | **Economic Calendar** | Release stream (FRED release dates) with importance/category filters, beat/miss vs consensus, downstream desk sensitivity tags, and pre/post release factor-move summaries |
+| `STAT` | **Statistical Analysis** | **Live FRED, up to 20y** — adjustable lookback (5/10/20Y/Max), transform (levels/Δ/YoY), Granger lag, rolling window & series selection; correlation matrix, **Granger causality** (F-test), OLS regression, ADF stationarity, rolling correlation, ACF, distributions & moments, plus desk-ready study packs |
+| `REGIME` | **Macro Regime Playbook** | Macro regime scoring across growth, inflation, liquidity, credit, and policy factors; playbook actions for collateral, reinvestment, lending, optimization, and funding desks |
 | `EML`  | **ML Applications** | Recession probit (AUC 0.89), inflation nowcast, rate-path BVAR+LSTM, regime HMM, feature importances, model registry |
-| `SFE`  | **Sec-Finance Economics** | Differentiator — repo complex, rate sensitivities ("greeks for the book") with a Fed-cut scenario stepper, cash-collateral reinvestment ladder, macro→business linkage |
+| `SFE`  | **Sec-Finance Economics** | Differentiator — repo complex, rate sensitivities ("greeks for the book") with a Fed-cut scenario stepper, cash-collateral reinvestment ladder, macro factor links, P&L bridge, shared scenario library, and macro→business linkage |
 | `AI`   | **AI Copilot** | Built-in "Bloomberg GPT" — natural-language Q&A over every dataset, with narratives, tables, charts, and recommended actions |
+| `DATAOPS` | **Data Ops** | Provider health, data lineage, SLA/quality scores, freshness monitoring, fallback status, and scaling hooks for Yahoo Finance, FRED, and future licensed feeds |
 | `ALRT` | **Alert Center** | Streaming risk & ops alerts with severity/category filters and a rules engine |
 
 ---
@@ -75,15 +80,19 @@ analytics/model modules are computed layers. Honest per-module status:
 | Module | Card values | Drill-down (24m) | Notes |
 |--------|-------------|------------------|-------|
 | Macro Dashboard | 🟢 Live (FRED, units-corrected) | 🟢 Live | `/api/econ/indicators` |
-| Treasury Curve Lab | 🟢 Live (today's curve) | 🟢 Live tenors | history & inversions are curated/computed |
-| Economic Calendar | 🟢 Live (FRED release dates) | — | `/api/econ/calendar` |
+| Treasury Curve Lab | 🟢 Live (today's curve) | 🟢 Live tenors | history, inversions, and term funding carry are curated/computed |
+| Economic Calendar | 🟢 Live (FRED release dates) | — | `/api/econ/calendar`; release sensitivities and factor moves are computed |
 | Inflation Explorer | 🟢 Live (index → derived MoM/YoY/accel) | 🟢 Live | CPI/PCE component FRED ids; per-item fallback to sim |
 | Global Inflation | 🟢 Live (most countries) | 🟢 Live | OECD-on-FRED CPI; per-country fallback to sim |
-| Credit Spreads | 🟢 Live (rating curve + IG/HY) | 🟢 Live | ICE BofA OAS FRED ids are real |
-| Statistical Analysis | 🟢 Live | — | up to 20y FRED history; customizable & incrementally cached |
-| Sec-Finance Economics | 🟡 Partial live | 🟢 Live | SOFR/EFFR/IORB/RRP + Fed-funds backdrop live; GC/specials/sensitivities curated |
+| Credit Spreads | 🟢 Live (rating curve + IG/HY) | 🟢 Live | ICE BofA OAS FRED ids are real; haircut, counterparty, and substitution analytics are computed |
+| Statistical Analysis | 🟢 Live | — | up to 20y FRED history; customizable, incrementally cached, and packaged into desk studies |
+| Macro Regime Playbook | 🟡 Partial live/sim | — | FRED/Yahoo/local factor playbook; deterministic factors until pipeline-backed |
+| Sec-Finance Economics | 🟡 Partial live | 🟢 Live | SOFR/EFFR/IORB/RRP + Fed-funds backdrop live; GC/specials/sensitivities, P&L bridge, and scenario library curated |
+| Cash Collateral Reinvestment | 🟡 Partial live/sim | — | FRED/Yahoo-ready local model for SOFR/EFFR/Fed-path-driven reinvestment scenarios |
+| Liquidity & Funding Stress | 🔴 Sim / local model | — | stress ladder and signal console designed for FRED/Yahoo/local-book inputs |
 | Global Policy Rates | 🟡 Partial live | 🟡 Live (most) | FRED OECD/ECB central-bank-rate series where available |
 | Rate Probabilities | 🔵 ETL (FedWatch) | — | `macro_data_etl` gold `fed_probabilities`; live CME with network, else deterministic fallback curve |
+| Data Ops | 🟡 Ops metadata | — | local provider health/lineage snapshot designed for `market_data_pipeline` manifests and quality tables |
 | ML Applications | 🔴 Sim / model | — | model outputs, not a feed |
 
 🟢 fully live with a key · 🔵 fed by the `macro_data_etl` pipeline · 🔴 simulation/model. The live modules batch-fetch raw index/OAS
@@ -96,6 +105,28 @@ The **FRED units correction** (`resolveFred`) maps each series to the right tran
 
 > FRED does not send CORS headers, so it is only ever called server-side from the route
 > handlers — the key is never exposed to the browser.
+
+### Roadmap implementation update
+
+The `roadmap_feature_implementation` branch expanded the terminal from 22 to 26
+modules and added the first collateral-adjacent macro workflow layer:
+
+- **#5 — Cash Collateral Reinvestment (`REINV`)**: reinvestment ladder, spread carry,
+  WAL/tenor buckets, policy-path sensitivity, and liquidity buffer analytics.
+- **#6 — Liquidity & Funding Stress (`LIQ`)**: stress ladder, desk funding heat map,
+  survival horizon, liquidity signals, and scenario console.
+- **#9 — Macro Regime Playbook (`REGIME`)**: growth/inflation/liquidity/credit/policy
+  regime scoring with desk actions for collateral, reinvestment, lending, and funding.
+- **#10 — Data Ops (`DATAOPS`)**: provider health, freshness, quality, lineage, SLA,
+  and fallback status for FRED/Yahoo/local sources.
+- **Economic & Macro enhancements**: `src/data/econEnhancements.ts` now feeds the
+  enhanced SFE, STAT, CRDT, CURV/FOMC, and CAL experiences with shared scenario,
+  sensitivity, study-pack, and desk-impact data.
+
+These additions are intentionally adapter-ready: they run locally with deterministic
+fixtures today, can use free **FRED** and **Yahoo Finance/yfinance** style inputs, and
+can later scale to licensed feeds, internal books, optimizer outputs, and the
+`market_data_pipeline` quality/lineage tables without changing the terminal UX.
 
 ---
 
@@ -178,17 +209,19 @@ schema, the endpoint list, and `docs/example_payloads.json`.
 ## Tech stack
 
 **This build** is fully client-rendered Next.js over **deterministic, seeded data
-generators**, so all 22 modules run with **zero configuration** — no database, no required
-keys — and stay reproducible across server/client renders. The only live integration is the
-**optional** FRED connection (see above), which runs through serverless route handlers and
-degrades gracefully to simulation when no key is present.
+generators**, so all 26 modules run with **zero configuration** — no database, no required
+keys — and stay reproducible across server/client renders. Optional live integrations include
+FRED for economics, the committed/exported `macro_data_etl` FedWatch snapshot, and the
+pluggable FRED/Yahoo-backed `market_data_pipeline`, each degrading gracefully to local
+snapshots or simulation when no key/service is present.
 
 - **Next.js 14 (App Router) · React 18 · TypeScript (strict) · Tailwind CSS**
 - **Zero-dependency SVG chart library** (sparklines, line/area, bars, candlesticks + VWAP,
   treemaps, Sankey, network graphs, revenue waterfalls, correlation matrices, donuts, gauges,
   heat grids, yield curves, scatter/regression plots)
 - **AG-Grid-style sortable data grids** built from scratch for density and speed
-- **Optional live data:** FRED via server-side route handlers (`FRED_API_KEY`)
+- **Optional live data:** FRED via server-side route handlers (`FRED_API_KEY`) and
+  `market_data_pipeline` via `MARKET_PIPELINE_URL` for FRED/Yahoo-backed market cards
 
 **Production architecture** (what the demo simulates) — see `ARCHITECTURE.md`:
 - Backend: **Python · FastAPI**, analytics in **Pandas / Polars / NumPy**
@@ -201,8 +234,9 @@ degrades gracefully to simulation when no key is present.
 ## Run locally
 
 The terminal is a standard Next.js app — **zero config, no database, no keys**.
-All 22 modules (including Rate Probabilities, which renders the committed ETL
-FedWatch snapshot) work fully offline.
+All 26 modules (including Rate Probabilities, which renders the committed ETL
+FedWatch snapshot, and the roadmap modules backed by deterministic local fixtures)
+work fully offline.
 
 ```bash
 npm install                 # first time only
@@ -265,10 +299,13 @@ env var is optional — without it the econ modules use simulation):
 src/
 ├── app/                     # one route per module
 │   ├── (HOME, markets, securities-lending, prime-finance, collateral, cash-optimizer,
-│   │    sources-uses, optimization, trading-desk, copilot, alerts)
+│   │    reinvestment, liquidity, sources-uses, optimization, trading-desk,
+│   │    market-snapshot, dataops, copilot, alerts)
 │   ├── economics/           # ECON + curve, inflation, global-cpi, policy-rates, credit,
-│   │                         #   rates, calendar, stats, ml, sec-finance (+ shared drill layout)
-│   └── api/econ/            # FRED route handlers (series, curve, calendar)
+│   │                         #   rates, calendar, stats, regime, ml, sec-finance (+ shared drill layout)
+│   └── api/                 # FRED econ handlers + market pipeline proxy routes
+│       ├── econ/            # series, indicators, curve, calendar, batch
+│       └── market/[view]/   # committed snapshot or live FastAPI market-data view
 ├── components/
 │   ├── shell/               # command bar, sidebar, status bar, ticker, command palette
 │   ├── ui/                  # Panel, Stat, Tag, DataGrid, PageHeader, KpiStrip
@@ -278,7 +315,8 @@ src/
 ├── data/                    # deterministic domain generators (universe, markets, securitiesLending,
 │                            #   primeFinance, collateral, cash, sourcesUses, optimization, trading,
 │                            #   alerts, econSeries, econCurve, econRates, econModels, inflation,
-│                            #   globalMacro, creditSpreads)
+│                            #   globalMacro, creditSpreads, reinvestment, liquidity, macroRegime,
+│                            #   dataOps, econEnhancements)
 └── lib/                     # rng (seeded), format, hooks, nav, useEcon, server/fred.ts
 ```
 
