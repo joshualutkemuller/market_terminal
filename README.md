@@ -86,6 +86,15 @@ FRED_API_KEY=your_key_here npm run dev
 # On Vercel/Netlify: add FRED_API_KEY as a project environment variable.
 ```
 
+**Daily refresh (Vercel Cron).** FRED data is fetched on-access and cached (curve history 6h,
+indicators 10 min), so a busy site is always fresh — but to guarantee the curve/rates refresh
+**once a day even with no traffic**, `vercel.json` registers a cron that hits
+`/api/cron/refresh` daily at 12:00 UTC. That endpoint re-pulls and re-warms the FRED-backed
+econ routes (`curve-history`, `curve`, `indicators`, `calendar`). Historical Treasury yields
+are immutable, so each refresh only advances the recent tail. Set a **`CRON_SECRET`** project
+env var to lock the endpoint down — Vercel sends it as a Bearer token and the route rejects
+any request without it (returns the warm summary on success).
+
 ### Data provenance — what's live vs. simulated
 
 Live wiring is **deliberately partial** — some modules have no free upstream API, and the
