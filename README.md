@@ -76,18 +76,20 @@ analytics/model modules are computed layers. Honest per-module status:
 | Macro Dashboard | 🟢 Live (FRED, units-corrected) | 🟢 Live | `/api/econ/indicators` |
 | Treasury Curve Lab | 🟢 Live (today's curve) | 🟢 Live tenors | history & inversions are curated/computed |
 | Economic Calendar | 🟢 Live (FRED release dates) | — | `/api/econ/calendar` |
-| Inflation Explorer | 🟡 Sim face | 🟢 Live | CPI/PCE component FRED ids are real |
-| Global Inflation | 🟡 Sim face | 🟢 Live (most) | OECD-on-FRED CPI ids; a few fall back to sim |
-| Credit Spreads | 🟡 Sim face | 🟢 Live | ICE BofA OAS FRED ids are real |
+| Inflation Explorer | 🟢 Live (index → derived MoM/YoY/accel) | 🟢 Live | CPI/PCE component FRED ids; per-item fallback to sim |
+| Global Inflation | 🟢 Live (most countries) | 🟢 Live | OECD-on-FRED CPI; per-country fallback to sim |
+| Credit Spreads | 🟢 Live (rating curve + IG/HY) | 🟢 Live | ICE BofA OAS FRED ids are real |
 | Global Policy Rates | 🔴 Sim | 🔴 Sim | drill keys are bank names, not FRED series |
 | Rate Probabilities | 🔴 Sim / model | — | no free fed-funds-futures / CME FedWatch API |
 | Statistical Analysis | 🔴 Sim | — | computed over the simulation history |
 | ML Applications | 🔴 Sim / model | — | model outputs, not a feed |
 | Sec-Finance Economics | 🔴 Sim / curated | — | repo/specials not freely on FRED |
 
-🟢 fully live with a key · 🟡 simulated values but **live on drill-down** · 🔴 simulation/model.
-Every drillable card calls `/api/econ/series`, which returns live FRED (units-corrected) when
-the clicked series has a real FRED id, otherwise the simulation — flagged by the LIVE/SIM badge.
+🟢 fully live with a key · 🔴 simulation/model. The live modules batch-fetch raw index/OAS
+series via `/api/econ/batch` and derive the displayed metrics (MoM/YoY/acceleration, streaks,
+1d/1m changes) client-side, falling back to the simulation per-series when a FRED id is missing
+or no key is set. Every drillable card also calls `/api/econ/series` for its 24-month history —
+both flagged by the LIVE/SIM badge.
 The **FRED units correction** (`resolveFred`) maps each series to the right transform
 (CPI → YoY `pc1`, retail → MoM `pch`, payrolls → `chg`, OAS/spreads → bps ×100, Fed B/S → $T).
 

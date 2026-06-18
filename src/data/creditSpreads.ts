@@ -47,6 +47,20 @@ export function getCreditCurve(): CreditRung[] {
   });
 }
 
+/**
+ * Recompute a rating rung from a live FRED OAS series (units=lin, already scaled
+ * to bps). Derives current OAS, 1d and ~1m changes. Falls back to the simulation
+ * `base` when the history is too short.
+ */
+export function liveRung(base: CreditRung, obs: { date: string; value: number }[]): CreditRung {
+  const v = obs.map((o) => o.value);
+  if (v.length < 2) return base;
+  const oas = Math.round(v[v.length - 1]);
+  const prior = Math.round(v[v.length - 2]);
+  const monthAgo = v.length >= 22 ? v[v.length - 22] : v[0];
+  return { ...base, oas, prior, chg1d: oas - prior, chg1m: Math.round(oas - monthAgo) };
+}
+
 export interface CreditSummary {
   igOas: number;
   hyOas: number;

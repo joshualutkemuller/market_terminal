@@ -7,7 +7,9 @@ import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { BarChart } from "@/components/charts/BarChart";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { useDrill } from "@/components/econ/DrillProvider";
-import { getGlobalCPI, getGlobalSummary, type CountryInflation, type Region } from "@/data/globalMacro";
+import { SourceBadge } from "@/components/econ/SourceBadge";
+import { useLiveSeriesSet } from "@/lib/useEcon";
+import { getGlobalCPI, getGlobalSummary, liveCountryCPI, type CountryInflation, type Region } from "@/data/globalMacro";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
 
 const REGIONS: Array<"ALL" | Region> = ["ALL", "AMER", "EMEA", "APAC"];
@@ -32,8 +34,23 @@ export default function GlobalInflation() {
   const { open } = useDrill();
   const [region, setRegion] = useState<"ALL" | Region>("ALL");
 
-  const all = getGlobalCPI();
-  const summary = getGlobalSummary();
+  // Take country CPI face values live from FRED index series (units=lin -> derive YoY/MoM/streak).
+  const baseAll = getGlobalCPI();
+  const { data: liveMap, source } = useLiveSeriesSet(baseAll.map((c) => c.fredId), "lin", 26);
+  const all = baseAll.map((c) => {
+    const L = liveMap[c.fredId];
+    return L && L.source === "FRED" && L.observations.length ? liveCountryCPI(c, L.observations) : c;
+  });
+  const base = getGlobalSummary();
+  const ys = all.map((c) => c.yoy).sort((a, b) => a - b);
+  const summary = {
+    ...base,
+    avgCpi: Number((all.reduce((a, c) => a + c.yoy, 0) / all.length).toFixed(1)),
+    medianCpi: ys[Math.floor(ys.length / 2)],
+    aboveTarget: all.filter((c) => c.vsTarget > 0).length,
+    risingCount: all.filter((c) => c.trend === "RISING").length,
+    fallingCount: all.filter((c) => c.trend === "FALLING").length,
+  };
   const rows = region === "ALL" ? all : all.filter((c) => c.region === region);
 
   const drill = (row: CountryInflation) =>
@@ -119,7 +136,7 @@ export default function GlobalInflation() {
         code="GCPI"
         title="Global Inflation"
         desc="CPI YoY & MoM by country — trend & streaks"
-        right={<Tag tone="amber">{all.length} TRACKED</Tag>}
+        right={<div className="flex items-center gap-2"><SourceBadge source={source} /><Tag tone="amber">{all.length} TRACKED</Tag></div>}
       />
 
       <KpiStrip>

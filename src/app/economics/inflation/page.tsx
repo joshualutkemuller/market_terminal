@@ -6,10 +6,12 @@ import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { BarChart } from "@/components/charts/BarChart";
 import { useDrill } from "@/components/econ/DrillProvider";
+import { SourceBadge } from "@/components/econ/SourceBadge";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import {
   getInflationHeadlines,
   getInflationComponents,
-  getInflationSummary,
+  liveInflationItem,
   type InflationItem,
 } from "@/data/inflation";
 import { fmtNum, fmtSigned, fmtSignedPct } from "@/lib/format";
@@ -55,9 +57,31 @@ export default function InflationExplorer() {
   const [metric, setMetric] = useState<Metric>("yoy");
   const [basket, setBasket] = useState<Basket>("CPI");
 
-  const headlines = getInflationHeadlines();
-  const components = getInflationComponents(basket);
-  const summary = getInflationSummary();
+  // Take headline + component face values fully live from FRED index series.
+  const cpiComps = getInflationComponents("CPI");
+  const pceComps = getInflationComponents("PCE");
+  const headBase = getInflationHeadlines();
+  const allIds = [...headBase, ...cpiComps, ...pceComps].map((i) => i.id);
+  const { data: liveMap, source } = useLiveSeriesSet(allIds, "lin", 15);
+  const merge = (it: InflationItem) => {
+    const L = liveMap[it.id];
+    return L && L.source === "FRED" && L.observations.length ? liveInflationItem(it, L.observations) : it;
+  };
+
+  const headlines = headBase.map(merge);
+  const cpiMerged = cpiComps.map(merge);
+  const components = (basket === "CPI" ? cpiMerged : pceComps.map(merge));
+  const head = (g: string) => headlines.find((h) => h.group === g)!;
+  const summary = {
+    cpiYoY: head("CPI").yoy,
+    coreCpiYoY: head("CORE_CPI").yoy,
+    pceYoY: head("PCE").yoy,
+    corePceYoY: head("CORE_PCE").yoy,
+    cpiMoM: head("CPI").mom,
+    coreCpiMoM: head("CORE_CPI").mom,
+    acceleratingCount: cpiMerged.filter((c) => c.yoyAccel > 0).length,
+    deceleratingCount: cpiMerged.filter((c) => c.yoyAccel < 0).length,
+  };
 
   const drillItem = (it: InflationItem) => {
     const u = drillUnits(metric);
@@ -211,6 +235,7 @@ export default function InflationExplorer() {
         code="INFL"
         title="Inflation Explorer"
         desc="CPI · Core CPI · PCE · Core PCE to item level"
+        right={<SourceBadge source={source} />}
       />
 
       <KpiStrip>

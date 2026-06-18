@@ -71,3 +71,28 @@ export function useLiveIndicators(): { data: Record<string, LiveIndicator>; sour
   );
   return { data, source };
 }
+
+export interface SeriesObs {
+  observations: { date: number; value: number }[] | { date: string; value: number }[];
+  source: "FRED" | "SIM";
+}
+
+/**
+ * Batch-fetch many series (one request). Returns a map keyed by id of the raw
+ * observations + per-series source. Pass `units: "lin"` to get raw index levels
+ * so the page can derive MoM/YoY/acceleration itself. Empty map until loaded;
+ * callers keep their simulation values unless a series reports source "FRED".
+ */
+export function useLiveSeriesSet(
+  ids: string[],
+  units?: string,
+  n = 15
+): { data: Record<string, { observations: { date: string; value: number }[]; source: "FRED" | "SIM" }>; source: DataSource } {
+  const key = ids.join(",");
+  const url = `/api/econ/batch?ids=${encodeURIComponent(key)}${units ? `&units=${units}` : ""}&n=${n}`;
+  return useEconResource(
+    url,
+    {} as Record<string, { observations: { date: string; value: number }[]; source: "FRED" | "SIM" }>,
+    (j) => Object.fromEntries((j.series ?? []).map((s: { id: string; observations: { date: string; value: number }[]; source: "FRED" | "SIM" }) => [s.id, { observations: s.observations, source: s.source }]))
+  );
+}

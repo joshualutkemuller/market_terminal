@@ -7,17 +7,41 @@ import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { ProgressBar } from "@/components/charts/Radial";
 import { useDrill } from "@/components/econ/DrillProvider";
+import { SourceBadge } from "@/components/econ/SourceBadge";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import {
-  getCreditCurve, getCreditSummary, getSpreadHistory, getSectorSpreads, getStressEpisodes, getCreditLinkages,
+  getCreditCurve, getCreditSummary, getSpreadHistory, getSectorSpreads, getStressEpisodes, getCreditLinkages, liveRung,
   type CreditRung, type SectorSpread, type CreditStress,
 } from "@/data/creditSpreads";
 import { fmtNum, fmtSigned, fmtInt, pnlClass } from "@/lib/format";
 
 const REGIME_TONE: Record<string, "up" | "down" | "amber" | "blue"> = { TIGHT: "up", NEUTRAL: "blue", WIDE: "amber", STRESS: "down" };
 
+const MASTER_IDS = ["BAMLC0A0CM", "BAMLH0A0HYM2"];
+
 export default function CreditSpreadsPage() {
-  const curve = getCreditCurve();
+  const baseCurve = getCreditCurve();
   const sum = getCreditSummary();
+
+  // Take rating-curve OAS and IG/HY masters fully live (units default -> bps).
+  const { data: liveMap, source } = useLiveSeriesSet([...baseCurve.map((r) => r.fredId), ...MASTER_IDS], undefined, 24);
+  const curve = baseCurve.map((r) => {
+    const L = liveMap[r.fredId];
+    return L && L.source === "FRED" && L.observations.length ? liveRung(r, L.observations) : r;
+  });
+  const masterOas = (id: string, fallback: number, prior = false) => {
+    const L = liveMap[id];
+    if (L && L.source === "FRED" && L.observations.length) {
+      const v = L.observations.map((o) => o.value);
+      return Math.round(prior ? v[v.length - 2] ?? v[v.length - 1] : v[v.length - 1]);
+    }
+    return fallback;
+  };
+  const igOas = masterOas("BAMLC0A0CM", sum.igOas);
+  const hyOas = masterOas("BAMLH0A0HYM2", sum.hyOas);
+  const igChg1d = igOas - masterOas("BAMLC0A0CM", sum.igOas - sum.igChg1d, true);
+  const hyChg1d = hyOas - masterOas("BAMLH0A0HYM2", sum.hyOas - sum.hyChg1d, true);
+
   const hist = getSpreadHistory(18);
   const sectors = getSectorSpreads();
   const stress = getStressEpisodes();
@@ -53,15 +77,25 @@ export default function CreditSpreadsPage() {
     { key: "def", header: "Default Pk", align: "right", render: (s) => <span className="text-term-text">{fmtNum(s.defaultPeak, 1)}%</span>, sortVal: (s) => s.defaultPeak },
   ];
 
+  const cv = (r: string) => curve.find((x) => x.rating === r) ?? baseCurve.find((x) => x.rating === r)!;
+  const qualitySpread = cv("CCC").oas - cv("BB").oas;
+  const bbbAaa = cv("BBB").oas - cv("AAA").oas;
+  const igHySpread = hyOas - igOas;
+
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="CRDT" title="Credit Spreads" desc="IG / HY OAS deep dive · curve · stress · sec-finance linkage" right={<Tag tone={REGIME_TONE[sum.regime]}>{sum.regime} REGIME</Tag>} />
+      <PageHeader
+        code="CRDT"
+        title="Credit Spreads"
+        desc="IG / HY OAS deep dive · curve · stress · sec-finance linkage"
+        right={<div className="flex items-center gap-2"><SourceBadge source={source} /><Tag tone={REGIME_TONE[sum.regime]}>{sum.regime} REGIME</Tag></div>}
+      />
 
       <KpiStrip>
-        <Stat label="IG OAS" value={`${fmtInt(sum.igOas)} bps`} sub={<span className={pnlClass(-sum.igChg1d)}>{fmtSigned(sum.igChg1d, 0)} 1d</span>} tone="amber" />
-        <Stat label="HY OAS" value={`${fmtInt(sum.hyOas)} bps`} sub={<span className={pnlClass(-sum.hyChg1d)}>{fmtSigned(sum.hyChg1d, 0)} 1d</span>} tone={sum.hyOas > 500 ? "down" : "amber"} />
-        <Stat label="HY − IG" value={`${fmtInt(sum.igHySpread)} bps`} sub="credit risk premium" />
-        <Stat label="Quality (CCC−BB)" value={`${fmtInt(sum.qualitySpread)} bps`} sub="dispersion / distress" tone={sum.qualitySpread > 450 ? "down" : "neutral"} />
+        <Stat label="IG OAS" value={`${fmtInt(igOas)} bps`} sub={<span className={pnlClass(-igChg1d)}>{fmtSigned(igChg1d, 0)} 1d</span>} tone="amber" />
+        <Stat label="HY OAS" value={`${fmtInt(hyOas)} bps`} sub={<span className={pnlClass(-hyChg1d)}>{fmtSigned(hyChg1d, 0)} 1d</span>} tone={hyOas > 500 ? "down" : "amber"} />
+        <Stat label="HY − IG" value={`${fmtInt(igHySpread)} bps`} sub="credit risk premium" />
+        <Stat label="Quality (CCC−BB)" value={`${fmtInt(qualitySpread)} bps`} sub="dispersion / distress" tone={qualitySpread > 450 ? "down" : "neutral"} />
         <Stat label="IG Yield" value={`${fmtNum(sum.igYield, 2)}%`} sub={`HY ${fmtNum(sum.hyYield, 2)}%`} />
         <Stat label="Distress Ratio" value={`${fmtNum(sum.distressRatio, 1)}%`} sub={`${fmtNum(sum.defaultRate, 1)}% TTM default`} tone={sum.distressRatio > 10 ? "down" : "neutral"} />
       </KpiStrip>
@@ -120,7 +154,7 @@ export default function CreditSpreadsPage() {
                 <ProgressBar value={sum.hyPctile} color={sum.hyPctile > 50 ? "#FF3B3B" : "#2ECC71"} height={8} />
               </div>
               <div className="grid grid-cols-2 gap-2 pt-1">
-                <Stat label="BBB − AAA" value={`${fmtInt(sum.bbbAaa)} bps`} className="px-0 py-1" />
+                <Stat label="BBB − AAA" value={`${fmtInt(bbbAaa)} bps`} className="px-0 py-1" />
                 <Stat label="Regime" value={sum.regime} tone={REGIME_TONE[sum.regime] === "down" ? "down" : "amber"} className="px-0 py-1" />
               </div>
               <div className="text-3xs text-term-text-mute">Low percentiles = spreads tight vs history (rich); compression signals complacency / low risk premium.</div>

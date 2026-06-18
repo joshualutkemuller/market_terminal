@@ -128,6 +128,38 @@ export function getGlobalCPI(): CountryInflation[] {
   });
 }
 
+/**
+ * Recompute a country's CPI row from a live FRED *index-level* series (units=lin):
+ * derives YoY, MoM, trend-vs-prior, the consecutive-print streak and the YoY
+ * sparkline. Falls back to the simulation `base` when history is too short.
+ */
+export function liveCountryCPI(base: CountryInflation, obs: { date: string; value: number }[]): CountryInflation {
+  const v = obs.map((o) => o.value);
+  if (v.length < 14) return base;
+  const pct = (a: number, b: number) => (b ? Number(((a / b - 1) * 100).toFixed(1)) : 0);
+  const yoyArr: number[] = [];
+  for (let i = 12; i < v.length; i++) yoyArr.push(pct(v[i], v[i - 12]));
+  if (yoyArr.length < 2) return base;
+  const yoy = yoyArr[yoyArr.length - 1];
+  const priorYoy = yoyArr[yoyArr.length - 2];
+  const trend = trendOf(yoy, priorYoy);
+  let streak = 1;
+  for (let i = yoyArr.length - 1; i > 0; i--) {
+    const t = trendOf(yoyArr[i], yoyArr[i - 1]);
+    if (t === trend && t !== "FLAT") streak++;
+    else break;
+  }
+  return {
+    ...base,
+    yoy, priorYoy,
+    mom: pct(v[v.length - 1], v[v.length - 2]),
+    trend,
+    streak: trend === "FLAT" ? 0 : streak,
+    vsTarget: Number((yoy - base.target).toFixed(1)),
+    history: yoyArr.slice(-11),
+  };
+}
+
 export function getGlobalPolicyRates(): PolicyRate[] {
   const cpi = getGlobalCPI();
   return RATE_DEFS.map(([country, flag, region, centralBank, rate, dir]) => {

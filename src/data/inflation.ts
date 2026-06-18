@@ -88,6 +88,35 @@ export function getInflationHeadlines(): InflationItem[] {
   return HEADLINES.map(([id, label, group, base]) => makeItem(id, label, group, "HEADLINE", 100, base));
 }
 
+/**
+ * Recompute an inflation item from a live FRED *index-level* series (units=lin),
+ * deriving the index reading, MoM %, YoY % and their accelerations. Falls back to
+ * the simulation `base` if the history is too short. Used to take the explorer
+ * fully live on the face values, not just the drill-down.
+ */
+export function liveInflationItem(base: InflationItem, obs: { date: string; value: number }[]): InflationItem {
+  const v = obs.map((o) => o.value);
+  if (v.length < 14) return base;
+  const n = v.length;
+  const pct = (a: number, b: number) => (b ? (a / b - 1) * 100 : 0);
+  const index = v[n - 1];
+  const mom = pct(v[n - 1], v[n - 2]);
+  const priorMom = pct(v[n - 2], v[n - 3]);
+  const yoy = pct(v[n - 1], v[n - 13]);
+  const priorYoy = pct(v[n - 2], v[n - 14]);
+  return {
+    ...base,
+    index: Number(index.toFixed(2)),
+    mom: Number(mom.toFixed(2)),
+    priorMom: Number(priorMom.toFixed(2)),
+    yoy: Number(yoy.toFixed(2)),
+    priorYoy: Number(priorYoy.toFixed(2)),
+    momAccel: Number((mom - priorMom).toFixed(2)),
+    yoyAccel: Number((yoy - priorYoy).toFixed(2)),
+    contribution: Number(((base.weight / 100) * yoy).toFixed(2)),
+  };
+}
+
 export function getInflationComponents(group: "CPI" | "PCE"): InflationItem[] {
   const defs = group === "CPI" ? CPI_COMPONENTS : PCE_COMPONENTS;
   return defs.map(([id, label, weight, base]) => makeItem(id, label, group === "CPI" ? "CPI" : "PCE", "COMPONENT", weight, base)).sort((a, b) => b.weight - a.weight);
