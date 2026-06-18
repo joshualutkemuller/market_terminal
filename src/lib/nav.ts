@@ -43,6 +43,7 @@ export const NAV: NavItem[] = [
   { code: "PB", label: "Prime Finance", href: "/prime-finance", icon: Briefcase, desc: "Hedge fund financing & risk", group: "FINANCE" },
   { code: "COLL", label: "Collateral Mgmt", href: "/collateral", icon: Layers, desc: "Margin & collateral optimization", group: "OPTIMIZATION" },
   { code: "CASH", label: "Cash Optimizer", href: "/cash-optimizer", icon: Wallet, desc: "Treasury funding optimization", group: "OPTIMIZATION" },
+  { code: "REINV", label: "Cash Reinvestment", href: "/reinvestment", icon: Banknote, desc: "Cash collateral yield ladder", group: "OPTIMIZATION" },
   { code: "SXU", label: "Sources & Uses", href: "/sources-uses", icon: GitMerge, desc: "Matching & internalization engine", group: "OPTIMIZATION" },
   { code: "OPT", label: "Optimization Center", href: "/optimization", icon: Cpu, desc: "Solver runs & impact analysis", group: "OPTIMIZATION" },
   { code: "DESK", label: "Trading Desk", href: "/trading-desk", icon: LineChart, desc: "Scorecards & execution analytics", group: "DESK" },
