@@ -187,8 +187,12 @@ instead of (or before) calling the FastAPI service:
 
 Each source degrades gracefully to the next (a missing file, an unreachable
 service, or an absent DB driver just falls through), so the module always
-renders — on Vercel included. The DB drivers are **optional**: install `duckdb`
-or `pg` only if you use `MARKET_DB_URL` (`npm i duckdb` / `npm i pg`).
+renders — on Vercel included. The DB drivers are loaded lazily at runtime, so:
+- **Postgres** (`pg`) ships as an `optionalDependency` — pure JS, no build cost,
+  the realistic cloud/Vercel `MARKET_DB_URL` target.
+- **DuckDB** (`duckdb`) is a *native* build, deliberately **kept out of the
+  default install** so cloud builds stay fast. For the local DuckDB-file path,
+  install it yourself once: `npm i duckdb`.
 
 ```bash
 # in this repo
