@@ -18,10 +18,18 @@ import {
   type RateSensitivity,
   type ReinvestmentTier,
 } from "@/data/econModels";
+import {
+  getSfeFactorLinks,
+  getSfePnlBridge,
+  getSfeScenarioLibrary,
+  type SfeFactorLink,
+  type SfePnlBridge,
+  type SfeScenario,
+} from "@/data/econEnhancements";
 import { getSeriesHistory } from "@/data/econSeries";
 import { SourceBadge } from "@/components/econ/SourceBadge";
 import { useLiveSeriesSet } from "@/lib/useEcon";
-import { fmtNum, fmtSigned, fmtBps, pnlClass } from "@/lib/format";
+import { fmtNum, fmtSigned, fmtBps, fmtUsdAbbr, fmtPct, pnlClass } from "@/lib/format";
 
 const DONUT_COLORS = ["#FF8C00", "#3B9DFF", "#2ECC71", "#A78BFA", "#22D3EE", "#EC4899"];
 
@@ -55,6 +63,9 @@ export default function SecFinanceEconomics() {
   const sens = getRateSensitivities();
   const ladder = getReinvestmentLadder();
   const links = getMacroLinkages();
+  const factorLinks = getSfeFactorLinks();
+  const pnlBridge = getSfePnlBridge();
+  const scenarioLibrary = getSfeScenarioLibrary();
 
   // Live FRED for the policy/repo rates that have real series, plus the backdrop.
   const liveIds = [...baseRepo.map((r) => r.fredId).filter(Boolean) as string[], "FEDFUNDS"];
@@ -225,6 +236,33 @@ export default function SecFinanceEconomics() {
     { key: "credit", header: "Credit", align: "center", sortVal: (r) => r.creditTone, render: (r) => <Tag tone={r.creditTone}>{CREDIT_TONE_LABEL[r.creditTone]}</Tag> },
   ];
 
+  const factorCols: Column<SfeFactorLink>[] = [
+    { key: "metric", header: "Metric", render: (r) => <span className="font-semibold text-term-text">{r.metric}</span>, sortVal: (r) => r.metric },
+    { key: "factor", header: "Macro Factor", render: (r) => <span className="text-term-amber">{r.factorLabel}</span>, sortVal: (r) => r.factorLabel },
+    { key: "source", header: "Source", align: "center", render: (r) => <Tag tone={r.source === "FRED" ? "up" : r.source === "YAHOO" ? "blue" : "neutral"}>{r.source}</Tag>, sortVal: (r) => r.source },
+    { key: "sens", header: "Beta", align: "right", render: (r) => <span className="text-term-text">{fmtBps(r.sensitivityBps, 0)}</span>, sortVal: (r) => r.sensitivityBps },
+    { key: "conf", header: "Conf.", align: "right", render: (r) => <span className="text-term-text-dim">{fmtPct(r.confidence, 0)}</span>, sortVal: (r) => r.confidence },
+    { key: "use", header: "Desk Use", render: (r) => <span className="text-term-text-dim">{r.deskUse}</span>, sortVal: (r) => r.deskUse },
+  ];
+
+  const pnlCols: Column<SfePnlBridge>[] = [
+    { key: "driver", header: "Driver", render: (r) => <span className="font-semibold text-term-text">{r.driver}</span>, sortVal: (r) => r.driver },
+    { key: "desk", header: "Desk", align: "center", render: (r) => <Tag tone="blue">{r.desk}</Tag>, sortVal: (r) => r.desk },
+    { key: "factor", header: "Factor ID", render: (r) => <span className="font-mono text-2xs text-term-text-mute">{r.factorId}</span>, sortVal: (r) => r.factorId },
+    { key: "base", header: "Base", align: "right", render: (r) => <span className="text-term-text-dim">{fmtBps(r.baseBps, 0)}</span>, sortVal: (r) => r.baseBps },
+    { key: "shock", header: "Shock", align: "right", render: (r) => <span className={pnlClass(r.shockBps)}>{fmtSigned(r.shockBps, 0)}</span>, sortVal: (r) => r.shockBps },
+    { key: "pnl", header: "P&L", align: "right", render: (r) => <span className={pnlClass(r.pnlImpact)}>{fmtUsdAbbr(r.pnlImpact)}</span>, sortVal: (r) => r.pnlImpact },
+  ];
+
+  const scenarioCols: Column<SfeScenario>[] = [
+    { key: "scenario", header: "Scenario", render: (r) => <span className="font-semibold text-term-text">{r.scenario}</span>, sortVal: (r) => r.scenario },
+    { key: "repo", header: "Repo", align: "right", render: (r) => <span className={pnlClass(-r.repoShockBps)}>{fmtSigned(r.repoShockBps, 0)}</span>, sortVal: (r) => r.repoShockBps },
+    { key: "rebate", header: "Rebate", align: "right", render: (r) => <span className={pnlClass(-r.rebateShockBps)}>{fmtSigned(r.rebateShockBps, 0)}</span>, sortVal: (r) => r.rebateShockBps },
+    { key: "reinvest", header: "Reinvest", align: "right", render: (r) => <span className={pnlClass(r.reinvestShockBps)}>{fmtSigned(r.reinvestShockBps, 0)}</span>, sortVal: (r) => r.reinvestShockBps },
+    { key: "special", header: "Specials", align: "right", render: (r) => <span className={pnlClass(r.specialnessShockBps)}>{fmtSigned(r.specialnessShockBps, 0)}</span>, sortVal: (r) => r.specialnessShockBps },
+    { key: "pnl", header: "P&L", align: "right", render: (r) => <span className={pnlClass(r.pnlImpact)}>{fmtUsdAbbr(r.pnlImpact)}</span>, sortVal: (r) => r.pnlImpact },
+  ];
+
   const cutLabel = cuts === 0 ? "No cuts" : `${cuts * 25}bp of cuts`;
 
   return (
@@ -316,6 +354,26 @@ export default function SecFinanceEconomics() {
                 </div>
               </Panel>
             </div>
+          </div>
+        </Panel>
+
+        <Panel title="Macro Factor Links And P&L Bridge" code="BETA" accent>
+          <div className="grid grid-cols-1 gap-2 p-2 xl:grid-cols-2">
+            <div>
+              <div className="term-label mb-1">Metric to macro factor map</div>
+              <DataGrid columns={factorCols} rows={factorLinks} rowKey={(r) => r.metric} dense maxHeight="230px" initialSort={{ key: "sens", dir: "desc" }} zebra />
+            </div>
+            <div>
+              <div className="term-label mb-1">Rate and spread P&L bridge</div>
+              <DataGrid columns={pnlCols} rows={pnlBridge} rowKey={(r) => r.driver} dense maxHeight="230px" initialSort={{ key: "pnl", dir: "desc" }} zebra />
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="Shared Scenario Library" code="LIB">
+          <div className="grid grid-cols-1 gap-2 p-2 xl:grid-cols-[1.2fr_0.8fr]">
+            <DataGrid columns={scenarioCols} rows={scenarioLibrary} rowKey={(r) => r.scenario} dense maxHeight="230px" initialSort={{ key: "pnl", dir: "desc" }} zebra />
+            <BarChart horizontal data={scenarioLibrary.map((s) => ({ label: s.scenario, value: s.pnlImpact, color: s.pnlImpact >= 0 ? "#2ECC71" : "#FF3B3B" }))} fmt={(n) => fmtUsdAbbr(n)} />
           </div>
         </Panel>
 
