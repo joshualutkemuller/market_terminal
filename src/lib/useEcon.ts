@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import { getSeriesHistory, type Observation } from "@/data/econSeries";
 import { getCurrentCurve, type CurveSnapshot } from "@/data/econCurve";
 import { getEconEvents, type EconEvent } from "@/data/econRates";
-import { buildStatsPayload, type StatsPayload } from "@/lib/stats";
-import { simStatSeries } from "@/data/statsConfig";
 
 export type DataSource = "FRED" | "SIM" | "LOADING";
 
@@ -72,18 +70,6 @@ export function useLiveIndicators(): { data: Record<string, LiveIndicator>; sour
     (j) => Object.fromEntries((j.indicators ?? []).map((i: LiveIndicator) => [i.id, i]))
   );
   return { data, source };
-}
-
-// Deterministic sim payload computed once for instant, SSR-safe first render.
-let _simStats: StatsPayload | null = null;
-function simStatsPayload(): StatsPayload {
-  if (!_simStats) _simStats = buildStatsPayload(simStatSeries(84), "SIM");
-  return _simStats;
-}
-
-/** Full statistics payload (correlation, Granger, ADF, moments, aligned matrix). */
-export function useEconStats(): { data: StatsPayload; source: DataSource } {
-  return useEconResource<StatsPayload>(`/api/econ/stats`, simStatsPayload(), (j) => j as StatsPayload);
 }
 
 export interface SeriesObs {

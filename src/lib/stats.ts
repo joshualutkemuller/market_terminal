@@ -224,48 +224,68 @@ export function histogram(values: number[], nbins = 13): { center: number; count
   return bins;
 }
 
+/** Intersect two dated series by date, returning aligned value arrays. */
+export function alignPair(a: Obs[], b: Obs[]): { x: number[]; y: number[]; n: number } {
+  const mb = new Map(b.map((o) => [o.date, o.value]));
+  const x: number[] = [], y: number[] = [];
+  for (const o of a) {
+    const v = mb.get(o.date);
+    if (v != null && o.value != null && isFinite(o.value) && isFinite(v)) { x.push(o.value); y.push(v); }
+  }
+  return { x, y, n: x.length };
+}
+
 /* ───────────────────────── full payload builder ───────────────────────── */
 
 export interface StatsPayload {
   source: "FRED" | "SIM";
   labels: string[];
-  dates: string[];
-  matrix: number[][];
   corr: number[][];
   grangerF: number[][];
   grangerSig: boolean[][];
   links: { from: string; to: string; fStat: number }[];
-  stationarity: { label: string; stat: number; stationary: boolean }[];
-  descstats: { label: string; mean: number; sd: number; skew: number; kurtosis: number; acf1: number }[];
+  stationarity: { label: string; stat: number; stationary: boolean; n: number }[];
+  descstats: { label: string; mean: number; sd: number; skew: number; kurtosis: number; acf1: number; n: number }[];
   lag: number;
+  minN: number;
+  maxN: number;
 }
 
-/** Compute the complete statistics payload from a set of named series. */
-export function buildStatsPayload(series: { label: string; obs: Obs[] }[], source: "FRED" | "SIM", lag = 2, maxLen = 60): StatsPayload {
-  const { labels, dates, matrix } = alignMonthly(series, maxLen);
+/**
+ * Compute correlation, pairwise Granger causality, ADF stationarity and
+ * descriptive moments. Each pair uses its own overlapping window (pairwise-
+ * complete) so the analysis exploits each series' full available history.
+ */
+export function buildStatsPayload(series: { label: string; obs: Obs[] }[], source: "FRED" | "SIM", lag = 2): StatsPayload {
+  const labels = series.map((s) => s.label);
   const k = labels.length;
-  const corr = matrix.map((a) => matrix.map((b) => Number(pearson(a, b).toFixed(2))));
+  const corr: number[][] = [];
   const grangerF: number[][] = [];
   const grangerSig: boolean[][] = [];
   const links: { from: string; to: string; fStat: number }[] = [];
   for (let i = 0; i < k; i++) {
-    grangerF[i] = []; grangerSig[i] = [];
+    corr[i] = []; grangerF[i] = []; grangerSig[i] = [];
     for (let j = 0; j < k; j++) {
-      if (i === j) { grangerF[i][j] = 0; grangerSig[i][j] = false; continue; }
-      const g = granger(matrix[i], matrix[j], lag);
+      if (i === j) { corr[i][j] = 1; grangerF[i][j] = 0; grangerSig[i][j] = false; continue; }
+      const al = alignPair(series[i].obs, series[j].obs);
+      corr[i][j] = Number(pearson(al.x, al.y).toFixed(2));
+      const g = granger(al.x, al.y, lag);
       grangerF[i][j] = Number(g.fStat.toFixed(2));
       grangerSig[i][j] = g.causes;
       if (g.causes) links.push({ from: labels[i], to: labels[j], fStat: Number(g.fStat.toFixed(2)) });
     }
   }
   links.sort((a, b) => b.fStat - a.fStat);
-  const stationarity = matrix.map((a, i) => {
-    const t = adf(a);
-    return { label: labels[i], stat: Number(t.stat.toFixed(2)), stationary: t.stationary };
+  const stationarity = series.map((s) => {
+    const v = s.obs.map((o) => o.value);
+    const t = adf(v);
+    return { label: s.label, stat: Number(t.stat.toFixed(2)), stationary: t.stationary, n: v.length };
   });
-  const descstats = matrix.map((a, i) => {
-    const m = moments(a);
-    return { label: labels[i], mean: Number(m.mean.toFixed(2)), sd: Number(m.sd.toFixed(2)), skew: Number(m.skew.toFixed(2)), kurtosis: Number(m.kurtosis.toFixed(2)), acf1: Number((acf(a, 1)[0] ?? 0).toFixed(2)) };
+  const descstats = series.map((s) => {
+    const v = s.obs.map((o) => o.value);
+    const m = moments(v);
+    return { label: s.label, mean: Number(m.mean.toFixed(2)), sd: Number(m.sd.toFixed(2)), skew: Number(m.skew.toFixed(2)), kurtosis: Number(m.kurtosis.toFixed(2)), acf1: Number((acf(v, 1)[0] ?? 0).toFixed(2)), n: v.length };
   });
-  return { source, labels, dates, matrix, corr, grangerF, grangerSig, links, stationarity, descstats, lag };
+  const lens = series.map((s) => s.obs.length);
+  return { source, labels, corr, grangerF, grangerSig, links, stationarity, descstats, lag, minN: Math.min(...lens), maxN: Math.max(...lens) };
 }

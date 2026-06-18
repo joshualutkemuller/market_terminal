@@ -47,10 +47,11 @@ export interface FredObservation {
  */
 export async function fredSeries(
   seriesId: string,
-  opts: { start?: string; limit?: number; units?: string; scale?: number } = {}
+  opts: { start?: string; end?: string; limit?: number; units?: string; scale?: number } = {}
 ): Promise<FredObservation[]> {
   const params: Record<string, string> = { series_id: seriesId, sort_order: "asc" };
   if (opts.start) params.observation_start = opts.start;
+  if (opts.end) params.observation_end = opts.end;
   if (opts.units && opts.units !== "lin") params.units = opts.units;
   if (opts.limit) {
     // pull extra so a YoY/MoM transform still yields `limit` populated points

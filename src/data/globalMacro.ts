@@ -41,6 +41,7 @@ export interface PolicyRate {
   realRate: number; // rate - cpi yoy
   bias: "HAWKISH" | "NEUTRAL" | "DOVISH";
   history: number[];
+  fredId?: string; // OECD central-bank-rate / ECB series where available
 }
 
 // country, flag, region, fredId, current CPI YoY, target
@@ -67,26 +68,26 @@ const CPI_DEFS: [string, string, Region, string, number, number][] = [
   ["Saudi Arabia", "🇸🇦", "EMEA", "SAUCPIALLMINMEI", 1.9, 2.0],
 ];
 
-// country, flag, region, central bank, current rate, recent bias direction (-1 cut / +1 hike / 0 hold)
-const RATE_DEFS: [string, string, Region, string, number, number][] = [
-  ["United States", "🇺🇸", "AMER", "Federal Reserve", 4.13, -1],
-  ["Euro Area", "🇪🇺", "EMEA", "ECB", 2.15, -1],
-  ["United Kingdom", "🇬🇧", "EMEA", "Bank of England", 4.00, -1],
-  ["Japan", "🇯🇵", "APAC", "Bank of Japan", 0.75, 1],
-  ["Canada", "🇨🇦", "AMER", "Bank of Canada", 2.50, -1],
-  ["Australia", "🇦🇺", "APAC", "Reserve Bank of Australia", 3.60, -1],
-  ["Switzerland", "🇨🇭", "EMEA", "Swiss National Bank", 0.25, -1],
-  ["China", "🇨🇳", "APAC", "People's Bank of China", 2.90, -1],
-  ["India", "🇮🇳", "APAC", "Reserve Bank of India", 5.50, -1],
-  ["Brazil", "🇧🇷", "AMER", "Banco Central do Brasil", 12.00, 1],
-  ["Mexico", "🇲🇽", "AMER", "Banco de México", 7.75, -1],
-  ["South Korea", "🇰🇷", "APAC", "Bank of Korea", 2.50, -1],
-  ["Sweden", "🇸🇪", "EMEA", "Riksbank", 2.00, 0],
-  ["Norway", "🇳🇴", "EMEA", "Norges Bank", 4.00, -1],
-  ["New Zealand", "🇳🇿", "APAC", "Reserve Bank of NZ", 3.25, -1],
-  ["Turkey", "🇹🇷", "EMEA", "CBRT", 42.00, -1],
-  ["Indonesia", "🇮🇩", "APAC", "Bank Indonesia", 5.25, -1],
-  ["South Africa", "🇿🇦", "EMEA", "South African Reserve Bank", 7.25, -1],
+// country, flag, region, central bank, current rate, bias dir (-1 cut/+1 hike/0 hold), FRED id
+const RATE_DEFS: [string, string, Region, string, number, number, string | undefined][] = [
+  ["United States", "🇺🇸", "AMER", "Federal Reserve", 4.13, -1, "IRSTCB01USM156N"],
+  ["Euro Area", "🇪🇺", "EMEA", "ECB", 2.15, -1, "ECBDFR"],
+  ["United Kingdom", "🇬🇧", "EMEA", "Bank of England", 4.00, -1, "IRSTCB01GBM156N"],
+  ["Japan", "🇯🇵", "APAC", "Bank of Japan", 0.75, 1, "IRSTCB01JPM156N"],
+  ["Canada", "🇨🇦", "AMER", "Bank of Canada", 2.50, -1, "IRSTCB01CAM156N"],
+  ["Australia", "🇦🇺", "APAC", "Reserve Bank of Australia", 3.60, -1, "IRSTCB01AUM156N"],
+  ["Switzerland", "🇨🇭", "EMEA", "Swiss National Bank", 0.25, -1, "IRSTCB01CHM156N"],
+  ["China", "🇨🇳", "APAC", "People's Bank of China", 2.90, -1, undefined],
+  ["India", "🇮🇳", "APAC", "Reserve Bank of India", 5.50, -1, undefined],
+  ["Brazil", "🇧🇷", "AMER", "Banco Central do Brasil", 12.00, 1, "IRSTCB01BRM156N"],
+  ["Mexico", "🇲🇽", "AMER", "Banco de México", 7.75, -1, "IRSTCB01MXM156N"],
+  ["South Korea", "🇰🇷", "APAC", "Bank of Korea", 2.50, -1, "IRSTCB01KRM156N"],
+  ["Sweden", "🇸🇪", "EMEA", "Riksbank", 2.00, 0, "IRSTCB01SEM156N"],
+  ["Norway", "🇳🇴", "EMEA", "Norges Bank", 4.00, -1, "IRSTCB01NOM156N"],
+  ["New Zealand", "🇳🇿", "APAC", "Reserve Bank of NZ", 3.25, -1, "IRSTCB01NZM156N"],
+  ["Turkey", "🇹🇷", "EMEA", "CBRT", 42.00, -1, "IRSTCB01TRM156N"],
+  ["Indonesia", "🇮🇩", "APAC", "Bank Indonesia", 5.25, -1, undefined],
+  ["South Africa", "🇿🇦", "EMEA", "South African Reserve Bank", 7.25, -1, undefined],
 ];
 
 function trendOf(curr: number, prev: number): Trend {
@@ -162,7 +163,7 @@ export function liveCountryCPI(base: CountryInflation, obs: { date: string; valu
 
 export function getGlobalPolicyRates(): PolicyRate[] {
   const cpi = getGlobalCPI();
-  return RATE_DEFS.map(([country, flag, region, centralBank, rate, dir]) => {
+  return RATE_DEFS.map(([country, flag, region, centralBank, rate, dir, fredId]) => {
     const rng = new Rng(`grate-${country}`);
     const cycle: PolicyRate["cycle"] = dir > 0 ? "HIKING" : dir < 0 ? "CUTTING" : "HOLD";
     const step = country === "Turkey" || country === "Brazil" ? 2.5 : 0.25;
@@ -198,8 +199,47 @@ export function getGlobalPolicyRates(): PolicyRate[] {
       realRate: Number(realRate.toFixed(1)),
       bias,
       history: hist,
+      fredId,
     };
   }).sort((a, b) => b.rate - a.rate);
+}
+
+/**
+ * Recompute a central bank's policy-rate row from a live FRED rate series
+ * (units lin, %). Derives the current level, last move, cycle, streak and real
+ * rate (vs the simulated CPI). Falls back to `base` when history is too short.
+ */
+export function livePolicyRate(base: PolicyRate, obs: { date: string; value: number }[]): PolicyRate {
+  const v = obs.map((o) => o.value);
+  if (v.length < 2) return base;
+  const rate = Number(v[v.length - 1].toFixed(2));
+  const priorRate = Number(v[v.length - 2].toFixed(2));
+  let dir = 0;
+  for (let i = v.length - 1; i > 0; i--) {
+    const d = v[i] - v[i - 1];
+    if (Math.abs(d) > 0.005) { dir = d > 0 ? 1 : -1; break; }
+  }
+  const cycle: PolicyRate["cycle"] = dir > 0 ? "HIKING" : dir < 0 ? "CUTTING" : "HOLD";
+  let streak = 0;
+  for (let i = v.length - 1; i > 0; i--) {
+    const d = v[i] - v[i - 1];
+    const act = d > 0.005 ? 1 : d < -0.005 ? -1 : 0;
+    if (act === dir && dir !== 0) streak++;
+    else if (act === 0 && dir === 0) streak++;
+    else break;
+  }
+  const cpi = base.rate - base.realRate; // implied CPI from the base row
+  const realRate = Number((rate - cpi).toFixed(1));
+  const bias: PolicyRate["bias"] = realRate > 1.5 ? "HAWKISH" : realRate < 0 ? "DOVISH" : "NEUTRAL";
+  return {
+    ...base,
+    rate, priorRate,
+    lastMoveBps: Math.round((rate - priorRate) * 100),
+    cycle,
+    streak: Math.max(1, streak),
+    realRate, bias,
+    history: v.map((x) => Number(x.toFixed(2))),
+  };
 }
 
 export interface GlobalSummary {
