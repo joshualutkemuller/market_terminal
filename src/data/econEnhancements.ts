@@ -88,6 +88,16 @@ export interface PolicyTransmission {
   action: string;
 }
 
+export type CalendarSensitivityTag = "Rates P&L" | "Haircut Risk" | "Borrow Demand" | "Funding Liquidity" | "Margin Risk";
+
+export interface ReleaseMoveSummary {
+  release: string;
+  factor: string;
+  preMoveBps: number;
+  postMoveBps: number;
+  deskImpact: CalendarSensitivityTag;
+}
+
 export function getSfeFactorLinks(): SfeFactorLink[] {
   return [
     { metric: "Cash reinvestment yield", macroFactorId: "SOFR", factorLabel: "SOFR", source: "FRED", sensitivityBps: 82, confidence: 89, deskUse: "Reset ladder yield and rebate economics" },
@@ -238,5 +248,25 @@ export function getPolicyTransmission(): PolicyTransmission[] {
     { module: "CASH", pathInput: "SOFR funding curve", currentImpact: "Funding cost falls, but repo squeeze basis can offset cuts.", shock25bp: 2.8e6, shock100bp: 10.6e6, action: "Keep term repo capacity for event windows." },
     { module: "COLL", pathInput: "Curve plus credit OAS", currentImpact: "Lower rates help HQLA carry; credit widening raises haircut drag.", shock25bp: 0.9e6, shock100bp: 2.7e6, action: "Prefer HQLA substitutions when OAS widens." },
     { module: "OPT", pathInput: "Forward rates and shadow prices", currentImpact: "Solver should reprice funding, liquidity and balance-sheet penalties.", shock25bp: 3.2e6, shock100bp: 11.8e6, action: "Run policy-path scenario before allocation approval." },
+  ];
+}
+
+export function getCalendarSensitivity(name: string, category: string): CalendarSensitivityTag[] {
+  const text = `${name} ${category}`.toLowerCase();
+  if (text.includes("cpi") || text.includes("pce") || text.includes("ppi") || text.includes("inflation")) return ["Rates P&L", "Funding Liquidity", "Margin Risk"];
+  if (text.includes("fomc") || text.includes("policy") || text.includes("auction")) return ["Rates P&L", "Funding Liquidity"];
+  if (text.includes("payroll") || text.includes("claims") || text.includes("unemployment") || text.includes("jolts") || text.includes("labor")) return ["Borrow Demand", "Margin Risk"];
+  if (text.includes("retail") || text.includes("ism") || text.includes("gdp") || text.includes("activity") || text.includes("growth")) return ["Borrow Demand", "Haircut Risk"];
+  if (text.includes("housing") || text.includes("consumer")) return ["Margin Risk"];
+  return ["Funding Liquidity"];
+}
+
+export function getReleaseMoveSummaries(): ReleaseMoveSummary[] {
+  return [
+    { release: "Core CPI", factor: "2Y Treasury", preMoveBps: 4, postMoveBps: 12, deskImpact: "Rates P&L" },
+    { release: "Nonfarm Payrolls", factor: "HY OAS", preMoveBps: -3, postMoveBps: 18, deskImpact: "Borrow Demand" },
+    { release: "FOMC Decision", factor: "SOFR-EFFR", preMoveBps: 2, postMoveBps: 9, deskImpact: "Funding Liquidity" },
+    { release: "Core PCE", factor: "IG OAS", preMoveBps: 1, postMoveBps: 7, deskImpact: "Haircut Risk" },
+    { release: "Initial Claims", factor: "Equity vol proxy", preMoveBps: 6, postMoveBps: 16, deskImpact: "Margin Risk" },
   ];
 }
