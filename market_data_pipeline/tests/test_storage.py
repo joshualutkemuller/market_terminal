@@ -28,8 +28,10 @@ def _norm_row(series_id, d, v, run="r1"):
     }
 
 
-def test_schema_creates_12_tables(store):
-    assert len(store.table_counts()) == 12
+def test_schema_creates_all_tables(store):
+    # 12 core tables + the analytics_api_views serving table
+    assert len(store.table_counts()) == 13
+    assert "analytics_api_views" in store.table_counts()
 
 
 def test_upsert_is_idempotent(store):

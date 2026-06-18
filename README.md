@@ -174,24 +174,43 @@ serves terminal "cards" over **FastAPI**.
 
 The pipeline's gold views are exported to JSON and committed under
 `src/data/market/`, imported at build time so the module renders with **zero
-config**. At runtime, `/api/market/[view]` transparently upgrades to the **live
-FastAPI service** when `MARKET_PIPELINE_URL` is set (blue `LIVE · PIPELINE`
-badge); otherwise it serves the committed snapshot (`PIPELINE · SNAPSHOT`).
-Identical shapes either way.
+config**. At runtime, `/api/market/[view]` resolves the data from the first
+configured source — so the terminal can read a **local cached database or file**
+instead of (or before) calling the FastAPI service:
+
+| Priority | Env var | Source | Badge |
+|----------|---------|--------|-------|
+| 1 | `MARKET_DB_URL` | local **DuckDB file** (`/path/market.duckdb`) or **Postgres** (`postgres://…`) — reads the `analytics_api_views` table | `LIVE · DB` |
+| 2 | `MARKET_DATA_DIR` | directory of **exported view JSON** (`mdp export-views`) read fresh per request | `LIVE · FILE` |
+| 3 | `MARKET_PIPELINE_URL` | the running **FastAPI service** | `LIVE · PIPELINE` |
+| 4 | *(none)* | committed build-time **snapshot** | `PIPELINE · SNAPSHOT` |
+
+Each source degrades gracefully to the next (a missing file, an unreachable
+service, or an absent DB driver just falls through), so the module always
+renders — on Vercel included. The DB drivers are **optional**: install `duckdb`
+or `pg` only if you use `MARKET_DB_URL` (`npm i duckdb` / `npm i pg`).
 
 ```bash
 # in this repo
 cd market_data_pipeline && pip install -e .
 python -m market_data_pipeline.cli run --offline   # synthetic, no keys/network
 FRED_API_KEY=… python -m market_data_pipeline.cli run   # live FRED + Yahoo
-python -m market_data_pipeline.cli serve --port 8000    # FastAPI → /docs
 
-# point the terminal at the live service:
+# (a) read a local DuckDB cache file — no service needed:
+MARKET_DB_URL=$PWD/data/market.duckdb npm run dev      # (npm i duckdb once)
+
+# (b) read a local exported-file cache — no driver needed:
+python -m market_data_pipeline.cli export-views --out ./data/export
+MARKET_DATA_DIR=$PWD/market_data_pipeline/data/export npm run dev
+
+# (c) stream live from the FastAPI service:
+python -m market_data_pipeline.cli serve --port 8000
 MARKET_PIPELINE_URL=http://localhost:8000 npm run dev
 ```
 
-See `market_data_pipeline/README.md` for the full architecture, the 12-table
-schema, the endpoint list, and `docs/example_payloads.json`.
+See `market_data_pipeline/README.md` for the full architecture, the 13-table
+schema (incl. the `analytics_api_views` serving table), the endpoint list, and
+`docs/example_payloads.json`.
 
 ---
 

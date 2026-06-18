@@ -41,6 +41,13 @@ def _rebuild(args) -> None:
     print(json.dumps(p.store.table_counts(), indent=2))
 
 
+def _export_views(args) -> None:
+    from market_data_pipeline.src.ingestion.pipeline import Pipeline
+
+    paths = Pipeline().export_api_views(args.out)
+    print(json.dumps({"written": [str(p) for p in paths], "dir": args.out}, indent=2))
+
+
 def _status(args) -> None:
     from market_data_pipeline.src.storage.duckdb_store import DuckDBStore
     from market_data_pipeline.src.config.settings import get_settings
@@ -81,6 +88,10 @@ def main() -> None:
 
     sub.add_parser("rebuild-analytics", help="Rebuild gold analytics from normalized").set_defaults(func=_rebuild)
     sub.add_parser("status", help="Show table row counts").set_defaults(func=_status)
+
+    p_ev = sub.add_parser("export-views", help="Write the 6 terminal view payloads as JSON files")
+    p_ev.add_argument("--out", default="./data/export", help="Output directory")
+    p_ev.set_defaults(func=_export_views)
 
     p_srv = sub.add_parser("serve", help="Run the FastAPI server")
     p_srv.add_argument("--host", default="0.0.0.0")
