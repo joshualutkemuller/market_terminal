@@ -22,6 +22,8 @@ BlackRock.
 | `HOME` | **Command Center** | Cross-desk KPIs, revenue, heat map, live alert stream, module launchpad |
 | `MKT`  | **Live Markets** | Multi-asset monitor — equities, ETFs, fixed income, futures, FX, commodities, crypto, vol. Quotes grid, candlesticks + VWAP, order flow, treemap heat map, movers |
 | `SNAP` | **Market Snapshot** | Cross-asset "state of the market" served by the **`market_data_pipeline`** (FRED · Yahoo · pluggable vendors): returns/drawdown table (1D…5Y CAGR, 52w distance), Treasury curve + 2s10s/3m10y, regime scores (risk-on/off · growth · inflation · liquidity), cross-asset dashboard, best/worst YTD |
+| `QUILT` | **Asset Quilt** | Annual cross-asset return "quilt" — every asset class ranked by yearly total return, Bilello-style, with leaders/laggards and dispersion |
+| `IRET` | **Index Return Analytics** | Monthly index return matrix, calendar-year totals, and intra-year drawdowns (Yahoo-ready via the `market_data_pipeline`) |
 | `SLAB` | **Securities Lending** | Inventory (internal / beneficial owner / prime), loan book, borrow demand, HTB & specials, revenue analytics (waterfall, Sankey, by borrower/security/asset class) |
 | `PB`   | **Prime Finance** | Gross/net/long/short exposure, top hedge-fund clients, financing revenue & RoA, VaR / stress testing, financing optimization opportunities |
 | `COLL` | **Collateral Management** | IM/VM, excess/deficits, current vs optimized allocation, shadow prices, eligibility/concentration/haircut constraints, interactive what-if |
@@ -212,6 +214,18 @@ python -m market_data_pipeline.cli serve --port 8000
 MARKET_PIPELINE_URL=http://localhost:8000 npm run dev
 ```
 
+**Does running locally refresh the cache from Yahoo?** Yes. `mdp run` (without
+`--offline`, `MDP_ALLOW_YAHOO=1` by default) pulls **~10y of daily history per
+symbol from Yahoo** — using the `yfinance` library if installed
+(`pip install -e ".[yahoo]"`), otherwise the public Yahoo chart endpoint — and
+**upserts it into the DuckDB**, rebuilds the analytics, and re-materializes the
+`analytics_api_views` table the terminal reads. FRED macro refreshes the same
+way when `FRED_API_KEY` is set. For a continuous refresh on a cadence run
+`mdp schedule` (market-close · macro-daily · controlled intraday). Yahoo is
+unofficial/best-effort and may rate-limit; if a pull returns nothing the
+pipeline falls back to the deterministic synthetic source for that run (recorded
+in `ingestion_manifest.response_status`) so the cache never ends up empty.
+
 See `market_data_pipeline/README.md` for the full architecture, the 13-table
 schema (incl. the `analytics_api_views` serving table), the endpoint list, and
 `docs/example_payloads.json`.
@@ -232,7 +246,7 @@ schema (incl. the `analytics_api_views` serving table), the endpoint list, and
 ## Tech stack
 
 **This build** is fully client-rendered Next.js over **deterministic, seeded data
-generators**, so all 26 modules run with **zero configuration** — no database, no required
+generators**, so all 29 modules run with **zero configuration** — no database, no required
 keys — and stay reproducible across server/client renders. Optional live integrations include
 FRED for economics, the committed/exported `macro_data_etl` FedWatch snapshot, and the
 pluggable FRED/Yahoo-backed `market_data_pipeline`, each degrading gracefully to local
@@ -257,7 +271,7 @@ snapshots or simulation when no key/service is present.
 ## Run locally
 
 The terminal is a standard Next.js app — **zero config, no database, no keys**.
-All 26 modules (including Rate Probabilities, which renders the committed ETL
+All 29 modules (including Rate Probabilities, which renders the committed ETL
 FedWatch snapshot, and the roadmap modules backed by deterministic local fixtures)
 work fully offline.
 
