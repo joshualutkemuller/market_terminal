@@ -6,6 +6,7 @@ import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { YieldCurve, type CurveLine } from "@/components/charts/YieldCurve";
+import { MarketDataControls } from "@/components/market/MarketDataControls";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import {
   marketSnapshot as snapFallback,
@@ -70,13 +71,15 @@ const regimeTone = (label: string): "up" | "down" | "neutral" | "amber" => {
 
 export default function MarketSnapshotPage() {
   const [basis, setBasis] = useState<ReturnBasis>("total");
-  const { data: snapData, source } = useMarketView<{ return_basis?: ReturnBasis; cards: SnapshotCard[] }>("market", basis);
-  const { data: ca } = useMarketView<CrossAsset>("cross-asset", basis);
+  const [asof, setAsOf] = useState("");
+  const { data: snapData, source } = useMarketView<{ return_basis?: ReturnBasis; cards: SnapshotCard[] }>("market", basis, asof);
+  const { data: ca } = useMarketView<CrossAsset>("cross-asset", basis, asof);
   const { data: rates } = useMarketView<RatesView>("rates");
   const { data: regime } = useMarketView<RegimeView>("regime", basis);
-  const { data: bilello } = useMarketView<BilelloView>("bilello", basis);
+  const { data: bilello } = useMarketView<BilelloView>("bilello", basis, asof);
 
   const cards = snapData?.cards ?? snapFallback;
+  const dataAsOf = cards[0]?.asof ?? ca?.asof ?? null;
   const cross = ca ?? caFallback;
   const rv = rates ?? ratesFallback;
   const reg = regime ?? regimeFallback;
@@ -125,8 +128,8 @@ export default function MarketSnapshotPage() {
         code="SNAP"
         title="Market Snapshot"
         desc="Cross-asset state of the market — market_data_pipeline"
-        asOf={rv.asof ?? cross.asof ?? null}
-        right={<span className="flex items-center gap-2"><ReturnBasisToggle value={basis} onChange={setBasis} /><PipeBadge source={source} /></span>}
+        asOf={asof || dataAsOf || rv.asof || cross.asof || null}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} /><PipeBadge source={source} /></span>}
       />
 
       <KpiStrip>
@@ -217,25 +220,5 @@ export default function MarketSnapshotPage() {
         Served by the <span className="text-violet-300">market_data_pipeline</span> (FRED official macro · Yahoo prototype market · pluggable vendors). Return basis: <span className="text-term-amber">{basis === "total" ? "total return / adjusted close" : "price return / raw close"}</span>; CAGR annualized.
       </div>
     </div>
-  );
-}
-
-function ReturnBasisToggle({ value, onChange }: { value: ReturnBasis; onChange: (v: ReturnBasis) => void }) {
-  return (
-    <span className="inline-flex overflow-hidden rounded-sm border border-term-border bg-term-panel-2">
-      {(["total", "price"] as ReturnBasis[]).map((basis) => (
-        <button
-          key={basis}
-          onClick={() => onChange(basis)}
-          className={clsx(
-            "px-2 py-1 text-3xs font-semibold uppercase tracking-wide",
-            value === basis ? "bg-term-amber text-black" : "text-term-text-mute hover:text-term-text"
-          )}
-          title={basis === "total" ? "Adjusted-close total return" : "Raw-close price return"}
-        >
-          {basis}
-        </button>
-      ))}
-    </span>
   );
 }

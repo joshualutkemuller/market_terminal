@@ -9,6 +9,7 @@ import { BarChart } from "@/components/charts/BarChart";
 import { Treemap } from "@/components/charts/Treemap";
 import { CandleChart } from "@/components/charts/CandleChart";
 import { CorrelationMatrix } from "@/components/charts/Matrix";
+import { MarketDataControls } from "@/components/market/MarketDataControls";
 import {
   getQuotes,
   quotesByClass,
@@ -63,8 +64,10 @@ export default function LiveMarkets() {
   const [tab, setTab] = useState<TabKey>("EQUITY");
   const [chartTicker, setChartTicker] = useState("AAPL");
   const [basis, setBasis] = useState<ReturnBasis>("total");
-  const { data: marketData, source } = useMarketView<{ cards: SnapshotCard[] }>("market", basis);
+  const [asof, setAsOf] = useState("");
+  const { data: marketData, source } = useMarketView<{ cards: SnapshotCard[] }>("market", basis, asof);
   const pipelineQuotes = useMemo(() => cardsToQuotes(marketData?.cards ?? []), [marketData]);
+  const dataAsOf = marketData?.cards?.[0]?.asof ?? null;
 
   const indices = useMemo(() => mergeIndexQuotes(getIndices(), marketData?.cards ?? []), [marketData]);
   const heat = useMemo(() => getHeatmap(), []);
@@ -194,7 +197,8 @@ export default function LiveMarkets() {
         code="MKT"
         title="Live Markets"
         desc="Real-time multi-asset monitor"
-        right={<span className="flex items-center gap-2"><ReturnBasisToggle value={basis} onChange={setBasis} /><PipelineTag source={source} /></span>}
+        asOf={asof || dataAsOf}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} /><PipelineTag source={source} /></span>}
       />
 
       <KpiStrip>
@@ -437,21 +441,4 @@ function mergeIndexQuotes(base: IndexQuote[], cards: SnapshotCard[]): IndexQuote
 
 function PipelineTag({ source }: { source: MarketSource }) {
   return <Tag tone={source === "DB" || source === "LIVE" || source === "FILE" ? "up" : "blue"}>{source === "LOADING" ? "SYNC" : source}</Tag>;
-}
-
-function ReturnBasisToggle({ value, onChange }: { value: ReturnBasis; onChange: (v: ReturnBasis) => void }) {
-  return (
-    <span className="inline-flex overflow-hidden rounded-sm border border-term-border bg-term-panel-2">
-      {(["total", "price"] as ReturnBasis[]).map((basis) => (
-        <button
-          key={basis}
-          onClick={() => onChange(basis)}
-          className={`px-2 py-1 text-3xs font-semibold uppercase tracking-wide ${value === basis ? "bg-term-amber text-black" : "text-term-text-mute hover:text-term-text"}`}
-          title={basis === "total" ? "Adjusted-close total return" : "Raw-close price return"}
-        >
-          {basis}
-        </button>
-      ))}
-    </span>
-  );
 }

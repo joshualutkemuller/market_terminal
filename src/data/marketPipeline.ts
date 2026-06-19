@@ -111,6 +111,7 @@ export interface RegimeView {
 
 export interface BilelloView {
   return_basis?: ReturnBasis;
+  asof?: string | null;
   best_worst_ytd: { best: { series_id: string; display_name: string; ytd: number }[]; worst: { series_id: string; display_name: string; ytd: number }[] };
   asset_class_returns_by_year: { asset_class: string; year: number; total_return: number }[];
   current_drawdowns: { series_id: string; display_name: string; drawdown: number }[];
@@ -152,6 +153,7 @@ export interface IndexReturnMatrix {
 
 export interface IndexReturnsView {
   return_basis?: ReturnBasis;
+  asof?: string | null;
   indices: IndexDefinition[];
   matrices: Record<string, IndexReturnMatrix>;
 }

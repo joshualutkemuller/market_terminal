@@ -1,9 +1,9 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import clsx from "clsx";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { MarketDataControls } from "@/components/market/MarketDataControls";
 import { getAssetQuilt, quiltColor, type QuiltYear } from "@/data/marketAnalytics";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import type { BilelloView, ReturnBasis } from "@/data/marketPipeline";
@@ -18,7 +18,8 @@ function tone(v: number): "up" | "down" | "amber" | "neutral" {
 
 export default function AssetQuiltPage() {
   const [basis, setBasis] = useState<ReturnBasis>("total");
-  const { data: bilello, source } = useMarketView<BilelloView>("bilello", basis);
+  const [asof, setAsOf] = useState("");
+  const { data: bilello, source } = useMarketView<BilelloView>("bilello", basis, asof);
   const quilt = useMemo(() => quiltFromBilello(bilello) ?? getAssetQuilt(), [bilello]);
   const latest = quilt[quilt.length - 1];
   const bestLatest = latest.cells[0];
@@ -38,7 +39,8 @@ export default function AssetQuiltPage() {
         code="QUILT"
         title="Asset Quilt"
         desc="Annual cross-asset return rank quilt"
-        right={<span className="flex items-center gap-2"><ReturnBasisToggle value={basis} onChange={setBasis} /><PipelineTag source={source} /></span>}
+        asOf={asof || bilello?.asof || null}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={bilello?.asof} /><PipelineTag source={source} /></span>}
       />
 
       <KpiStrip>
@@ -142,21 +144,4 @@ function prettyAssetClass(assetClass: string): string {
 
 function PipelineTag({ source }: { source: MarketSource }) {
   return <Tag tone={source === "DB" || source === "LIVE" || source === "FILE" ? "up" : "blue"}>{source === "LOADING" ? "SYNC" : source}</Tag>;
-}
-
-function ReturnBasisToggle({ value, onChange }: { value: ReturnBasis; onChange: (v: ReturnBasis) => void }) {
-  return (
-    <span className="inline-flex overflow-hidden rounded-sm border border-term-border bg-term-panel-2">
-      {(["total", "price"] as ReturnBasis[]).map((basis) => (
-        <button
-          key={basis}
-          onClick={() => onChange(basis)}
-          className={clsx("px-2 py-1 text-3xs font-semibold uppercase tracking-wide", value === basis ? "bg-term-amber text-black" : "text-term-text-mute hover:text-term-text")}
-          title={basis === "total" ? "Adjusted-close total return" : "Raw-close price return"}
-        >
-          {basis}
-        </button>
-      ))}
-    </span>
-  );
 }
