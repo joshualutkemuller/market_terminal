@@ -38,7 +38,7 @@ export default function AssetQuiltPage() {
       <PageHeader
         code="QUILT"
         title="Asset Quilt"
-        desc="Annual cross-asset return rank quilt"
+        desc="Annual ETF/index proxy return rank quilt"
         asOf={asof || bilello?.asof || null}
         right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={bilello?.asof} /><PipelineTag source={source} /></span>}
       />
@@ -49,11 +49,17 @@ export default function AssetQuiltPage() {
         <Stat label="Dispersion" value={`${fmtNum(dispersion, 1)} pts`} sub={`${latest.year} high-low`} tone="amber" />
         <Stat label="Most #1 Finishes" value={leader?.[0] ?? "—"} sub={`${leader?.[1] ?? 0} years`} />
         <Stat label="Years" value={`${quilt[0].year}-${latest.year}`} sub="2016-2025 + current YTD" />
-        <Stat label="Method" value="Ranked" sub="best to worst by year" tone="neutral" />
+        <Stat label="Method" value="ETF Proxy" sub={basis === "total" ? "adj close total return" : "raw close price return"} tone="neutral" />
       </KpiStrip>
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-12">
-        <Panel title="Asset Class Return Quilt" code="RANK" className="xl:col-span-12" accent>
+        <Panel
+          title="ETF / Index Proxy Return Quilt"
+          code="RANK"
+          className="xl:col-span-12"
+          accent
+          right={<span className="text-3xs text-term-text-mute">{source} · {basis === "total" ? "adjusted close" : "raw close"} · {asof || bilello?.asof || "latest"}</span>}
+        >
           <div className="overflow-auto">
             <div className="grid min-w-[1080px]" style={{ gridTemplateColumns: `76px repeat(${quilt.length}, minmax(88px, 1fr))` }}>
               <div className="sticky left-0 z-20 border-b border-r border-term-border bg-term-panel-2 px-2 py-1 text-2xs font-semibold uppercase text-term-text-mute">Rank</div>
@@ -75,7 +81,8 @@ export default function AssetQuiltPage() {
                     }
                     return (
                       <div key={`${year.year}-${cell.asset}`} className="min-h-[64px] border-b border-r border-black/40 p-1.5" style={{ background: quiltColor(cell.asset) }}>
-                        <div className="text-2xs font-semibold uppercase leading-tight text-black/80">{cell.asset}</div>
+                        <div className="text-2xs font-semibold uppercase leading-tight text-black/85">{cell.asset}</div>
+                        <div className="mt-0.5 truncate text-[9px] font-semibold leading-tight text-black/65" title={cell.displayName}>{cell.displayName ?? cell.assetClass ?? ""}</div>
                         <div className="tnum mt-1 text-lg font-bold leading-none text-black">{fmtSignedPct(cell.returnPct, 1)}</div>
                       </div>
                     );
@@ -88,9 +95,9 @@ export default function AssetQuiltPage() {
 
         <Panel title="How to Read" code="NOTE" className="xl:col-span-4">
           <div className="space-y-2 p-3 text-xs text-term-text-dim">
-            <p>Each column ranks asset classes from best annual return at the top to worst annual return at the bottom.</p>
+            <p>Each column ranks the actual ETF/index proxy ticker from best annual return at the top to worst annual return at the bottom.</p>
             <p>The current year column is YTD, so it should not be compared as a full-year return.</p>
-            <p>Default view ranks adjusted-close total returns. Switch to price return to rank raw-close performance.</p>
+            <p>Default view ranks adjusted-close total returns. Switch to price return to rank raw-close performance. The data source badge and DATA AS OF date show the exact feed state.</p>
           </div>
         </Panel>
 
@@ -102,7 +109,7 @@ export default function AssetQuiltPage() {
                   <Tag tone={tone(c.returnPct)}>#{c.rank}</Tag>
                   <span className="tnum text-xs font-semibold text-term-text">{fmtSignedPct(c.returnPct, 1)}</span>
                 </div>
-                <div className="mt-1 truncate text-xs text-term-text-dim">{c.asset}</div>
+                <div className="mt-1 truncate text-xs text-term-text-dim" title={c.displayName}>{c.asset} · {c.displayName}</div>
               </div>
             ))}
           </div>
@@ -122,7 +129,9 @@ function quiltFromBilello(bilello: BilelloView | null | undefined): QuiltYear[] 
       .sort((a, b) => b.total_return - a.total_return)
       .map((r, i) => ({
         year,
-        asset: prettyAssetClass(r.asset_class),
+        asset: r.series_id ?? prettyAssetClass(r.asset_class),
+        displayName: r.display_name,
+        assetClass: r.asset_class,
         returnPct: Number((r.total_return * 100).toFixed(1)),
         rank: i + 1,
       }));

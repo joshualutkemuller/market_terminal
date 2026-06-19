@@ -432,12 +432,12 @@ def _cards_to_frame(cards: list[dict], run_id: str) -> pl.DataFrame:
 
 
 INDEX_RETURN_SERIES = [
-    {"symbol": "SPX", "series_id": "SPY", "name": "S&P 500", "base": 5975, "drift": 0.75, "vol": 4.2},
-    {"symbol": "NDX", "series_id": "QQQ", "name": "Nasdaq 100", "base": 21450, "drift": 0.95, "vol": 6.0},
-    {"symbol": "RUT", "series_id": "IWM", "name": "Russell 2000", "base": 2380, "drift": 0.62, "vol": 5.8},
-    {"symbol": "INDU", "series_id": "DIA", "name": "Dow Jones Industrial Average", "base": 43400, "drift": 0.58, "vol": 3.8},
-    {"symbol": "EAFE", "series_id": "EFA", "name": "MSCI EAFE Proxy", "base": 2450, "drift": 0.46, "vol": 4.6},
-    {"symbol": "EM", "series_id": "EEM", "name": "MSCI Emerging Markets Proxy", "base": 1080, "drift": 0.52, "vol": 6.4},
+    {"symbol": "SPX", "series_id": "SPY", "proxy": "SPY", "name": "S&P 500", "base": 5975, "drift": 0.75, "vol": 4.2},
+    {"symbol": "NDX", "series_id": "QQQ", "proxy": "QQQ", "name": "Nasdaq 100", "base": 21450, "drift": 0.95, "vol": 6.0},
+    {"symbol": "RUT", "series_id": "IWM", "proxy": "IWM", "name": "Russell 2000", "base": 2380, "drift": 0.62, "vol": 5.8},
+    {"symbol": "INDU", "series_id": "DIA", "proxy": "DIA", "name": "Dow Jones Industrial Average", "base": 43400, "drift": 0.58, "vol": 3.8},
+    {"symbol": "EAFE", "series_id": "EFA", "proxy": "EFA", "name": "MSCI EAFE Proxy", "base": 2450, "drift": 0.46, "vol": 4.6},
+    {"symbol": "EM", "series_id": "EEM", "proxy": "EEM", "name": "MSCI Emerging Markets Proxy", "base": 1080, "drift": 0.52, "vol": 6.4},
 ]
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -449,18 +449,20 @@ def _monthly_returns_for_series(prices: pl.DataFrame, series_id: str) -> dict[in
     if sub.height == 0:
         return out
     rows = sub.to_dicts()
-    by_month: dict[tuple[int, int], list[float]] = {}
+    by_month_end: dict[tuple[int, int], float] = {}
     for row in rows:
         d = row["date"]
-        by_month.setdefault((d.year, d.month), []).append(float(row["value"]))
+        by_month_end[(d.year, d.month)] = float(row["value"])
     for year in sorted({d["date"].year for d in rows}):
         out[year] = []
         for month in range(1, 13):
-            vals = by_month.get((year, month), [])
-            if len(vals) < 2 or vals[0] == 0:
+            cur = by_month_end.get((year, month))
+            prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
+            base = by_month_end.get((prev_year, prev_month))
+            if cur is None or base is None or base == 0:
                 out[year].append(None)
             else:
-                out[year].append(round((vals[-1] / vals[0] - 1.0) * 100, 2))
+                out[year].append(round((cur / base - 1.0) * 100, 2))
     return out
 
 

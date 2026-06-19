@@ -102,6 +102,7 @@ export default function MarketSnapshotPage() {
       </span>
     )},
     { key: "class", header: "Class", align: "center", sortVal: (r) => r.asset_class, render: (r) => <Tag tone="neutral">{r.asset_class}</Tag> },
+    { key: "asof", header: "As Of", align: "center", sortVal: (r) => r.asof ?? "", render: (r) => <span className="tnum text-term-text-mute">{r.asof ?? "—"}</span> },
     { key: "price", header: "Price", align: "right", sortVal: (r) => r.price ?? 0, render: (r) => <span className="tnum text-term-amber">{r.price !== null ? fmtNum(r.price, 2) : "—"}</span> },
     { key: "d1", header: "1D", align: "right", sortVal: (r) => r.ret_1d ?? 0, render: (r) => <Pct v={r.ret_1d} /> },
     { key: "d5", header: "5D", align: "right", sortVal: (r) => r.ret_5d ?? 0, render: (r) => <Pct v={r.ret_5d} /> },
@@ -145,7 +146,13 @@ export default function MarketSnapshotPage() {
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-3">
         {/* Market snapshot table */}
-        <Panel title="Market Snapshot — Returns & Drawdowns" code="RETURNS" className="xl:col-span-2" accent>
+        <Panel
+          title="Market Snapshot — Returns & Drawdowns"
+          code="RETURNS"
+          className="xl:col-span-2"
+          accent
+          right={<span className="text-3xs text-term-text-mute">{source} · {basis === "total" ? "adjusted close" : "raw close"} · {asof || dataAsOf || "latest"}</span>}
+        >
           <DataGrid columns={columns} rows={cards} rowKey={(r) => r.series_id} maxHeight="520px" initialSort={{ key: "ytd", dir: "desc" }} />
         </Panel>
 
