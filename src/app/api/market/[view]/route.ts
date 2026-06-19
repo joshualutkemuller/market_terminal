@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
-import { SNAPSHOTS, type MarketView } from "@/data/marketPipeline";
+import { PRICE_SNAPSHOTS, SNAPSHOTS, type MarketView, type ReturnBasis } from "@/data/marketPipeline";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs"; // needs fs + optional native DB drivers
@@ -14,6 +14,7 @@ const ENDPOINT: Record<MarketView, string> = {
   inflation: "/snapshot/inflation",
   regime: "/dashboard/regime",
   bilello: "/dashboard/bilello",
+  "index-returns": "",
 };
 
 /** Exported-JSON filename for each view (matches `mdp export-views`). */
@@ -24,7 +25,29 @@ const FILE_NAME: Record<MarketView, string> = {
   inflation: "inflation.json",
   regime: "regime.json",
   bilello: "bilello.json",
+  "index-returns": "index_returns.json",
 };
+
+const PRICE_FILE_NAME: Partial<Record<MarketView, string>> = {
+  market: "market_snapshot_price.json",
+  "cross-asset": "cross_asset_price.json",
+  regime: "regime_price.json",
+  bilello: "bilello_price.json",
+  "index-returns": "index_returns_price.json",
+};
+
+function returnBasis(req: NextRequest): ReturnBasis {
+  return req.nextUrl.searchParams.get("basis") === "price" ? "price" : "total";
+}
+
+function dbView(view: MarketView, basis: ReturnBasis): string {
+  return basis === "price" && view in PRICE_SNAPSHOTS ? `${view}:price` : view;
+}
+
+function snapshotFor(view: MarketView, basis: ReturnBasis): unknown {
+  if (basis === "price" && view in PRICE_SNAPSHOTS) return PRICE_SNAPSHOTS[view as keyof typeof PRICE_SNAPSHOTS];
+  return SNAPSHOTS[view];
+}
 
 /** Require an optional module at runtime without the bundler resolving it. */
 function optionalRequire(name: string): any {
@@ -41,7 +64,7 @@ function optionalRequire(name: string): any {
  * Supports a local DuckDB file (`*.duckdb` / `duckdb:<path>`) or Postgres
  * (`postgres://…`). Drivers are optional — install `duckdb` or `pg` to use them.
  */
-async function readFromDb(dbUrl: string, view: MarketView): Promise<unknown | null> {
+async function readFromDb(dbUrl: string, view: string): Promise<unknown | null> {
   const isPg = /^postgres(ql)?:\/\//.test(dbUrl);
   if (isPg) {
     const pg = optionalRequire("pg");
@@ -80,9 +103,10 @@ async function readFromDb(dbUrl: string, view: MarketView): Promise<unknown | nu
 }
 
 /** Read one view's JSON payload from a local directory of exported files. */
-async function readFromDir(dir: string, view: MarketView): Promise<unknown | null> {
+async function readFromDir(dir: string, view: MarketView, basis: ReturnBasis): Promise<unknown | null> {
+  const filename = basis === "price" ? PRICE_FILE_NAME[view] ?? FILE_NAME[view] : FILE_NAME[view];
   try {
-    const raw = await readFile(path.join(dir, FILE_NAME[view]), "utf8");
+    const raw = await readFile(path.join(dir, filename), "utf8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -100,18 +124,20 @@ async function readFromDir(dir: string, view: MarketView): Promise<unknown | nul
  *
  * Always 200 with a `source` field so the UI renders uniformly and never blocks.
  */
-export async function GET(_req: NextRequest, { params }: { params: { view: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { view: string } }) {
   const view = params.view as MarketView;
   if (!(view in SNAPSHOTS)) {
     return NextResponse.json({ error: `unknown view '${view}'` }, { status: 404 });
   }
+  const basis = returnBasis(req);
+  const viewKey = dbView(view, basis);
 
   // 1. local database (DuckDB file or Postgres)
   const dbUrl = process.env.MARKET_DB_URL;
   if (dbUrl) {
     try {
-      const data = await readFromDb(dbUrl, view);
-      if (data) return NextResponse.json({ source: "DB", view, data });
+      const data = await readFromDb(dbUrl, viewKey);
+      if (data) return NextResponse.json({ source: "DB", view, basis, data });
     } catch {
       // fall through
     }
@@ -120,24 +146,24 @@ export async function GET(_req: NextRequest, { params }: { params: { view: strin
   // 2. local exported-file cache
   const dir = process.env.MARKET_DATA_DIR;
   if (dir) {
-    const data = await readFromDir(dir, view);
-    if (data) return NextResponse.json({ source: "FILE", view, data });
+    const data = await readFromDir(dir, view, basis);
+    if (data) return NextResponse.json({ source: "FILE", view, basis, data });
   }
 
   // 3. live FastAPI service
   const base = process.env.MARKET_PIPELINE_URL;
-  if (base) {
+  if (base && basis === "total" && ENDPOINT[view]) {
     try {
       const r = await fetch(`${base.replace(/\/$/, "")}${ENDPOINT[view]}`, {
         signal: AbortSignal.timeout(4000),
         cache: "no-store",
       });
-      if (r.ok) return NextResponse.json({ source: "LIVE", view, data: await r.json() });
+      if (r.ok) return NextResponse.json({ source: "LIVE", view, basis, data: await r.json() });
     } catch {
       // fall through
     }
   }
 
   // 4. committed build-time snapshot
-  return NextResponse.json({ source: "SNAPSHOT", view, data: SNAPSHOTS[view] });
+  return NextResponse.json({ source: "SNAPSHOT", view, basis, data: snapshotFor(view, basis) });
 }

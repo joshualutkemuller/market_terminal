@@ -259,18 +259,60 @@ class Pipeline:
     # Serving views (read directly by the terminal — DB or file)
     # ------------------------------------------------------------------
 
+    def _price_return_frame(self, run_id: str) -> pl.DataFrame:
+        """Build a normalized-like market frame from raw closes for price returns."""
+        raw = self.store.query("SELECT * FROM raw_market_prices")
+        if raw.is_empty():
+            return pl.DataFrame()
+
+        sym_to_asset = {a.vendor_symbol: a for a in self.catalog.assets}
+        rows = []
+        ingested = _now()
+        for sym, sub in raw.partition_by("vendor_symbol", as_dict=True).items():
+            symbol = sym[0] if isinstance(sym, tuple) else sym
+            asset = sym_to_asset.get(symbol)
+            if asset is None:
+                continue
+            source = sub["source"][0] if "source" in sub.columns and sub.height else "YAHOO"
+            rows.append(
+                sub.select(
+                    pl.lit(asset.series_id).alias("series_id"),
+                    pl.lit(source).alias("source"),
+                    pl.lit(symbol).alias("vendor_symbol"),
+                    pl.lit(asset.display_name).alias("display_name"),
+                    pl.lit(asset.asset_class).alias("asset_class"),
+                    pl.lit(asset.frequency).alias("frequency"),
+                    pl.col("date"),
+                    pl.col("close").cast(pl.Float64).alias("value"),
+                    pl.lit(asset.unit).alias("unit"),
+                    pl.lit(asset.currency).alias("currency"),
+                    pl.lit("PRICE_CLOSE").alias("adjustment_type"),
+                    pl.lit(None, dtype=pl.Datetime).alias("revision_timestamp"),
+                    pl.lit(None, dtype=pl.Date).alias("vintage_date"),
+                    pl.lit(ingested).alias("ingested_at"),
+                    pl.lit(run_id).alias("ingestion_run_id"),
+                ).filter(pl.col("value").is_not_null())
+            )
+
+        return pl.concat(rows, how="vertical_relaxed") if rows else pl.DataFrame()
+
     def build_api_views(
-        self, prices: pl.DataFrame, macro: pl.DataFrame
+        self,
+        prices: pl.DataFrame,
+        macro: pl.DataFrame,
+        return_basis: str = "total",
     ) -> dict[str, dict]:
-        """Build the 6 terminal view payloads (identical to the FastAPI shapes)."""
+        """Build terminal view payloads for one return basis."""
         ca = analytics.cross_asset_dashboard(prices)
+        basis_note = "total" if return_basis != "price" else "price"
         return _json_clean({
-            "market": {"cards": analytics.market_snapshot(prices)},
-            "cross-asset": ca,
+            "market": {"return_basis": basis_note, "cards": analytics.market_snapshot(prices)},
+            "cross-asset": {"return_basis": basis_note, **ca},
             "rates": analytics.rates_dashboard(macro),
             "inflation": {"cards": analytics.inflation_dashboard(macro)},
-            "regime": analytics.regime_dashboard(prices, macro),
+            "regime": {"return_basis": basis_note, **analytics.regime_dashboard(prices, macro)},
             "bilello": {
+                "return_basis": basis_note,
                 "best_worst_ytd": analytics.best_worst_ytd(prices),
                 "asset_class_returns_by_year": analytics.asset_class_returns_by_year(prices),
                 "current_drawdowns": analytics.current_drawdowns(prices),
@@ -278,6 +320,7 @@ class Pipeline:
                 "inflation_vs_policy_gap": analytics.inflation_vs_policy_gap(macro),
                 "unemployment_vs_longrun": analytics.unemployment_vs_longrun(macro),
             },
+            "index-returns": build_index_returns_view(prices, return_basis=basis_note),
         })
 
     def materialize_api_views(
@@ -297,7 +340,15 @@ class Pipeline:
             prices = df.filter(pl.col("asset_class").is_in(
                 ["EQUITY", "BOND", "COMMODITY", "CREDIT", "VOLATILITY", "CURRENCY"]))
             macro = df.filter(pl.col("asset_class").str.starts_with("MACRO"))
-        views = self.build_api_views(prices, macro)
+        views = self.build_api_views(prices, macro, return_basis="total")
+        price_prices = self._price_return_frame(run_id)
+        if not price_prices.is_empty():
+            price_views = self.build_api_views(price_prices, macro, return_basis="price")
+            views.update({
+                f"{view}:price": payload
+                for view, payload in price_views.items()
+                if view in {"market", "cross-asset", "regime", "bilello", "index-returns"}
+            })
         now = _now()
         rows = []
         for view, payload in views.items():
@@ -327,10 +378,24 @@ class Pipeline:
         prices = df.filter(pl.col("asset_class").is_in(
             ["EQUITY", "BOND", "COMMODITY", "CREDIT", "VOLATILITY", "CURRENCY"]))
         macro = df.filter(pl.col("asset_class").str.starts_with("MACRO"))
-        views = self.build_api_views(prices, macro)
+        views = self.build_api_views(prices, macro, return_basis="total")
+        price_prices = self._price_return_frame(run_id)
+        if not price_prices.is_empty():
+            price_views = self.build_api_views(price_prices, macro, return_basis="price")
+            views.update({
+                f"{view}:price": payload
+                for view, payload in price_views.items()
+                if view in {"market", "cross-asset", "regime", "bilello", "index-returns"}
+            })
         name_map = {
             "market": "market_snapshot", "cross-asset": "cross_asset", "rates": "rates",
             "inflation": "inflation", "regime": "regime", "bilello": "bilello",
+            "index-returns": "index_returns",
+            "market:price": "market_snapshot_price",
+            "cross-asset:price": "cross_asset_price",
+            "regime:price": "regime_price",
+            "bilello:price": "bilello_price",
+            "index-returns:price": "index_returns_price",
         }
         written = []
         for view, payload in views.items():
@@ -355,3 +420,101 @@ def _cards_to_frame(cards: list[dict], run_id: str) -> pl.DataFrame:
         r["ingestion_run_id"] = run_id
         rows.append(r)
     return pl.DataFrame(rows, infer_schema_length=None)
+
+
+INDEX_RETURN_SERIES = [
+    {"symbol": "SPX", "series_id": "SPY", "name": "S&P 500", "base": 5975, "drift": 0.75, "vol": 4.2},
+    {"symbol": "NDX", "series_id": "QQQ", "name": "Nasdaq 100", "base": 21450, "drift": 0.95, "vol": 6.0},
+    {"symbol": "RUT", "series_id": "IWM", "name": "Russell 2000", "base": 2380, "drift": 0.62, "vol": 5.8},
+    {"symbol": "INDU", "series_id": "DIA", "name": "Dow Jones Industrial Average", "base": 43400, "drift": 0.58, "vol": 3.8},
+    {"symbol": "EAFE", "series_id": "EFA", "name": "MSCI EAFE Proxy", "base": 2450, "drift": 0.46, "vol": 4.6},
+    {"symbol": "EM", "series_id": "EEM", "name": "MSCI Emerging Markets Proxy", "base": 1080, "drift": 0.52, "vol": 6.4},
+]
+
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _monthly_returns_for_series(prices: pl.DataFrame, series_id: str) -> dict[int, list[float | None]]:
+    sub = prices.filter(pl.col("series_id") == series_id).select(["date", "value"]).drop_nulls().sort("date")
+    out: dict[int, list[float | None]] = {}
+    if sub.height == 0:
+        return out
+    rows = sub.to_dicts()
+    by_month: dict[tuple[int, int], list[float]] = {}
+    for row in rows:
+        d = row["date"]
+        by_month.setdefault((d.year, d.month), []).append(float(row["value"]))
+    for year in sorted({d["date"].year for d in rows}):
+        out[year] = []
+        for month in range(1, 13):
+            vals = by_month.get((year, month), [])
+            if len(vals) < 2 or vals[0] == 0:
+                out[year].append(None)
+            else:
+                out[year].append(round((vals[-1] / vals[0] - 1.0) * 100, 2))
+    return out
+
+
+def _compound_pct(values: list[float | None]) -> float | None:
+    valid = [v for v in values if v is not None]
+    if not valid:
+        return None
+    ret = 1.0
+    for v in valid:
+        ret *= 1 + v / 100.0
+    return round((ret - 1.0) * 100, 2)
+
+
+def _max_drawdown_pct(values: list[float | None]) -> float | None:
+    valid = [v for v in values if v is not None]
+    if not valid:
+        return None
+    level = 100.0
+    peak = 100.0
+    worst = 0.0
+    for v in valid:
+        level *= 1 + v / 100.0
+        peak = max(peak, level)
+        worst = min(worst, level / peak - 1.0)
+    return round(worst * 100, 2)
+
+
+def build_index_returns_view(prices: pl.DataFrame, return_basis: str = "total") -> dict:
+    indices = [{k: v for k, v in item.items() if k != "series_id"} for item in INDEX_RETURN_SERIES]
+    matrices = {}
+    for item in INDEX_RETURN_SERIES:
+        monthly = _monthly_returns_for_series(prices, item["series_id"])
+        if not monthly:
+            continue
+        latest_year = max(monthly)
+        full_years = [y for y in sorted(monthly) if y < latest_year][-10:]
+        years = full_years if full_years else [y for y in sorted(monthly) if y <= latest_year]
+        columns = [*years, latest_year] if latest_year not in years else years
+        rows = []
+        for i, month in enumerate(MONTHS):
+            values = {str(year): monthly.get(year, [None] * 12)[i] for year in columns}
+            avg_vals = [monthly[year][i] for year in years if monthly.get(year, [None] * 12)[i] is not None]
+            month_avg = round(sum(avg_vals) / len(avg_vals), 2) if avg_vals else None
+            rows.append({"month": month, "values": values, "monthAverage": month_avg})
+        annual = {str(year): _compound_pct(monthly.get(year, [])) for year in columns}
+        full_annuals = [annual[str(year)] for year in years if annual.get(str(year)) is not None]
+        avg_annual = round(sum(full_annuals) / len(full_annuals), 2) if full_annuals else 0
+        summaries = [
+            {
+                "year": year,
+                "annualReturn": annual[str(year)],
+                "maxDrawdown": _max_drawdown_pct(monthly.get(year, [])),
+                "isYtd": year == latest_year,
+            }
+            for year in columns
+        ]
+        matrices[item["symbol"]] = {
+            "index": {k: v for k, v in item.items() if k != "series_id"},
+            "years": years,
+            "ytdYear": latest_year,
+            "rows": rows,
+            "annualReturns": annual,
+            "averageAnnualReturn": avg_annual,
+            "summaries": summaries,
+        }
+    return {"return_basis": return_basis, "indices": indices, "matrices": matrices}

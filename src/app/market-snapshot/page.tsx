@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
@@ -18,6 +19,7 @@ import {
   type RatesView,
   type RegimeView,
   type BilelloView,
+  type ReturnBasis,
 } from "@/data/marketPipeline";
 import { fmtNum, fmtSignedPct, fmtBps, pnlClass } from "@/lib/format";
 
@@ -67,11 +69,12 @@ const regimeTone = (label: string): "up" | "down" | "neutral" | "amber" => {
 };
 
 export default function MarketSnapshotPage() {
-  const { data: snapData, source } = useMarketView<{ cards: SnapshotCard[] }>("market");
-  const { data: ca } = useMarketView<CrossAsset>("cross-asset");
+  const [basis, setBasis] = useState<ReturnBasis>("total");
+  const { data: snapData, source } = useMarketView<{ return_basis?: ReturnBasis; cards: SnapshotCard[] }>("market", basis);
+  const { data: ca } = useMarketView<CrossAsset>("cross-asset", basis);
   const { data: rates } = useMarketView<RatesView>("rates");
-  const { data: regime } = useMarketView<RegimeView>("regime");
-  const { data: bilello } = useMarketView<BilelloView>("bilello");
+  const { data: regime } = useMarketView<RegimeView>("regime", basis);
+  const { data: bilello } = useMarketView<BilelloView>("bilello", basis);
 
   const cards = snapData?.cards ?? snapFallback;
   const cross = ca ?? caFallback;
@@ -118,7 +121,13 @@ export default function MarketSnapshotPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="SNAP" title="Market Snapshot" desc="Cross-asset state of the market — market_data_pipeline" asOf={rv.asof ?? cross.asof ?? null} right={<PipeBadge source={source} />} />
+      <PageHeader
+        code="SNAP"
+        title="Market Snapshot"
+        desc="Cross-asset state of the market — market_data_pipeline"
+        asOf={rv.asof ?? cross.asof ?? null}
+        right={<span className="flex items-center gap-2"><ReturnBasisToggle value={basis} onChange={setBasis} /><PipeBadge source={source} /></span>}
+      />
 
       <KpiStrip>
         <Stat label="Regime" value={reg.composite.label} sub={`score ${fmtNum(reg.composite.score, 0)}`} tone={regimeTone(reg.composite.label)} />
@@ -205,8 +214,28 @@ export default function MarketSnapshotPage() {
       </div>
 
       <div className="border-t border-term-border bg-term-panel px-3 py-1.5 text-3xs text-term-text-mute">
-        Served by the <span className="text-violet-300">market_data_pipeline</span> (FRED official macro · Yahoo prototype market · pluggable vendors). Returns are total-return on adjusted close; CAGR annualized. Set <code className="text-term-text-dim">MARKET_PIPELINE_URL</code> to stream live from the FastAPI service.
+        Served by the <span className="text-violet-300">market_data_pipeline</span> (FRED official macro · Yahoo prototype market · pluggable vendors). Return basis: <span className="text-term-amber">{basis === "total" ? "total return / adjusted close" : "price return / raw close"}</span>; CAGR annualized.
       </div>
     </div>
+  );
+}
+
+function ReturnBasisToggle({ value, onChange }: { value: ReturnBasis; onChange: (v: ReturnBasis) => void }) {
+  return (
+    <span className="inline-flex overflow-hidden rounded-sm border border-term-border bg-term-panel-2">
+      {(["total", "price"] as ReturnBasis[]).map((basis) => (
+        <button
+          key={basis}
+          onClick={() => onChange(basis)}
+          className={clsx(
+            "px-2 py-1 text-3xs font-semibold uppercase tracking-wide",
+            value === basis ? "bg-term-amber text-black" : "text-term-text-mute hover:text-term-text"
+          )}
+          title={basis === "total" ? "Adjusted-close total return" : "Raw-close price return"}
+        >
+          {basis}
+        </button>
+      ))}
+    </span>
   );
 }

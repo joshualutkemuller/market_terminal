@@ -193,7 +193,8 @@ macro-etl export fed_probabilities  # JSON for the terminal
 
 ## Market data pipeline (`market_data_pipeline`)
 
-The **Market Snapshot** module (`SNAP`) is served by a second Python service (in
+The **Market Snapshot** / **Live Markets** / **Asset Quilt** / **Index Returns**
+market surfaces are served by a second Python service (in
 this repo under `/market_data_pipeline`): a production market + macro pipeline
 that ingests **FRED** (official macro) and **Yahoo/yfinance** (prototype-grade
 market, replaceable vendor interface), lands a raw → bronze → silver → gold
@@ -261,7 +262,10 @@ MARKET_DB_URL=postgres://... PYTHONPATH=$PWD python -m market_data_pipeline.cli 
 ```
 
 The publisher creates `analytics_api_views` if it does not exist. Once populated,
-`/api/market/market` should return `"source":"DB"` from Vercel.
+`/api/market/market` should return `"source":"DB"` from Vercel. Return-bearing
+views default to **total return** (`adj_close`) and also publish **price return**
+variants (`?basis=price`) from raw close. The app exposes that switch on Market
+Snapshot, Live Markets, Asset Quilt, and Index Returns.
 
 **Does running locally refresh the cache from Yahoo?** Yes. `mdp run` (without
 `--offline`, `MDP_ALLOW_YAHOO=1` by default) pulls **~10y of daily history per

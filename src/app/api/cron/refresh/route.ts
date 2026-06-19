@@ -28,6 +28,12 @@ const MARKET_TARGETS = [
   "/api/market/inflation",
   "/api/market/regime",
   "/api/market/bilello",
+  "/api/market/index-returns",
+  "/api/market/market?basis=price",
+  "/api/market/cross-asset?basis=price",
+  "/api/market/regime?basis=price",
+  "/api/market/bilello?basis=price",
+  "/api/market/index-returns?basis=price",
 ];
 
 function baseUrl(req: NextRequest): string {

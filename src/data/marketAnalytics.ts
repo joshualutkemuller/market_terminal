@@ -1,6 +1,6 @@
 import { Rng } from "@/lib/rng";
 
-export type QuiltAsset = "US Large Cap" | "US Small Cap" | "Intl Developed" | "Emerging Markets" | "US Bonds" | "High Yield" | "Commodities" | "Gold" | "REITs" | "Cash";
+export type QuiltAsset = string;
 
 export interface QuiltCell {
   year: number;
@@ -47,7 +47,7 @@ export interface IndexReturnMatrix {
 
 export const QUILT_ASSETS: QuiltAsset[] = ["US Large Cap", "US Small Cap", "Intl Developed", "Emerging Markets", "US Bonds", "High Yield", "Commodities", "Gold", "REITs", "Cash"];
 
-const QUILT_BASE: Record<QuiltAsset, { drift: number; vol: number; color: string }> = {
+const QUILT_BASE: Record<string, { drift: number; vol: number; color: string }> = {
   "US Large Cap": { drift: 9.2, vol: 15, color: "#3B9DFF" },
   "US Small Cap": { drift: 8.4, vol: 22, color: "#7C3AED" },
   "Intl Developed": { drift: 6.4, vol: 17, color: "#14B8A6" },
@@ -61,8 +61,17 @@ const QUILT_BASE: Record<QuiltAsset, { drift: number; vol: number; color: string
 };
 
 export function quiltColor(asset: QuiltAsset): string {
-  return QUILT_BASE[asset].color;
+  return QUILT_BASE[asset]?.color ?? ASSET_CLASS_COLORS[asset] ?? "#94A3B8";
 }
+
+const ASSET_CLASS_COLORS: Record<string, string> = {
+  EQUITY: "#3B9DFF",
+  BOND: "#60A5FA",
+  CREDIT: "#F97316",
+  COMMODITY: "#EAB308",
+  VOLATILITY: "#EF4444",
+  CURRENCY: "#9CA3AF",
+};
 
 export function getAssetQuilt(): QuiltYear[] {
   const rng = new Rng("asset-quilt");

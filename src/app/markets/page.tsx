@@ -22,6 +22,8 @@ import {
   type IndexQuote,
 } from "@/data/markets";
 import type { AssetClass } from "@/data/universe";
+import { useMarketView, type MarketSource } from "@/lib/useMarket";
+import type { ReturnBasis, SnapshotCard } from "@/data/marketPipeline";
 import { fmtNum, fmtInt, fmtAbbr, fmtSignedPct, pnlClass } from "@/lib/format";
 
 type TabKey = "EQUITY" | "ETF" | "FI" | "FUTURE" | "FX" | "COMMODITY" | "CRYPTO";
@@ -60,8 +62,11 @@ function quotesForTab(tab: TabKey): Quote[] {
 export default function LiveMarkets() {
   const [tab, setTab] = useState<TabKey>("EQUITY");
   const [chartTicker, setChartTicker] = useState("AAPL");
+  const [basis, setBasis] = useState<ReturnBasis>("total");
+  const { data: marketData, source } = useMarketView<{ cards: SnapshotCard[] }>("market", basis);
+  const pipelineQuotes = useMemo(() => cardsToQuotes(marketData?.cards ?? []), [marketData]);
 
-  const indices = useMemo(() => getIndices(), []);
+  const indices = useMemo(() => mergeIndexQuotes(getIndices(), marketData?.cards ?? []), [marketData]);
   const heat = useMemo(() => getHeatmap(), []);
   const movers = useMemo(() => getMovers(), []);
   const allQuotes = useMemo(() => getQuotes(), []);
@@ -75,7 +80,10 @@ export default function LiveMarkets() {
   const btc = idx("BTC");
   const move = idx("MOVE");
 
-  const rows = useMemo(() => quotesForTab(tab), [tab]);
+  const rows = useMemo(() => {
+    const liveRows = quotesForTabFromPipeline(tab, pipelineQuotes);
+    return liveRows.length ? liveRows : quotesForTab(tab);
+  }, [pipelineQuotes, tab]);
   const candles = useMemo(() => getCandles(chartTicker, 60), [chartTicker]);
   const book = useMemo(() => getOrderBook(chartTicker), [chartTicker]);
 
@@ -182,7 +190,12 @@ export default function LiveMarkets() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="MKT" title="Live Markets" desc="Real-time multi-asset monitor" />
+      <PageHeader
+        code="MKT"
+        title="Live Markets"
+        desc="Real-time multi-asset monitor"
+        right={<span className="flex items-center gap-2"><ReturnBasisToggle value={basis} onChange={setBasis} /><PipelineTag source={source} /></span>}
+      />
 
       <KpiStrip>
         <Stat label="S&P 500" value={fmtNum(spx?.last ?? 0, 1)} sub={<span className={pnlClass(spx?.chgPct ?? 0)}>{fmtSignedPct(spx?.chgPct ?? 0)}</span>} tone={(spx?.chgPct ?? 0) >= 0 ? "up" : "down"} />
@@ -200,7 +213,7 @@ export default function LiveMarkets() {
             title="Live Quote Board"
             code="WEI"
             accent
-            right={<span className="tnum text-3xs text-term-text-mute">{rows.length} instruments</span>}
+            right={<span className="tnum text-3xs text-term-text-mute">{rows.length} instruments · {basis === "total" ? "adj close" : "raw close"}</span>}
           >
             <div className="flex flex-wrap gap-px border-b border-term-border bg-term-border">
               {TABS.map((t) => (
@@ -361,5 +374,84 @@ export default function LiveMarkets() {
         </div>
       </div>
     </div>
+  );
+}
+
+function cardsToQuotes(cards: SnapshotCard[]): Quote[] {
+  return cards
+    .filter((c) => c.price !== null)
+    .map((c) => {
+      const last = c.price ?? 0;
+      const chgPct = (c.ret_1d ?? 0) * 100;
+      const prior = chgPct === -100 ? last : last / (1 + chgPct / 100);
+      const chg = last - prior;
+      const spread = Math.max(0.01, last * 0.0004);
+      return {
+        ticker: c.series_id,
+        name: c.display_name,
+        assetClass: marketAssetClass(c.asset_class),
+        sector: c.asset_class,
+        last,
+        chg,
+        chgPct,
+        bid: last - spread / 2,
+        ask: last + spread / 2,
+        vol: 0,
+        notional: 0,
+        vwap: last,
+        high: last * (1 + Math.max(0, -(c.pct_from_52w_high ?? 0))),
+        low: last * (1 + Math.min(0, c.max_drawdown ?? 0)),
+        open: prior,
+        spark: [prior, last],
+      };
+    });
+}
+
+function marketAssetClass(assetClass: string): AssetClass {
+  if (assetClass === "BOND") return "GOVT";
+  if (assetClass === "CREDIT") return "CORP";
+  if (assetClass === "COMMODITY") return "COMMODITY" as AssetClass;
+  if (assetClass === "CURRENCY") return "FX" as AssetClass;
+  if (assetClass === "VOLATILITY") return "ETF" as AssetClass;
+  return "ETF" as AssetClass;
+}
+
+function quotesForTabFromPipeline(tab: TabKey, quotes: Quote[]): Quote[] {
+  if (tab === "ETF") return quotes.filter((q) => q.assetClass === "ETF");
+  if (tab === "FI") return quotes.filter((q) => q.assetClass === "GOVT" || q.assetClass === "CORP");
+  if (tab === "COMMODITY") return quotes.filter((q) => q.assetClass === "COMMODITY");
+  if (tab === "FX") return quotes.filter((q) => q.assetClass === "FX");
+  return [];
+}
+
+function mergeIndexQuotes(base: IndexQuote[], cards: SnapshotCard[]): IndexQuote[] {
+  const bySeries = new Map(cards.map((c) => [c.series_id, c]));
+  const map: Record<string, string> = { SPX: "SPY", NDX: "QQQ", RUT: "IWM", INDU: "DIA", VIX: "VIXY", DXY: "UUP", GC: "GLD" };
+  return base.map((idx) => {
+    const card = bySeries.get(map[idx.symbol]);
+    if (!card || card.price === null) return idx;
+    const chgPct = (card.ret_1d ?? 0) * 100;
+    return { ...idx, last: card.price, chgPct, chg: card.price - card.price / (1 + chgPct / 100), spark: [card.price / (1 + chgPct / 100), card.price] };
+  });
+}
+
+function PipelineTag({ source }: { source: MarketSource }) {
+  return <Tag tone={source === "DB" || source === "LIVE" || source === "FILE" ? "up" : "blue"}>{source === "LOADING" ? "SYNC" : source}</Tag>;
+}
+
+function ReturnBasisToggle({ value, onChange }: { value: ReturnBasis; onChange: (v: ReturnBasis) => void }) {
+  return (
+    <span className="inline-flex overflow-hidden rounded-sm border border-term-border bg-term-panel-2">
+      {(["total", "price"] as ReturnBasis[]).map((basis) => (
+        <button
+          key={basis}
+          onClick={() => onChange(basis)}
+          className={`px-2 py-1 text-3xs font-semibold uppercase tracking-wide ${value === basis ? "bg-term-amber text-black" : "text-term-text-mute hover:text-term-text"}`}
+          title={basis === "total" ? "Adjusted-close total return" : "Raw-close price return"}
+        >
+          {basis}
+        </button>
+      ))}
+    </span>
   );
 }

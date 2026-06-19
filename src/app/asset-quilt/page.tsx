@@ -1,9 +1,12 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useMemo, useState } from "react";
+import clsx from "clsx";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
-import { getAssetQuilt, quiltColor } from "@/data/marketAnalytics";
+import { getAssetQuilt, quiltColor, type QuiltYear } from "@/data/marketAnalytics";
+import { useMarketView, type MarketSource } from "@/lib/useMarket";
+import type { BilelloView, ReturnBasis } from "@/data/marketPipeline";
 import { fmtNum, fmtSignedPct } from "@/lib/format";
 
 function tone(v: number): "up" | "down" | "amber" | "neutral" {
@@ -14,7 +17,9 @@ function tone(v: number): "up" | "down" | "amber" | "neutral" {
 }
 
 export default function AssetQuiltPage() {
-  const quilt = getAssetQuilt();
+  const [basis, setBasis] = useState<ReturnBasis>("total");
+  const { data: bilello, source } = useMarketView<BilelloView>("bilello", basis);
+  const quilt = useMemo(() => quiltFromBilello(bilello) ?? getAssetQuilt(), [bilello]);
   const latest = quilt[quilt.length - 1];
   const bestLatest = latest.cells[0];
   const worstLatest = latest.cells[latest.cells.length - 1];
@@ -25,9 +30,16 @@ export default function AssetQuiltPage() {
   const leader = Object.entries(leaders).sort((a, b) => b[1] - a[1])[0];
   const dispersion = latest.cells[0].returnPct - latest.cells[latest.cells.length - 1].returnPct;
 
+  const maxRank = Math.max(...quilt.map((y) => y.cells.length));
+
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="QUILT" title="Asset Quilt" desc="Annual cross-asset return rank quilt" right={<Tag tone="blue">SNAPSHOT</Tag>} />
+      <PageHeader
+        code="QUILT"
+        title="Asset Quilt"
+        desc="Annual cross-asset return rank quilt"
+        right={<span className="flex items-center gap-2"><ReturnBasisToggle value={basis} onChange={setBasis} /><PipelineTag source={source} /></span>}
+      />
 
       <KpiStrip>
         <Stat label="Latest Leader" value={bestLatest.asset} sub={fmtSignedPct(bestLatest.returnPct, 1)} tone={tone(bestLatest.returnPct)} />
@@ -49,13 +61,16 @@ export default function AssetQuiltPage() {
                 </div>
               ))}
 
-              {Array.from({ length: 10 }, (_, rank) => (
+              {Array.from({ length: maxRank }, (_, rank) => (
                 <Fragment key={`rank-row-${rank}`}>
                   <div key={`rank-${rank}`} className="sticky left-0 z-10 border-b border-r border-term-border bg-term-panel px-2 py-3 text-center text-xs font-semibold text-term-text-mute">
                     #{rank + 1}
                   </div>
                   {quilt.map((year) => {
                     const cell = year.cells[rank];
+                    if (!cell) {
+                      return <div key={`${year.year}-empty-${rank}`} className="min-h-[64px] border-b border-r border-black/40 bg-term-panel" />;
+                    }
                     return (
                       <div key={`${year.year}-${cell.asset}`} className="min-h-[64px] border-b border-r border-black/40 p-1.5" style={{ background: quiltColor(cell.asset) }}>
                         <div className="text-2xs font-semibold uppercase leading-tight text-black/80">{cell.asset}</div>
@@ -73,7 +88,7 @@ export default function AssetQuiltPage() {
           <div className="space-y-2 p-3 text-xs text-term-text-dim">
             <p>Each column ranks asset classes from best annual return at the top to worst annual return at the bottom.</p>
             <p>The current year column is YTD, so it should not be compared as a full-year return.</p>
-            <p>This local view uses deterministic market-style returns and is shaped to accept future Yahoo or licensed index total-return feeds.</p>
+            <p>Default view ranks adjusted-close total returns. Switch to price return to rank raw-close performance.</p>
           </div>
         </Panel>
 
@@ -92,5 +107,56 @@ export default function AssetQuiltPage() {
         </Panel>
       </div>
     </div>
+  );
+}
+
+function quiltFromBilello(bilello: BilelloView | null | undefined): QuiltYear[] | null {
+  const rows = bilello?.asset_class_returns_by_year ?? [];
+  if (!rows.length) return null;
+  const years = Array.from(new Set(rows.map((r) => r.year))).sort((a, b) => a - b);
+  return years.map((year) => {
+    const cells = rows
+      .filter((r) => r.year === year && r.total_return !== null)
+      .sort((a, b) => b.total_return - a.total_return)
+      .map((r, i) => ({
+        year,
+        asset: prettyAssetClass(r.asset_class),
+        returnPct: Number((r.total_return * 100).toFixed(1)),
+        rank: i + 1,
+      }));
+    return { year, cells };
+  }).filter((y) => y.cells.length);
+}
+
+function prettyAssetClass(assetClass: string): string {
+  const map: Record<string, string> = {
+    EQUITY: "Equities",
+    BOND: "Bonds",
+    CREDIT: "Credit",
+    COMMODITY: "Commodities",
+    VOLATILITY: "Volatility",
+    CURRENCY: "Currencies",
+  };
+  return map[assetClass] ?? assetClass;
+}
+
+function PipelineTag({ source }: { source: MarketSource }) {
+  return <Tag tone={source === "DB" || source === "LIVE" || source === "FILE" ? "up" : "blue"}>{source === "LOADING" ? "SYNC" : source}</Tag>;
+}
+
+function ReturnBasisToggle({ value, onChange }: { value: ReturnBasis; onChange: (v: ReturnBasis) => void }) {
+  return (
+    <span className="inline-flex overflow-hidden rounded-sm border border-term-border bg-term-panel-2">
+      {(["total", "price"] as ReturnBasis[]).map((basis) => (
+        <button
+          key={basis}
+          onClick={() => onChange(basis)}
+          className={clsx("px-2 py-1 text-3xs font-semibold uppercase tracking-wide", value === basis ? "bg-term-amber text-black" : "text-term-text-mute hover:text-term-text")}
+          title={basis === "total" ? "Adjusted-close total return" : "Raw-close price return"}
+        >
+          {basis}
+        </button>
+      ))}
+    </span>
   );
 }
