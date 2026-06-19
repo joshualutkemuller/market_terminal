@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { MarketDataControls } from "@/components/market/MarketDataControls";
 import { getIndexReturnMatrix, INDEXES as FALLBACK_INDEXES, type IndexYearSummary } from "@/data/marketAnalytics";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import type { IndexReturnsView, ReturnBasis } from "@/data/marketPipeline";
@@ -61,7 +62,8 @@ function AnnualDrawdownBars({ data }: { data: IndexYearSummary[] }) {
 export default function IndexReturnAnalyticsPage() {
   const [symbol, setSymbol] = useState("SPX");
   const [basis, setBasis] = useState<ReturnBasis>("total");
-  const { data: liveData, source } = useMarketView<IndexReturnsView>("index-returns", basis);
+  const [asof, setAsOf] = useState("");
+  const { data: liveData, source } = useMarketView<IndexReturnsView>("index-returns", basis, asof);
   const indexes = liveData?.indices?.length ? liveData.indices : FALLBACK_INDEXES;
   const matrix = useMemo(() => liveData?.matrices?.[symbol] ?? getIndexReturnMatrix(symbol), [liveData, symbol]);
   const columns = [...matrix.years, matrix.ytdYear];
@@ -76,7 +78,8 @@ export default function IndexReturnAnalyticsPage() {
         code="IRET"
         title="Index Return Analytics"
         desc="Monthly return matrix, annual totals and intra-year drawdowns"
-        right={<span className="flex items-center gap-2"><ReturnBasisToggle value={basis} onChange={setBasis} /><PipelineTag source={source} /></span>}
+        asOf={asof || liveData?.asof || null}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={liveData?.asof} /><PipelineTag source={source} /></span>}
       />
 
       <KpiStrip>
@@ -154,21 +157,4 @@ export default function IndexReturnAnalyticsPage() {
 
 function PipelineTag({ source }: { source: MarketSource }) {
   return <Tag tone={source === "DB" || source === "LIVE" || source === "FILE" ? "up" : "blue"}>{source === "LOADING" ? "SYNC" : source}</Tag>;
-}
-
-function ReturnBasisToggle({ value, onChange }: { value: ReturnBasis; onChange: (v: ReturnBasis) => void }) {
-  return (
-    <span className="inline-flex overflow-hidden rounded-sm border border-term-border bg-term-panel-2">
-      {(["total", "price"] as ReturnBasis[]).map((basis) => (
-        <button
-          key={basis}
-          onClick={() => onChange(basis)}
-          className={clsx("px-2 py-1 text-3xs font-semibold uppercase tracking-wide", value === basis ? "bg-term-amber text-black" : "text-term-text-mute hover:text-term-text")}
-          title={basis === "total" ? "Adjusted-close total return" : "Raw-close price return"}
-        >
-          {basis}
-        </button>
-      ))}
-    </span>
-  );
 }

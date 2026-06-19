@@ -17,7 +17,7 @@ function fallbackSnapshot(view: MarketView, basis: ReturnBasis): unknown {
   return SNAPSHOTS[view];
 }
 
-export function useMarketView<T>(view: MarketView, basis: ReturnBasis = "total"): { data: T; source: MarketSource } {
+export function useMarketView<T>(view: MarketView, basis: ReturnBasis = "total", asof?: string): { data: T; source: MarketSource } {
   const [data, setData] = useState<T>(fallbackSnapshot(view, basis) as T);
   const [source, setSource] = useState<MarketSource>("SNAPSHOT");
 
@@ -25,7 +25,9 @@ export function useMarketView<T>(view: MarketView, basis: ReturnBasis = "total")
     let alive = true;
     setData(fallbackSnapshot(view, basis) as T);
     setSource("LOADING");
-    fetch(`/api/market/${view}?basis=${basis}`)
+    const params = new URLSearchParams({ basis });
+    if (asof) params.set("asof", asof);
+    fetch(`/api/market/${view}?${params.toString()}`)
       .then((r) => r.json())
       .then((json) => {
         if (!alive) return;
@@ -40,7 +42,7 @@ export function useMarketView<T>(view: MarketView, basis: ReturnBasis = "total")
     return () => {
       alive = false;
     };
-  }, [view, basis]);
+  }, [view, basis, asof]);
 
   return { data, source };
 }

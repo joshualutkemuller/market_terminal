@@ -58,6 +58,13 @@ def _extract_asof(payload: dict) -> date | None:
         return None
 
 
+def _frame_asof(df: pl.DataFrame) -> str | None:
+    if df is None or df.is_empty() or "date" not in df.columns:
+        return None
+    val = df["date"].max()
+    return val.isoformat() if val else None
+
+
 class Pipeline:
     def __init__(self, store: DuckDBStore | None = None) -> None:
         self.settings = get_settings()
@@ -305,6 +312,7 @@ class Pipeline:
         """Build terminal view payloads for one return basis."""
         ca = analytics.cross_asset_dashboard(prices)
         basis_note = "total" if return_basis != "price" else "price"
+        asof = _frame_asof(prices)
         return _json_clean({
             "market": {"return_basis": basis_note, "cards": analytics.market_snapshot(prices)},
             "cross-asset": {"return_basis": basis_note, **ca},
@@ -313,6 +321,7 @@ class Pipeline:
             "regime": {"return_basis": basis_note, **analytics.regime_dashboard(prices, macro)},
             "bilello": {
                 "return_basis": basis_note,
+                "asof": asof,
                 "best_worst_ytd": analytics.best_worst_ytd(prices),
                 "asset_class_returns_by_year": analytics.asset_class_returns_by_year(prices),
                 "current_drawdowns": analytics.current_drawdowns(prices),
@@ -320,7 +329,7 @@ class Pipeline:
                 "inflation_vs_policy_gap": analytics.inflation_vs_policy_gap(macro),
                 "unemployment_vs_longrun": analytics.unemployment_vs_longrun(macro),
             },
-            "index-returns": build_index_returns_view(prices, return_basis=basis_note),
+            "index-returns": build_index_returns_view(prices, return_basis=basis_note, asof=asof),
         })
 
     def materialize_api_views(
@@ -479,7 +488,7 @@ def _max_drawdown_pct(values: list[float | None]) -> float | None:
     return round(worst * 100, 2)
 
 
-def build_index_returns_view(prices: pl.DataFrame, return_basis: str = "total") -> dict:
+def build_index_returns_view(prices: pl.DataFrame, return_basis: str = "total", asof: str | None = None) -> dict:
     indices = [{k: v for k, v in item.items() if k != "series_id"} for item in INDEX_RETURN_SERIES]
     matrices = {}
     for item in INDEX_RETURN_SERIES:
@@ -517,4 +526,4 @@ def build_index_returns_view(prices: pl.DataFrame, return_basis: str = "total") 
             "averageAnnualReturn": avg_annual,
             "summaries": summaries,
         }
-    return {"return_basis": return_basis, "indices": indices, "matrices": matrices}
+    return {"return_basis": return_basis, "asof": asof, "indices": indices, "matrices": matrices}

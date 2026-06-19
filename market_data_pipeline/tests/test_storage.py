@@ -11,7 +11,7 @@ import pytest
 
 from market_data_pipeline.src.storage.duckdb_store import DuckDBStore
 from market_data_pipeline.src.storage.parquet_archive import ParquetArchive
-from market_data_pipeline.src.storage.postgres_views import DDL, publish_api_views
+from market_data_pipeline.src.storage.postgres_views import DDL, OBS_DDL, publish_api_views
 
 
 @pytest.fixture()
@@ -127,7 +127,8 @@ def test_publish_api_views_upserts_to_postgres(monkeypatch, store):
 
     result = publish_api_views("postgres://example", store)
 
-    assert result == {"published": 1, "views": ["market"]}
+    assert result == {"published": 1, "views": ["market"], "observations": 0}
     assert DDL in executed
+    assert OBS_DDL in executed
     assert batches == [[("market", '{"cards":[]}', date(2026, 1, 5), "r1", None)]]
     assert "COMMIT" in executed
