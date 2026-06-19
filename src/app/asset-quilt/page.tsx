@@ -122,7 +122,7 @@ function quiltFromBilello(bilello: BilelloView | null | undefined): QuiltYear[] 
       .sort((a, b) => b.total_return - a.total_return)
       .map((r, i) => ({
         year,
-        asset: prettyAssetClass(r.asset_class),
+        asset: r.series_id ?? prettyAssetClass(r.asset_class),
         returnPct: Number((r.total_return * 100).toFixed(1)),
         rank: i + 1,
       }));

@@ -7,7 +7,6 @@ empty / short input.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import date
 from typing import Optional
 
@@ -46,18 +45,22 @@ def best_worst_ytd(prices_norm: pl.DataFrame, n: int = 10) -> dict:
 
 
 def asset_class_returns_by_year(prices_norm: pl.DataFrame) -> list[dict]:
-    """Calendar-year total returns aggregated (equal-weight) per asset class."""
+    """Calendar-year returns per series for the Asset Quilt.
+
+    The historical name is kept for API compatibility, but rows are now direct
+    ETF/index proxy series rather than broad equal-weight asset-class buckets.
+    """
     if prices_norm is None or prices_norm.height == 0:
         return []
     df = prices_norm.filter(pl.col("asset_class").is_in(list(PRICE_CLASSES)))
     if df.height == 0:
         return []
 
-    # per (asset_class, year) -> list of per-series calendar returns
-    bucket: dict[tuple[str, int], list[float]] = defaultdict(list)
+    rows = []
     for series_id in df.get_column("series_id").unique().to_list():
         sub = df.filter(pl.col("series_id") == series_id)
         asset_class = sub.tail(1).get_column("asset_class").to_list()[0]
+        display_name = sub.tail(1).get_column("display_name").to_list()[0]
         dates, values = R.to_series(df, series_id)
         if len(values) < 2:
             continue
@@ -72,21 +75,16 @@ def asset_class_returns_by_year(prices_norm: pl.DataFrame) -> list[dict]:
             cur = by_year[cur_y]
             if base and base != 0:
                 ret = cur / base - 1.0
-                bucket[(asset_class, cur_y)].append(ret)
-
-    rows = []
-    for (asset_class, year), rets in bucket.items():
-        if not rets:
-            continue
-        avg = sum(rets) / len(rets)
-        rows.append(
-            {
-                "asset_class": asset_class,
-                "year": year,
-                "total_return": R.round_or_none(avg, 4),
-            }
-        )
-    rows.sort(key=lambda r: (r["asset_class"], r["year"]))
+                rows.append(
+                    {
+                        "series_id": series_id,
+                        "display_name": display_name,
+                        "asset_class": asset_class,
+                        "year": cur_y,
+                        "total_return": R.round_or_none(ret, 4),
+                    }
+                )
+    rows.sort(key=lambda r: (r["year"], r["series_id"]))
     return rows
 
 

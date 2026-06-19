@@ -257,25 +257,27 @@ function crossAssetFromCards(cards: any[], basis: ReturnBasis) {
 }
 
 function yearlyReturns(rows: MarketObservation[]) {
-  const buckets = new Map<string, number[]>();
+  const out = [];
   for (const [seriesId, obs] of groupObs(rows)) {
     const byYear = new Map<number, number>();
     for (const row of obs) byYear.set(Number(row.date.slice(0, 4)), row.value);
     const years = [...byYear.keys()].sort();
-    const assetClass = obs[obs.length - 1].asset_class;
+    const last = obs[obs.length - 1];
     for (let i = 1; i < years.length; i++) {
       const prev = byYear.get(years[i - 1]);
       const cur = byYear.get(years[i]);
       if (prev && cur) {
-        const key = `${assetClass}|${years[i]}`;
-        buckets.set(key, [...(buckets.get(key) ?? []), cur / prev - 1]);
+        out.push({
+          series_id: seriesId,
+          display_name: last.display_name,
+          asset_class: last.asset_class,
+          year: years[i],
+          total_return: round(cur / prev - 1),
+        });
       }
     }
   }
-  return [...buckets.entries()].map(([key, vals]) => {
-    const [asset_class, year] = key.split("|");
-    return { asset_class, year: Number(year), total_return: round(vals.reduce((a, v) => a + v, 0) / vals.length) };
-  }).sort((a, b) => a.asset_class.localeCompare(b.asset_class) || a.year - b.year);
+  return out.sort((a, b) => a.year - b.year || a.series_id.localeCompare(b.series_id));
 }
 
 function bilelloFromRows(rows: MarketObservation[], basis: ReturnBasis) {
@@ -312,10 +314,10 @@ function indexReturnsFromRows(rows: MarketObservation[], basis: ReturnBasis) {
   for (const [symbol, seriesId, name, base, drift, vol] of INDEX_MAP) {
     const obs = grouped.get(seriesId);
     if (!obs?.length) continue;
-    const byMonth = new Map<string, number[]>();
+    const byMonthEnd = new Map<string, number>();
     for (const row of obs) {
       const key = row.date.slice(0, 7);
-      byMonth.set(key, [...(byMonth.get(key) ?? []), row.value]);
+      byMonthEnd.set(key, row.value);
     }
     const years = [...new Set(obs.map((o) => Number(o.date.slice(0, 4))))].sort((a, b) => a - b);
     const ytdYear = years[years.length - 1];
@@ -324,8 +326,12 @@ function indexReturnsFromRows(rows: MarketObservation[], basis: ReturnBasis) {
     const monthly: Record<number, (number | null)[]> = {};
     for (const year of columns) {
       monthly[year] = MONTHS.map((_, i) => {
-        const vals = byMonth.get(`${year}-${String(i + 1).padStart(2, "0")}`) ?? [];
-        return vals.length >= 2 && vals[0] ? round((vals[vals.length - 1] / vals[0] - 1) * 100, 2) : null;
+        const month = i + 1;
+        const cur = byMonthEnd.get(`${year}-${String(month).padStart(2, "0")}`);
+        const prevYear = month === 1 ? year - 1 : year;
+        const prevMonth = month === 1 ? 12 : month - 1;
+        const base = byMonthEnd.get(`${prevYear}-${String(prevMonth).padStart(2, "0")}`);
+        return cur !== undefined && base ? round((cur / base - 1) * 100, 2) : null;
       });
     }
     const rowsOut = MONTHS.map((month, i) => {

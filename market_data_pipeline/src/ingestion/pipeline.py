@@ -449,18 +449,20 @@ def _monthly_returns_for_series(prices: pl.DataFrame, series_id: str) -> dict[in
     if sub.height == 0:
         return out
     rows = sub.to_dicts()
-    by_month: dict[tuple[int, int], list[float]] = {}
+    by_month_end: dict[tuple[int, int], float] = {}
     for row in rows:
         d = row["date"]
-        by_month.setdefault((d.year, d.month), []).append(float(row["value"]))
+        by_month_end[(d.year, d.month)] = float(row["value"])
     for year in sorted({d["date"].year for d in rows}):
         out[year] = []
         for month in range(1, 13):
-            vals = by_month.get((year, month), [])
-            if len(vals) < 2 or vals[0] == 0:
+            cur = by_month_end.get((year, month))
+            prev_year, prev_month = (year - 1, 12) if month == 1 else (year, month - 1)
+            base = by_month_end.get((prev_year, prev_month))
+            if cur is None or base is None or base == 0:
                 out[year].append(None)
             else:
-                out[year].append(round((vals[-1] / vals[0] - 1.0) * 100, 2))
+                out[year].append(round((cur / base - 1.0) * 100, 2))
     return out
 
 
