@@ -134,10 +134,20 @@ python -m market_data_pipeline.cli status                 # table row counts
 python -m market_data_pipeline.cli backfill 2000-01-01    # historical backfill
 python -m market_data_pipeline.cli rebuild-analytics      # gold rebuild from silver
 python -m market_data_pipeline.cli export-views --out DIR  # write view JSON for the terminal file-cache
+python -m market_data_pipeline.cli publish-views          # upsert analytics_api_views to MARKET_DB_URL
 python -m market_data_pipeline.cli schedule               # APScheduler refresh loop
 
-pytest                                                     # 59 tests, no network needed
+pytest                                                     # 61 tests, no network needed
 ```
+
+Scheduled market refreshes are intentionally small-window jobs: by default they
+ask Yahoo for the latest 14 days (`MDP_MARKET_REFRESH_LOOKBACK_DAYS`) and use a
+1 request/sec throttle (`yahoo_rate_limit`) plus the on-disk response cache.
+Use explicit `run --start YYYY-MM-DD` / `backfill` for larger historical loads.
+For Vercel, set `MARKET_DB_URL=postgres://...` in both Vercel and your refresh
+runner, then run `publish-views` after each pipeline refresh. The command creates
+the Postgres `analytics_api_views` table if needed and upserts the six view
+payloads that `/api/market/[view]` reads.
 
 ### Docker
 

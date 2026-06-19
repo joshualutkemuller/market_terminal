@@ -1,0 +1,48 @@
+name: Market data refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Optional ISO start date. Defaults to 14 days ago."
+        required: false
+        type: string
+  schedule:
+    # Weekdays after the US close. GitHub schedules are UTC.
+    - cron: "45 21 * * 1-5"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      MARKET_DB_URL: ${{ secrets.MARKET_DB_URL }}
+      MDP_ALLOW_YAHOO: "1"
+      MDP_MARKET_REFRESH_LOOKBACK_DAYS: "14"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pipeline dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            polars duckdb pyarrow httpx tenacity pydantic pydantic-settings \
+            pyyaml fastapi "uvicorn[standard]" apscheduler structlog \
+            "psycopg[binary]" yfinance
+
+      - name: Refresh DuckDB analytics
+        run: |
+          START_DATE="${{ inputs.start_date }}"
+          if [ -z "$START_DATE" ]; then
+            START_DATE="$(date -u -d '14 days ago' +%F)"
+          fi
+          PYTHONPATH="$GITHUB_WORKSPACE" python -m market_data_pipeline.cli run --start "$START_DATE"
+
+      - name: Publish views to Postgres
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE" python -m market_data_pipeline.cli publish-views

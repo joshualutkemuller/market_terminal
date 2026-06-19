@@ -212,6 +212,50 @@ def test_yahoo_fetch_offline_degrades_gracefully(monkeypatch, tmp_path):
     assert res.rows.columns == MARKET_COLS
 
 
+def test_yahoo_http_fetch_uses_bounded_start_window(tmp_path):
+    seen = {}
+    ts = int(datetime(2026, 1, 5, tzinfo=timezone.utc).timestamp())
+
+    class _Client:
+        def get_json(self, url, params=None):
+            seen["url"] = url
+            seen["params"] = params
+            return {
+                "chart": {
+                    "result": [
+                        {
+                            "timestamp": [ts],
+                            "indicators": {
+                                "quote": [
+                                    {
+                                        "open": [562.0],
+                                        "high": [566.0],
+                                        "low": [561.0],
+                                        "close": [564.5],
+                                        "volume": [65000000],
+                                    }
+                                ],
+                                "adjclose": [{"adjclose": [564.0]}],
+                            },
+                        }
+                    ]
+                }
+            }
+
+    conn = YahooConnector(prefer_yfinance=False, cache=ResponseCache(cache_dir=tmp_path))
+    conn._client = _Client()
+    res = conn.fetch_history(["SPY"], start=date(2026, 1, 1))
+
+    assert res.response_status == "ok"
+    assert res.rows.height == 1
+    assert "range" not in seen["params"]
+    assert seen["params"]["period1"] == int(
+        datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp()
+    )
+    assert seen["params"]["period2"] >= seen["params"]["period1"]
+    assert seen["params"]["interval"] == "1d"
+
+
 def test_adapter_result_manifest_fields():
     res = SyntheticConnector().fetch_history(["GLD"])
     m = res.manifest()

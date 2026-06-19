@@ -100,12 +100,15 @@ class Pipeline:
     def _macro_connector(self):
         if self.settings.offline or not fred_enabled():
             return SyntheticConnector()
-        return FredConnector()
+        return FredConnector(cache_ttl_hours=self.settings.macro_cache_ttl_h)
 
     def _market_connector(self):
         if self.settings.offline or not self.settings.allow_yahoo:
             return SyntheticConnector()
-        return YahooConnector()
+        return YahooConnector(
+            cache_ttl_hours=self.settings.market_cache_ttl_h,
+            rate_limit=self.settings.yahoo_rate_limit,
+        )
 
     # ------------------------------------------------------------------
     # Extraction

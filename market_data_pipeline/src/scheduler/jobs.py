@@ -12,6 +12,8 @@ via the CLI or POST /ingestion/backfill.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -19,11 +21,16 @@ from market_data_pipeline.src.config.settings import get_settings
 from market_data_pipeline.src.ingestion.pipeline import Pipeline
 
 
+def _market_refresh_start() -> date:
+    settings = get_settings()
+    return date.today() - timedelta(days=settings.market_refresh_lookback_days)
+
+
 def refresh_market() -> dict:
     """Daily market close refresh (cached)."""
     p = Pipeline()
     run_id = "sched_market"
-    norm = p.ingest_market(run_id)
+    norm = p.ingest_market(run_id, start=_market_refresh_start())
     if not norm.is_empty():
         p.store.upsert("normalized_time_series", norm, ["series_id", "date", "source"])
         p.build_analytics(run_id)

@@ -90,10 +90,15 @@ FRED_API_KEY=your_key_here npm run dev
 indicators 10 min), so a busy site is always fresh — but to guarantee the curve/rates refresh
 **once a day even with no traffic**, `vercel.json` registers a cron that hits
 `/api/cron/refresh` daily at 12:00 UTC. That endpoint re-pulls and re-warms the FRED-backed
-econ routes (`curve-history`, `curve`, `indicators`, `calendar`). Historical Treasury yields
-are immutable, so each refresh only advances the recent tail. Set a **`CRON_SECRET`** project
-env var to lock the endpoint down — Vercel sends it as a Bearer token and the route rejects
-any request without it (returns the warm summary on success).
+econ routes (`curve-history`, `curve`, `indicators`, `calendar`) plus the market-data bridge
+routes (`/api/market/*`). If `MARKET_PIPELINE_URL` is configured, cron first POSTs to the
+pipeline's `/ingestion/run` endpoint with a recent start date so Yahoo-backed market data
+refreshes once per day without repeatedly backfilling full history. Tune that window with
+`MARKET_CRON_LOOKBACK_DAYS` (default 14), pin it with `MARKET_CRON_START_DATE`, or disable
+the ingestion POST with `MARKET_CRON_INGESTION=0`. Historical Treasury yields are immutable,
+so each refresh only advances the recent tail. Set a **`CRON_SECRET`** project env var to
+lock the endpoint down — Vercel sends it as a Bearer token and the route rejects any request
+without it (returns the warm summary on success).
 
 ### Data provenance — what's live vs. simulated
 
@@ -219,9 +224,9 @@ renders — on Vercel included. The DB drivers are loaded lazily at runtime, so:
 
 ```bash
 # in this repo
-cd market_data_pipeline && pip install -e .
-python -m market_data_pipeline.cli run --offline   # synthetic, no keys/network
-FRED_API_KEY=… python -m market_data_pipeline.cli run   # live FRED + Yahoo
+python -m pip install polars duckdb pyarrow httpx tenacity pydantic pydantic-settings pyyaml fastapi "uvicorn[standard]" apscheduler structlog
+PYTHONPATH=$PWD python -m market_data_pipeline.cli run --offline   # synthetic, no keys/network
+FRED_API_KEY=… PYTHONPATH=$PWD python -m market_data_pipeline.cli run   # live FRED + Yahoo
 
 # (a) read a local DuckDB cache file — no service needed:
 MARKET_DB_URL=$PWD/data/market.duckdb npm run dev      # (npm i duckdb once)
@@ -235,6 +240,29 @@ python -m market_data_pipeline.cli serve --port 8000
 MARKET_PIPELINE_URL=http://localhost:8000 npm run dev
 ```
 
+**Vercel/Postgres live-ish setup.** The cloud path is `MARKET_DB_URL=postgres://...`.
+The Next app reads Postgres directly, while the Python pipeline publishes the six
+compact terminal views into the `analytics_api_views` table after each refresh.
+
+1. Create a managed Postgres database (Vercel Postgres, Neon, Supabase, etc.).
+2. Add `MARKET_DB_URL=postgres://...` to Vercel project env vars.
+3. Add GitHub repo secrets `MARKET_DB_URL` and optional `FRED_API_KEY`.
+4. Use the included `.github/workflows/market-data-refresh.yml` workflow to run
+   daily after the US close. It refreshes DuckDB from Yahoo/FRED, then runs
+   `publish-views` to upsert Postgres.
+
+Manual publish flow:
+
+```bash
+python -m pip install "psycopg[binary]" yfinance
+START_DATE=$(python -c "from datetime import date,timedelta; print(date.today()-timedelta(days=14))")
+PYTHONPATH=$PWD python -m market_data_pipeline.cli run --start "$START_DATE"
+MARKET_DB_URL=postgres://... PYTHONPATH=$PWD python -m market_data_pipeline.cli publish-views
+```
+
+The publisher creates `analytics_api_views` if it does not exist. Once populated,
+`/api/market/market` should return `"source":"DB"` from Vercel.
+
 **Does running locally refresh the cache from Yahoo?** Yes. `mdp run` (without
 `--offline`, `MDP_ALLOW_YAHOO=1` by default) pulls **~10y of daily history per
 symbol from Yahoo** — using the `yfinance` library if installed
@@ -243,7 +271,9 @@ symbol from Yahoo** — using the `yfinance` library if installed
 `analytics_api_views` table the terminal reads. FRED macro refreshes the same
 way when `FRED_API_KEY` is set. For a continuous refresh on a cadence run
 `mdp schedule` (market-close · macro-daily · controlled intraday). Yahoo is
-unofficial/best-effort and may rate-limit; if a pull returns nothing the
+unofficial/best-effort and may rate-limit; the scheduled market jobs request only a recent
+tail (`MDP_MARKET_REFRESH_LOOKBACK_DAYS`, default 14) and use the configured throttle
+(`yahoo_rate_limit`, default 1 request/sec). If a pull returns nothing the
 pipeline falls back to the deterministic synthetic source for that run (recorded
 in `ingestion_manifest.response_status`) so the cache never ends up empty.
 

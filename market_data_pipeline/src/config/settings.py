@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     macro_cache_ttl_h: float = Field(default=6.0)
     market_cache_ttl_h: float = Field(default=1.0)
 
+    # --- scheduled refresh windows ---
+    market_refresh_lookback_days: int = Field(
+        default=14,
+        alias="MDP_MARKET_REFRESH_LOOKBACK_DAYS",
+    )
+
     # --- quality thresholds ---
     stale_days_daily: int = Field(default=5)
     stale_days_monthly: int = Field(default=45)

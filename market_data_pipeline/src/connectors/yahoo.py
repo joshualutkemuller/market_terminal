@@ -17,7 +17,7 @@ cached on disk.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Any, Optional
 
 import polars as pl
@@ -52,16 +52,18 @@ class YahooConnector(MarketDataAdapter):
         prefer_yfinance: bool = True,
         cache_ttl_hours: float = YAHOO_DAILY_TTL_HOURS,
         default_range: str = "10y",
+        rate_limit: float = 1.0,
     ) -> None:
         self._client = client
         self.cache = cache or ResponseCache()
         self.prefer_yfinance = prefer_yfinance
         self.cache_ttl_hours = cache_ttl_hours
         self.default_range = default_range
+        self.rate_limit = rate_limit
 
     def _get_client(self) -> ThrottledClient:
         if self._client is None:
-            self._client = ThrottledClient(rate=2.0)
+            self._client = ThrottledClient(rate=self.rate_limit)
         return self._client
 
     @staticmethod
@@ -148,8 +150,12 @@ class YahooConnector(MarketDataAdapter):
         )
 
     def _fetch_one_via_http(self, symbol: str, start: Optional[date]) -> AdapterResult:
-        rng = self.default_range
-        params: dict[str, Any] = {"range": rng, "interval": "1d"}
+        if start is not None:
+            period1 = int(datetime.combine(start, time.min, tzinfo=timezone.utc).timestamp())
+            period2 = int(datetime.now(timezone.utc).timestamp())
+            params: dict[str, Any] = {"period1": period1, "period2": period2, "interval": "1d"}
+        else:
+            params = {"range": self.default_range, "interval": "1d"}
         url = YAHOO_CHART_URL.format(symbol=symbol)
 
         def _result(df: pl.DataFrame, status: str) -> AdapterResult:
