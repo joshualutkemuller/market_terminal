@@ -352,7 +352,22 @@ function indexReturnsFromRows(rows: MarketObservation[], basis: ReturnBasis) {
       rows: rowsOut,
       annualReturns,
       averageAnnualReturn: fullAnnuals.length ? round(fullAnnuals.reduce((a, v) => a + v, 0) / fullAnnuals.length, 2) : 0,
-      summaries: columns.map((year) => ({ year, annualReturn: annualReturns[String(year)], maxDrawdown: null, isYtd: year === ytdYear })),
+      summaries: columns.map((year) => {
+        const monthlyVals = monthly[year].filter((v): v is number => v !== null);
+        let dd: number | null = null;
+        if (monthlyVals.length) {
+          let level = 100;
+          let peak = 100;
+          let worst = 0;
+          for (const v of monthlyVals) {
+            level *= 1 + v / 100;
+            peak = Math.max(peak, level);
+            worst = Math.min(worst, level / peak - 1);
+          }
+          dd = round(worst * 100, 2);
+        }
+        return { year, annualReturn: annualReturns[String(year)], maxDrawdown: dd, isYtd: year === ytdYear };
+      }),
     };
   }
   const latest = rows.reduce<string | null>((acc, row) => (!acc || row.date > acc ? row.date : acc), null);
@@ -378,6 +393,99 @@ async function readFromDir(dir: string, view: MarketView, basis: ReturnBasis): P
   } catch {
     return null;
   }
+}
+
+function extractEarliestAsOf(data: unknown, view: MarketView): string | null {
+  const d = data as any;
+  if ((view === "market" || view === "cross-asset") && d?.cards) {
+    return (d.cards as any[]).reduce<string | null>((min, c) => {
+      if (!c.asof) return min;
+      return !min || c.asof < min ? c.asof : min;
+    }, null);
+  }
+  if (view === "bilello" && d?.asset_class_returns_by_year) {
+    const years = (d.asset_class_returns_by_year as any[]).map((r: any) => r.year);
+    const earliest = years.length ? Math.min(...years) : null;
+    return earliest ? `${earliest}-01-01` : null;
+  }
+  if (view === "index-returns" && d?.matrices) {
+    const allYears = Object.values(d.matrices as Record<string, any>).flatMap((m: any) => [...(m.years ?? []), m.ytdYear]);
+    const earliest = allYears.length ? Math.min(...allYears) : null;
+    return earliest ? `${earliest}-01-01` : null;
+  }
+  return null;
+}
+
+function filterSnapshotByAsOf(data: unknown, view: MarketView, asof: string): unknown {
+  if (!asof) return data;
+  const d = data as any;
+  if (view === "market" && d?.cards) {
+    const filtered = d.cards.filter((c: any) => !c.asof || c.asof <= asof);
+    if (!filtered.length) return data;
+    return { ...d, cards: filtered };
+  }
+  if (view === "cross-asset" && d) {
+    const buckets = ["equities", "bonds", "commodities", "credit", "volatility", "currencies"] as const;
+    const out = { ...d };
+    for (const b of buckets) {
+      if (Array.isArray(out[b])) {
+        out[b] = out[b].filter((item: any) => !item.asof || item.asof <= asof);
+      }
+    }
+    out.asof = asof;
+    return out;
+  }
+  if (view === "bilello" && d) {
+    const out = { ...d, asof };
+    if (d.asset_class_returns_by_year) {
+      out.asset_class_returns_by_year = d.asset_class_returns_by_year.filter(
+        (r: any) => r.year < Number(asof.slice(0, 4)) || (r.year === Number(asof.slice(0, 4)))
+      );
+    }
+    if (d.best_worst_ytd) {
+      out.best_worst_ytd = { ...d.best_worst_ytd };
+    }
+    if (d.current_drawdowns) {
+      out.current_drawdowns = [...d.current_drawdowns];
+    }
+    return out;
+  }
+  if (view === "index-returns" && d?.matrices) {
+    const cutoffYear = Number(asof.slice(0, 4));
+    const cutoffMonth = Number(asof.slice(5, 7));
+    const out = { ...d, asof };
+    const newMatrices: Record<string, any> = {};
+    for (const [sym, matrix] of Object.entries(d.matrices as Record<string, any>)) {
+      const m = { ...matrix };
+      const allYears = [...(m.years ?? []), m.ytdYear].filter((y: number) => y <= cutoffYear);
+      if (!allYears.length) { newMatrices[sym] = m; continue; }
+      const newYtdYear = allYears[allYears.length - 1];
+      const newFullYears = allYears.filter((y: number) => y < newYtdYear);
+      const newRows = (m.rows ?? []).map((row: any) => {
+        const monthIdx = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].indexOf(row.month);
+        const newValues = { ...row.values };
+        for (const [yearStr, val] of Object.entries(newValues)) {
+          const y = Number(yearStr);
+          if (y > cutoffYear || (y === cutoffYear && monthIdx + 1 > cutoffMonth)) {
+            newValues[yearStr] = null;
+          }
+        }
+        return { ...row, values: newValues };
+      });
+      const newSummaries = (m.summaries ?? []).filter((s: any) => s.year <= cutoffYear).map((s: any) => ({
+        ...s,
+        isYtd: s.year === newYtdYear,
+      }));
+      const newAnnualReturns: Record<string, any> = {};
+      for (const [yr, val] of Object.entries(m.annualReturns ?? {})) {
+        if (Number(yr) <= cutoffYear) newAnnualReturns[yr] = val;
+      }
+      newMatrices[sym] = { ...m, years: newFullYears, ytdYear: newYtdYear, rows: newRows, summaries: newSummaries, annualReturns: newAnnualReturns };
+    }
+    out.matrices = newMatrices;
+    return out;
+  }
+  return data;
 }
 
 /**
@@ -407,10 +515,16 @@ export async function GET(req: NextRequest, { params }: { params: { view: string
       if (asof && ["market", "cross-asset", "bilello", "index-returns"].includes(view)) {
         const rows = await readMarketObservations(dbUrl, basis, asof);
         const data = computedView(view, rows, basis);
-        if (data) return NextResponse.json({ source: "DB", view, basis, asof, data });
+        if (data) {
+          const earliestAsOf = extractEarliestAsOf(data, view);
+          return NextResponse.json({ source: "DB", view, basis, asof, earliestAsOf, data });
+        }
       }
       const data = await readFromDb(dbUrl, viewKey);
-      if (data) return NextResponse.json({ source: "DB", view, basis, data });
+      if (data) {
+        const earliestAsOf = extractEarliestAsOf(data, view);
+        return NextResponse.json({ source: "DB", view, basis, earliestAsOf, data });
+      }
     } catch {
       // fall through
     }
@@ -420,7 +534,11 @@ export async function GET(req: NextRequest, { params }: { params: { view: string
   const dir = process.env.MARKET_DATA_DIR;
   if (dir) {
     const data = await readFromDir(dir, view, basis);
-    if (data) return NextResponse.json({ source: "FILE", view, basis, data });
+    if (data) {
+      const earliestAsOf = extractEarliestAsOf(data, view);
+      const filtered = asof ? filterSnapshotByAsOf(data, view, asof) : data;
+      return NextResponse.json({ source: "FILE", view, basis, ...(asof ? { asof } : {}), earliestAsOf, data: filtered });
+    }
   }
 
   // 3. live FastAPI service
@@ -431,12 +549,20 @@ export async function GET(req: NextRequest, { params }: { params: { view: string
         signal: AbortSignal.timeout(4000),
         cache: "no-store",
       });
-      if (r.ok) return NextResponse.json({ source: "LIVE", view, basis, data: await r.json() });
+      if (r.ok) {
+        const livePayload = await r.json();
+        const earliestAsOf = extractEarliestAsOf(livePayload, view);
+        const filtered = asof ? filterSnapshotByAsOf(livePayload, view, asof) : livePayload;
+        return NextResponse.json({ source: "LIVE", view, basis, ...(asof ? { asof } : {}), earliestAsOf, data: filtered });
+      }
     } catch {
       // fall through
     }
   }
 
   // 4. committed build-time snapshot
-  return NextResponse.json({ source: "SNAPSHOT", view, basis, data: snapshotFor(view, basis) });
+  const snapData = snapshotFor(view, basis);
+  const earliestAsOf = extractEarliestAsOf(snapData, view);
+  const filtered = asof ? filterSnapshotByAsOf(snapData, view, asof) : snapData;
+  return NextResponse.json({ source: "SNAPSHOT", view, basis, ...(asof ? { asof } : {}), earliestAsOf, data: filtered });
 }

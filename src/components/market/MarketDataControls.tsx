@@ -10,12 +10,14 @@ export function MarketDataControls({
   asof,
   onAsOfChange,
   latestAsOf,
+  earliestAsOf,
 }: {
   basis: ReturnBasis;
   onBasisChange: (basis: ReturnBasis) => void;
   asof: string;
   onAsOfChange: (asof: string) => void;
   latestAsOf?: string | null;
+  earliestAsOf?: string | null;
 }) {
   return (
     <span className="flex flex-wrap items-center justify-end gap-2">
@@ -39,6 +41,7 @@ export function MarketDataControls({
         <input
           type="date"
           value={asof}
+          min={earliestAsOf ?? undefined}
           max={latestAsOf ?? undefined}
           onChange={(e) => onAsOfChange(e.target.value)}
           className="h-6 border border-term-border bg-term-panel-2 px-1 text-3xs text-term-text outline-none"

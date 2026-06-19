@@ -17,9 +17,10 @@ function fallbackSnapshot(view: MarketView, basis: ReturnBasis): unknown {
   return SNAPSHOTS[view];
 }
 
-export function useMarketView<T>(view: MarketView, basis: ReturnBasis = "total", asof?: string): { data: T; source: MarketSource } {
+export function useMarketView<T>(view: MarketView, basis: ReturnBasis = "total", asof?: string): { data: T; source: MarketSource; earliestAsOf: string | null } {
   const [data, setData] = useState<T>(fallbackSnapshot(view, basis) as T);
   const [source, setSource] = useState<MarketSource>("SNAPSHOT");
+  const [earliestAsOf, setEarliestAsOf] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -34,6 +35,7 @@ export function useMarketView<T>(view: MarketView, basis: ReturnBasis = "total",
         if (json?.data) setData(json.data as T);
         const s = json?.source;
         setSource(s === "LIVE" || s === "DB" || s === "FILE" ? s : "SNAPSHOT");
+        if (json?.earliestAsOf) setEarliestAsOf(json.earliestAsOf);
       })
       .catch(() => {
         if (!alive) return;
@@ -44,5 +46,5 @@ export function useMarketView<T>(view: MarketView, basis: ReturnBasis = "total",
     };
   }, [view, basis, asof]);
 
-  return { data, source };
+  return { data, source, earliestAsOf };
 }

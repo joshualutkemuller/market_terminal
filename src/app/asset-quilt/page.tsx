@@ -19,7 +19,7 @@ function tone(v: number): "up" | "down" | "amber" | "neutral" {
 export default function AssetQuiltPage() {
   const [basis, setBasis] = useState<ReturnBasis>("total");
   const [asof, setAsOf] = useState("");
-  const { data: bilello, source } = useMarketView<BilelloView>("bilello", basis, asof);
+  const { data: bilello, source, earliestAsOf } = useMarketView<BilelloView>("bilello", basis, asof);
   const quilt = useMemo(() => quiltFromBilello(bilello) ?? getAssetQuilt(), [bilello]);
   const latest = quilt[quilt.length - 1];
   const bestLatest = latest.cells[0];
@@ -40,7 +40,7 @@ export default function AssetQuiltPage() {
         title="Asset Quilt"
         desc="Annual ETF/index proxy return rank quilt"
         asOf={asof || bilello?.asof || null}
-        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={bilello?.asof} /><PipelineTag source={source} /></span>}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={bilello?.asof} earliestAsOf={earliestAsOf} /><PipelineTag source={source} /></span>}
       />
 
       <KpiStrip>
