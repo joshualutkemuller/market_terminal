@@ -72,7 +72,7 @@ const regimeTone = (label: string): "up" | "down" | "neutral" | "amber" => {
 export default function MarketSnapshotPage() {
   const [basis, setBasis] = useState<ReturnBasis>("total");
   const [asof, setAsOf] = useState("");
-  const { data: snapData, source } = useMarketView<{ return_basis?: ReturnBasis; cards: SnapshotCard[] }>("market", basis, asof);
+  const { data: snapData, source, earliestAsOf } = useMarketView<{ return_basis?: ReturnBasis; cards: SnapshotCard[] }>("market", basis, asof);
   const { data: ca } = useMarketView<CrossAsset>("cross-asset", basis, asof);
   const { data: rates } = useMarketView<RatesView>("rates");
   const { data: regime } = useMarketView<RegimeView>("regime", basis);
@@ -130,7 +130,7 @@ export default function MarketSnapshotPage() {
         title="Market Snapshot"
         desc="Cross-asset state of the market — market_data_pipeline"
         asOf={asof || dataAsOf || rv.asof || cross.asof || null}
-        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} /><PipeBadge source={source} /></span>}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} earliestAsOf={earliestAsOf} /><PipeBadge source={source} /></span>}
       />
 
       <KpiStrip>

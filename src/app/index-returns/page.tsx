@@ -63,7 +63,7 @@ export default function IndexReturnAnalyticsPage() {
   const [symbol, setSymbol] = useState("SPX");
   const [basis, setBasis] = useState<ReturnBasis>("total");
   const [asof, setAsOf] = useState("");
-  const { data: liveData, source } = useMarketView<IndexReturnsView>("index-returns", basis, asof);
+  const { data: liveData, source, earliestAsOf } = useMarketView<IndexReturnsView>("index-returns", basis, asof);
   const indexes = liveData?.indices?.length ? liveData.indices : FALLBACK_INDEXES;
   const matrix = useMemo(() => liveData?.matrices?.[symbol] ?? getIndexReturnMatrix(symbol), [liveData, symbol]);
   const columns = [...matrix.years, matrix.ytdYear];
@@ -77,7 +77,7 @@ export default function IndexReturnAnalyticsPage() {
         title="Index Return Analytics"
         desc="Monthly return matrix, annual totals and intra-year drawdowns"
         asOf={asof || liveData?.asof || null}
-        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={liveData?.asof} /><PipelineTag source={source} /></span>}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={liveData?.asof} earliestAsOf={earliestAsOf} /><PipelineTag source={source} /></span>}
       />
 
       <KpiStrip>

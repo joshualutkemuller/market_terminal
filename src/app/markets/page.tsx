@@ -65,7 +65,7 @@ export default function LiveMarkets() {
   const [chartTicker, setChartTicker] = useState("AAPL");
   const [basis, setBasis] = useState<ReturnBasis>("total");
   const [asof, setAsOf] = useState("");
-  const { data: marketData, source } = useMarketView<{ cards: SnapshotCard[] }>("market", basis, asof);
+  const { data: marketData, source, earliestAsOf } = useMarketView<{ cards: SnapshotCard[] }>("market", basis, asof);
   const pipelineQuotes = useMemo(() => cardsToQuotes(marketData?.cards ?? []), [marketData]);
   const dataAsOf = marketData?.cards?.[0]?.asof ?? null;
 
@@ -198,7 +198,7 @@ export default function LiveMarkets() {
         title="Live Markets"
         desc="Real-time multi-asset monitor"
         asOf={asof || dataAsOf}
-        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} /><PipelineTag source={source} /></span>}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} earliestAsOf={earliestAsOf} /><PipelineTag source={source} /></span>}
       />
 
       <KpiStrip>
