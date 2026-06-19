@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SNAPSHOTS, type MarketView } from "@/data/marketPipeline";
+import { PRICE_SNAPSHOTS, SNAPSHOTS, type MarketView, type ReturnBasis } from "@/data/marketPipeline";
 
 export type MarketSource = "LIVE" | "DB" | "FILE" | "SNAPSHOT" | "LOADING";
 
@@ -12,14 +12,20 @@ export type MarketSource = "LIVE" | "DB" | "FILE" | "SNAPSHOT" | "LOADING";
  * FastAPI service (LIVE), or the bundled snapshot (SNAPSHOT). `source` drives
  * the provenance badge.
  */
-export function useMarketView<T>(view: MarketView): { data: T; source: MarketSource } {
-  const [data, setData] = useState<T>(SNAPSHOTS[view] as unknown as T);
+function fallbackSnapshot(view: MarketView, basis: ReturnBasis): unknown {
+  if (basis === "price" && view in PRICE_SNAPSHOTS) return PRICE_SNAPSHOTS[view as keyof typeof PRICE_SNAPSHOTS];
+  return SNAPSHOTS[view];
+}
+
+export function useMarketView<T>(view: MarketView, basis: ReturnBasis = "total"): { data: T; source: MarketSource } {
+  const [data, setData] = useState<T>(fallbackSnapshot(view, basis) as T);
   const [source, setSource] = useState<MarketSource>("SNAPSHOT");
 
   useEffect(() => {
     let alive = true;
+    setData(fallbackSnapshot(view, basis) as T);
     setSource("LOADING");
-    fetch(`/api/market/${view}`)
+    fetch(`/api/market/${view}?basis=${basis}`)
       .then((r) => r.json())
       .then((json) => {
         if (!alive) return;
@@ -34,7 +40,7 @@ export function useMarketView<T>(view: MarketView): { data: T; source: MarketSou
     return () => {
       alive = false;
     };
-  }, [view]);
+  }, [view, basis]);
 
   return { data, source };
 }

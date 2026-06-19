@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
-import { getIndexReturnMatrix, INDEXES, type IndexYearSummary } from "@/data/marketAnalytics";
+import { getIndexReturnMatrix, INDEXES as FALLBACK_INDEXES, type IndexYearSummary } from "@/data/marketAnalytics";
+import { useMarketView, type MarketSource } from "@/lib/useMarket";
+import type { IndexReturnsView, ReturnBasis } from "@/data/marketPipeline";
 import { fmtNum, fmtSignedPct } from "@/lib/format";
 
 function returnClass(v: number | null): string {
@@ -58,7 +60,10 @@ function AnnualDrawdownBars({ data }: { data: IndexYearSummary[] }) {
 
 export default function IndexReturnAnalyticsPage() {
   const [symbol, setSymbol] = useState("SPX");
-  const matrix = useMemo(() => getIndexReturnMatrix(symbol), [symbol]);
+  const [basis, setBasis] = useState<ReturnBasis>("total");
+  const { data: liveData, source } = useMarketView<IndexReturnsView>("index-returns", basis);
+  const indexes = liveData?.indices?.length ? liveData.indices : FALLBACK_INDEXES;
+  const matrix = useMemo(() => liveData?.matrices?.[symbol] ?? getIndexReturnMatrix(symbol), [liveData, symbol]);
   const columns = [...matrix.years, matrix.ytdYear];
   const bestYear = matrix.summaries.filter((s) => !s.isYtd).sort((a, b) => (b.annualReturn ?? -999) - (a.annualReturn ?? -999))[0];
   const worstYear = matrix.summaries.filter((s) => !s.isYtd).sort((a, b) => (a.annualReturn ?? 999) - (b.annualReturn ?? 999))[0];
@@ -67,7 +72,12 @@ export default function IndexReturnAnalyticsPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="IRET" title="Index Return Analytics" desc="Monthly return matrix, annual totals and intra-year drawdowns" right={<Tag tone="blue">YAHOO READY</Tag>} />
+      <PageHeader
+        code="IRET"
+        title="Index Return Analytics"
+        desc="Monthly return matrix, annual totals and intra-year drawdowns"
+        right={<span className="flex items-center gap-2"><ReturnBasisToggle value={basis} onChange={setBasis} /><PipelineTag source={source} /></span>}
+      />
 
       <KpiStrip>
         <Stat label="Index" value={matrix.index.symbol} sub={matrix.index.name} tone="amber" />
@@ -79,7 +89,7 @@ export default function IndexReturnAnalyticsPage() {
       </KpiStrip>
 
       <div className="flex flex-wrap gap-1 border-b border-term-border bg-term-panel px-2 py-1">
-        {INDEXES.map((idx) => (
+        {indexes.map((idx) => (
           <button key={idx.symbol} onClick={() => setSymbol(idx.symbol)} className={`term-btn ${symbol === idx.symbol ? "term-btn-active" : ""}`} title={idx.name}>
             {idx.symbol}
           </button>
@@ -134,10 +144,31 @@ export default function IndexReturnAnalyticsPage() {
             <p>The `Annual / YTD` row compounds monthly returns within each year. The current year column is YTD only.</p>
             <p>The `Month Avg` column averages each month across the ten completed full years only.</p>
             <p><span className="text-term-amber">Avg Annual*</span> is the arithmetic average of completed annual returns and explicitly excludes the current YTD return.</p>
-            <p>Data is deterministic and Yahoo-ready; the matrix shape can be backed by adjusted-close monthly returns from the market data pipeline.</p>
+            <p>Default view uses adjusted-close total returns from the market data pipeline. Switch to price return to use raw-close performance.</p>
           </div>
         </Panel>
       </div>
     </div>
+  );
+}
+
+function PipelineTag({ source }: { source: MarketSource }) {
+  return <Tag tone={source === "DB" || source === "LIVE" || source === "FILE" ? "up" : "blue"}>{source === "LOADING" ? "SYNC" : source}</Tag>;
+}
+
+function ReturnBasisToggle({ value, onChange }: { value: ReturnBasis; onChange: (v: ReturnBasis) => void }) {
+  return (
+    <span className="inline-flex overflow-hidden rounded-sm border border-term-border bg-term-panel-2">
+      {(["total", "price"] as ReturnBasis[]).map((basis) => (
+        <button
+          key={basis}
+          onClick={() => onChange(basis)}
+          className={clsx("px-2 py-1 text-3xs font-semibold uppercase tracking-wide", value === basis ? "bg-term-amber text-black" : "text-term-text-mute hover:text-term-text")}
+          title={basis === "total" ? "Adjusted-close total return" : "Raw-close price return"}
+        >
+          {basis}
+        </button>
+      ))}
+    </span>
   );
 }

@@ -18,6 +18,12 @@ import ratesRaw from "./market/rates.json";
 import inflationRaw from "./market/inflation.json";
 import regimeRaw from "./market/regime.json";
 import bilelloRaw from "./market/bilello.json";
+import marketSnapshotPriceRaw from "./market/market_snapshot_price.json";
+import crossAssetPriceRaw from "./market/cross_asset_price.json";
+import regimePriceRaw from "./market/regime_price.json";
+import bilelloPriceRaw from "./market/bilello_price.json";
+import indexReturnsRaw from "./market/index_returns.json";
+import indexReturnsPriceRaw from "./market/index_returns_price.json";
 
 export interface SnapshotCard {
   series_id: string;
@@ -35,6 +41,12 @@ export interface SnapshotCard {
   cagr_5y: number | null;
   max_drawdown: number | null;
   pct_from_52w_high: number | null;
+}
+
+export type ReturnBasis = "total" | "price";
+
+export interface ReturnBasisPayload {
+  return_basis?: ReturnBasis;
 }
 
 export interface CrossAssetItem {
@@ -98,6 +110,7 @@ export interface RegimeView {
 }
 
 export interface BilelloView {
+  return_basis?: ReturnBasis;
   best_worst_ytd: { best: { series_id: string; display_name: string; ytd: number }[]; worst: { series_id: string; display_name: string; ytd: number }[] };
   asset_class_returns_by_year: { asset_class: string; year: number; total_return: number }[];
   current_drawdowns: { series_id: string; display_name: string; drawdown: number }[];
@@ -106,12 +119,50 @@ export interface BilelloView {
   unemployment_vs_longrun: Record<string, unknown>;
 }
 
+export interface IndexDefinition {
+  symbol: string;
+  name: string;
+  base: number;
+  vol: number;
+  drift: number;
+}
+
+export interface MonthlyReturnRow {
+  month: string;
+  values: Record<string, number | null>;
+  monthAverage: number | null;
+}
+
+export interface IndexYearSummary {
+  year: number;
+  annualReturn: number | null;
+  maxDrawdown: number | null;
+  isYtd: boolean;
+}
+
+export interface IndexReturnMatrix {
+  index: IndexDefinition;
+  years: number[];
+  ytdYear: number;
+  rows: MonthlyReturnRow[];
+  annualReturns: Record<string, number | null>;
+  averageAnnualReturn: number;
+  summaries: IndexYearSummary[];
+}
+
+export interface IndexReturnsView {
+  return_basis?: ReturnBasis;
+  indices: IndexDefinition[];
+  matrices: Record<string, IndexReturnMatrix>;
+}
+
 export const marketSnapshot = (marketSnapshotRaw as { cards: SnapshotCard[] }).cards;
 export const crossAsset = crossAssetRaw as unknown as CrossAsset;
 export const ratesView = ratesRaw as unknown as RatesView;
 export const inflationView = (inflationRaw as { cards: InflationCard[] }).cards;
 export const regimeView = regimeRaw as unknown as RegimeView;
 export const bilelloView = bilelloRaw as unknown as BilelloView;
+export const indexReturnsView = indexReturnsRaw as unknown as IndexReturnsView;
 
 /** Snapshot keyed by view name, mirroring the FastAPI endpoints. */
 export const SNAPSHOTS = {
@@ -121,6 +172,15 @@ export const SNAPSHOTS = {
   inflation: inflationRaw,
   regime: regimeRaw,
   bilello: bilelloRaw,
+  "index-returns": indexReturnsRaw,
+} as const;
+
+export const PRICE_SNAPSHOTS = {
+  market: marketSnapshotPriceRaw,
+  "cross-asset": crossAssetPriceRaw,
+  regime: regimePriceRaw,
+  bilello: bilelloPriceRaw,
+  "index-returns": indexReturnsPriceRaw,
 } as const;
 
 export type MarketView = keyof typeof SNAPSHOTS;

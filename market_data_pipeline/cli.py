@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import date
 
 
@@ -46,6 +47,21 @@ def _export_views(args) -> None:
 
     paths = Pipeline().export_api_views(args.out)
     print(json.dumps({"written": [str(p) for p in paths], "dir": args.out}, indent=2))
+
+
+def _publish_views(args) -> None:
+    from market_data_pipeline.src.config.settings import get_settings
+    from market_data_pipeline.src.storage.duckdb_store import DuckDBStore
+    from market_data_pipeline.src.storage.postgres_views import publish_api_views
+
+    db_url = args.db_url or os.environ.get("MARKET_DB_URL")
+    if not db_url:
+        raise SystemExit("Provide --db-url or set MARKET_DB_URL.")
+
+    s = get_settings()
+    with DuckDBStore(s.duckdb_path) as db:
+        result = publish_api_views(db_url, db, create_table=not args.no_create_table)
+    print(json.dumps(result, indent=2, default=str))
 
 
 def _status(args) -> None:
@@ -92,6 +108,18 @@ def main() -> None:
     p_ev = sub.add_parser("export-views", help="Write the 6 terminal view payloads as JSON files")
     p_ev.add_argument("--out", default="./data/export", help="Output directory")
     p_ev.set_defaults(func=_export_views)
+
+    p_pub = sub.add_parser(
+        "publish-views",
+        help="Publish analytics_api_views from DuckDB into Postgres for MARKET_DB_URL",
+    )
+    p_pub.add_argument("--db-url", default=None, help="Postgres URL. Defaults to MARKET_DB_URL.")
+    p_pub.add_argument(
+        "--no-create-table",
+        action="store_true",
+        help="Skip CREATE TABLE IF NOT EXISTS before upserting rows",
+    )
+    p_pub.set_defaults(func=_publish_views)
 
     p_srv = sub.add_parser("serve", help="Run the FastAPI server")
     p_srv.add_argument("--host", default="0.0.0.0")

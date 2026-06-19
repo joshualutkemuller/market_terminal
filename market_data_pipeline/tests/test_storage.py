@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from datetime import date
+import sys
+import types
 
 import polars as pl
 import pytest
 
 from market_data_pipeline.src.storage.duckdb_store import DuckDBStore
 from market_data_pipeline.src.storage.parquet_archive import ParquetArchive
+from market_data_pipeline.src.storage.postgres_views import DDL, publish_api_views
 
 
 @pytest.fixture()
@@ -72,3 +75,59 @@ def test_parquet_archive_roundtrip(tmp_path):
     back = arch.read_dataset("silver", "normalized")
     assert back.height == 1
     assert arch.write(pl.DataFrame(), "silver", "normalized", "X", "r2") is None
+
+
+def test_publish_api_views_upserts_to_postgres(monkeypatch, store):
+    executed = []
+    batches = []
+
+    frame = pl.DataFrame(
+        [
+            {
+                "view": "market",
+                "payload_json": '{"cards":[]}',
+                "as_of": date(2026, 1, 5),
+                "ingestion_run_id": "r1",
+                "updated_at": None,
+            }
+        ],
+        schema_overrides={"as_of": pl.Date},
+    )
+    store.upsert("analytics_api_views", frame, ["view"])
+
+    class _Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return None
+
+        def execute(self, sql):
+            executed.append(sql)
+
+        def executemany(self, sql, rows):
+            executed.append(sql)
+            batches.append(rows)
+
+    class _Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return None
+
+        def cursor(self):
+            return _Cursor()
+
+        def commit(self):
+            executed.append("COMMIT")
+
+    fake = types.SimpleNamespace(connect=lambda db_url: _Connection())
+    monkeypatch.setitem(sys.modules, "psycopg", fake)
+
+    result = publish_api_views("postgres://example", store)
+
+    assert result == {"published": 1, "views": ["market"]}
+    assert DDL in executed
+    assert batches == [[("market", '{"cards":[]}', date(2026, 1, 5), "r1", None)]]
+    assert "COMMIT" in executed
