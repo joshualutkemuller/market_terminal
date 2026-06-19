@@ -8,7 +8,7 @@ import { BarChart } from "@/components/charts/BarChart";
 import { SourceBadge } from "@/components/econ/SourceBadge";
 import { getCalendarSensitivity, getReleaseMoveSummaries, type CalendarSensitivityTag, type ReleaseMoveSummary } from "@/data/econEnhancements";
 import { useEconCalendar } from "@/lib/useEcon";
-import { useTick } from "@/lib/hooks";
+import { useTick, useMounted } from "@/lib/hooks";
 import type { EconEvent, EventImportance } from "@/data/econRates";
 import { fmtSigned } from "@/lib/format";
 
@@ -59,6 +59,10 @@ export default function EconomicCalendarPage() {
   const { data: events, source } = useEconCalendar();
   const moveSummaries = getReleaseMoveSummaries();
   const tick = useTick(2000);
+  const mounted = useMounted();
+  // "today" reference for the calendar — rendered only after mount so the
+  // server/client hydration never disagrees on the date.
+  const todayStr = mounted ? new Date().toISOString().slice(0, 10) : null;
   const [impFilter, setImpFilter] = useState<EventImportance | "ALL">("ALL");
   const [catFilter, setCatFilter] = useState<string>("ALL");
 
@@ -106,7 +110,7 @@ export default function EconomicCalendarPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="CAL" title="Economic Calendar" desc="Releases & events" right={<SourceBadge source={source} />} />
+      <PageHeader code="CAL" title="Economic Calendar" desc="Releases & events" asOf={todayStr} right={<SourceBadge source={source} />} />
 
       <KpiStrip>
         <Stat label="Events This Week" value={thisWeek} sub="next 7 days" tone="amber" />
