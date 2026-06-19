@@ -187,7 +187,7 @@ export default function MacroDashboard() {
             title="Key Indicators by Category"
             code="ECDB"
             accent
-            right={<span className="tnum text-3xs text-term-text-mute">{indicators.length} series</span>}
+            right={<span className="tnum text-3xs text-term-text-mute">{indicators.length} series · click → drill 24m</span>}
           >
             <div className="grid grid-cols-1 gap-px bg-term-border md:grid-cols-2">
               {CATEGORY_ORDER.map((cat) => {
@@ -203,7 +203,12 @@ export default function MacroDashboard() {
                     </div>
                     <div className="divide-y divide-term-border-soft">
                       {rows.map((r) => (
-                        <div key={r.id} className="flex items-center gap-2 px-2 py-1 text-2xs">
+                        <div
+                          key={r.id}
+                          onClick={() => drill(r)}
+                          className="flex cursor-pointer items-center gap-2 px-2 py-1 text-2xs transition-colors hover:bg-term-panel-2"
+                          title={`${r.label} — click to drill 24m`}
+                        >
                           <span className="w-16 shrink-0 truncate font-semibold text-term-text" title={r.label}>
                             {r.short}
                           </span>

@@ -81,12 +81,24 @@ export async function fredLatest(seriesId: string, opts: { units?: string; scale
   return null;
 }
 
-/** Upcoming economic-release dates (drives the live calendar). */
-export async function fredReleaseDates(limit = 40): Promise<{ release_id: number; release_name: string; date: string }[]> {
-  const json = await fredGet<{ release_dates: { release_id: number; release_name: string; date: string }[] }>("/releases/dates", {
-    limit: String(limit),
-    sort_order: "asc",
-    include_release_dates_with_no_data: "true",
-  });
+/** Upcoming economic-release dates (drives the live calendar). Requests the
+ *  forward schedule from today so the calendar shows what's coming, not past
+ *  releases. `include_release_dates_with_no_data` surfaces dates not yet
+ *  released; the future `realtime_end` exposes the scheduled calendar. */
+export async function fredReleaseDates(limit = 60): Promise<{ release_id: number; release_name: string; date: string }[]> {
+  const now = new Date();
+  const start = now.toISOString().slice(0, 10);
+  const end = new Date(now.getTime() + 120 * 86400000).toISOString().slice(0, 10);
+  const json = await fredGet<{ release_dates: { release_id: number; release_name: string; date: string }[] }>(
+    "/releases/dates",
+    {
+      limit: String(limit),
+      sort_order: "asc",
+      include_release_dates_with_no_data: "true",
+      realtime_start: start,
+      realtime_end: end,
+    },
+    600
+  );
   return json.release_dates;
 }

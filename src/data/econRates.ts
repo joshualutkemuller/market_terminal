@@ -170,12 +170,19 @@ const EVENT_DEFS: [string, string, string, EventImportance, string, string, stri
   ["Fed Beige Book", "Policy", "14:00", "LOW", "Jul", "—", "—"],
 ];
 
-export function getEconEvents(): EconEvent[] {
+/**
+ * Simulated economic calendar, anchored to the **current date** so it never goes
+ * stale (the live route overrides this with real FRED release dates when keyed).
+ * Day-granular UTC anchor → identical on server render and client hydration.
+ */
+export function getEconEvents(anchor?: Date): EconEvent[] {
   const rng = new Rng("events");
+  const base = anchor ?? new Date();
+  const baseMs = Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate());
   return EVENT_DEFS.map((d, i) => {
     const [name, category, time, importance, period, prior, consensus] = d;
     const daysOut = rng.int(-3, 18);
-    const date = new Date(Date.UTC(2026, 5, 17) + daysOut * 86400000).toISOString().slice(0, 10);
+    const date = new Date(baseMs + daysOut * 86400000).toISOString().slice(0, 10);
     // released if in the past
     const released = daysOut < 0;
     const actual = released ? consensus : null;

@@ -111,47 +111,96 @@ export interface MLModel {
   updated: string;
 }
 
+/**
+ * Normalize a raw importance list to sum to 1.0 (descending), rounding to 3dp.
+ * Keeps feature weights plausible regardless of how many features a model lists.
+ */
+function normImportances<T extends { name: string; importance: number }>(feats: T[]): T[] {
+  const total = feats.reduce((a, f) => a + f.importance, 0) || 1;
+  return feats
+    .map((f) => ({ ...f, importance: Number((f.importance / total).toFixed(3)) }))
+    .sort((a, b) => b.importance - a.importance);
+}
+
 export function getMLModels(): MLModel[] {
-  const rng = new Rng("ml-models");
   const recessionProbHist = getSeriesHistory("T10Y2Y", 48).map((o) => {
     const z = -o.value / 60; // more inverted → higher prob
     return Number((1 / (1 + Math.exp(-(z * 2 - 1.2))) * 100).toFixed(1));
   });
+  // Financial-conditions index history from the Chicago Fed NFCI (looser < 0).
+  const fciHist = getSeriesHistory("NFCI", 48).map((o) => Number(o.value.toFixed(2)));
+  // Labor-momentum z-score history driven by initial claims (inverted → tighter labor).
+  const claims = getSeriesHistory("ICSA", 48).map((o) => o.value);
+  const claimMean = claims.reduce((a, b) => a + b, 0) / claims.length;
+  const claimSd = Math.sqrt(claims.reduce((a, b) => a + (b - claimMean) ** 2, 0) / claims.length) || 1;
+  const laborHist = claims.map((c) => Number((-(c - claimMean) / claimSd).toFixed(2)));
+
   return [
     {
       id: "rec-prob", name: "Recession Probability (12M)", task: "Classification", algo: "Logistic Regression + Probit (yield-curve)", target: "NBER recession within 12 months",
       output: recessionProbHist[recessionProbHist.length - 1], outputUnit: "%", confidence: 81, auc: 0.89, status: "LIVE",
-      features: [
-        { name: "2s10s spread", importance: 0.34 }, { name: "3m10y spread", importance: 0.27 }, { name: "Real fed funds", importance: 0.14 },
-        { name: "HY credit OAS", importance: 0.11 }, { name: "Initial claims Δ", importance: 0.08 }, { name: "ISM new orders", importance: 0.06 },
-      ],
+      features: normImportances([
+        { name: "10Y-2Y spread", importance: 0.30 }, { name: "10Y-3M spread", importance: 0.24 }, { name: "HY OAS (BofA)", importance: 0.13 },
+        { name: "10Y real yield (TIPS)", importance: 0.10 }, { name: "Initial jobless claims", importance: 0.09 }, { name: "Nonfarm payrolls", importance: 0.07 },
+        { name: "ISM Manufacturing PMI", importance: 0.06 }, { name: "Building permits", importance: 0.05 }, { name: "Industrial production", importance: 0.04 },
+        { name: "BBB corp OAS", importance: 0.04 }, { name: "Chicago Fed NFCI", importance: 0.03 }, { name: "Avg weekly hours", importance: 0.03 },
+      ]),
       history: recessionProbHist, updated: "2026-06-17",
     },
     {
       id: "infl-now", name: "Inflation Nowcast (Core PCE)", task: "Nowcast", algo: "Gradient Boosting (XGBoost) + ridge ensemble", target: "Next Core PCE m/m",
       output: 0.21, outputUnit: "% m/m", confidence: 73, auc: 0.0, status: "LIVE",
-      features: [
-        { name: "Sticky CPI", importance: 0.29 }, { name: "Wage growth (AHE)", importance: 0.22 }, { name: "Shelter lag", importance: 0.18 },
-        { name: "Used-car prices", importance: 0.13 }, { name: "Energy", importance: 0.10 }, { name: "USD index", importance: 0.08 },
-      ],
+      features: normImportances([
+        { name: "Sticky CPI (Atlanta Fed)", importance: 0.20 }, { name: "Core CPI", importance: 0.17 }, { name: "Avg hourly earnings", importance: 0.14 },
+        { name: "PCE price index", importance: 0.11 }, { name: "PPI all commodities", importance: 0.09 }, { name: "5y breakeven inflation", importance: 0.07 },
+        { name: "Case-Shiller home prices", importance: 0.06 }, { name: "Trade-weighted USD", importance: 0.05 }, { name: "Capacity utilization", importance: 0.04 },
+        { name: "M2 money supply YoY", importance: 0.04 }, { name: "Unemployment rate", importance: 0.03 },
+      ]),
       history: getSeriesHistory("PCEPILFE", 36).map((o) => Number((o.value / 12).toFixed(2))), updated: "2026-06-17",
     },
     {
       id: "rate-path", name: "Policy-Rate Path Forecast", task: "Time-Series", algo: "Bayesian VAR + LSTM", target: "Effective fed funds, 12M",
       output: 3.35, outputUnit: "%", confidence: 68, auc: 0.0, status: "LIVE",
-      features: [
-        { name: "Core PCE", importance: 0.31 }, { name: "Unemployment gap", importance: 0.26 }, { name: "Fed-funds futures", importance: 0.21 },
-        { name: "Fin. conditions", importance: 0.12 }, { name: "GDPNow", importance: 0.10 },
-      ],
+      features: normImportances([
+        { name: "Core PCE", importance: 0.18 }, { name: "Unemployment rate", importance: 0.15 }, { name: "Real GDP (SAAR)", importance: 0.12 },
+        { name: "2-Year Treasury", importance: 0.11 }, { name: "SOFR", importance: 0.09 }, { name: "Core CPI", importance: 0.08 },
+        { name: "Chicago Fed NFCI", importance: 0.07 }, { name: "Nonfarm payrolls", importance: 0.06 }, { name: "Job openings (JOLTS)", importance: 0.05 },
+        { name: "10Y-2Y spread", importance: 0.05 }, { name: "Retail sales", importance: 0.04 },
+      ]),
       history: [4.08, 4.05, 3.95, 3.86, 3.74, 3.63, 3.55, 3.48, 3.42, 3.39, 3.36, 3.35], updated: "2026-06-17",
     },
     {
       id: "regime", name: "Macro Regime Classifier", task: "Classification", algo: "Hidden Markov Model (4-state)", target: "Growth/Inflation regime",
       output: 2, outputUnit: "state", confidence: 64, auc: 0.78, status: "STAGING",
-      features: [
-        { name: "Growth momentum", importance: 0.3 }, { name: "Inflation trend", importance: 0.28 }, { name: "Curve slope", importance: 0.22 }, { name: "Credit spreads", importance: 0.2 },
-      ],
+      features: normImportances([
+        { name: "ISM Manufacturing PMI", importance: 0.15 }, { name: "Industrial production", importance: 0.13 }, { name: "Core PCE", importance: 0.12 },
+        { name: "10Y-2Y spread", importance: 0.11 }, { name: "HY OAS (BofA)", importance: 0.10 }, { name: "Unemployment rate", importance: 0.09 },
+        { name: "Real GDP (SAAR)", importance: 0.08 }, { name: "CBOE VIX", importance: 0.07 }, { name: "Capacity utilization", importance: 0.06 },
+        { name: "Chicago Fed NFCI", importance: 0.05 }, { name: "Consumer sentiment", importance: 0.04 },
+      ]),
       history: getSeriesHistory("ISM-MFG", 36).map((o) => Math.max(0, Math.min(3, Math.round((o.value - 47) / 2)))), updated: "2026-06-16",
+    },
+    {
+      id: "fci", name: "Financial Conditions Index", task: "Regression", algo: "PCA factor model (rates · credit · vol · USD)", target: "Composite conditions (z-score)",
+      output: fciHist[fciHist.length - 1], outputUnit: "σ", confidence: 76, auc: 0.0, status: "LIVE",
+      features: normImportances([
+        { name: "Chicago Fed NFCI", importance: 0.16 }, { name: "HY OAS (BofA)", importance: 0.14 }, { name: "IG corp OAS", importance: 0.12 },
+        { name: "CBOE VIX", importance: 0.11 }, { name: "10Y-2Y spread", importance: 0.10 }, { name: "Trade-weighted USD", importance: 0.09 },
+        { name: "30Y mortgage rate", importance: 0.07 }, { name: "10Y real yield (TIPS)", importance: 0.07 }, { name: "BBB corp OAS", importance: 0.06 },
+        { name: "Effective fed funds", importance: 0.05 }, { name: "2-Year Treasury", importance: 0.03 },
+      ]),
+      history: fciHist, updated: "2026-06-17",
+    },
+    {
+      id: "labor-mom", name: "Labor Market Momentum", task: "Nowcast", algo: "Dynamic factor model (Kalman filter)", target: "Labor momentum (z-score)",
+      output: laborHist[laborHist.length - 1], outputUnit: "σ", confidence: 70, auc: 0.0, status: "STAGING",
+      features: normImportances([
+        { name: "Initial jobless claims", importance: 0.18 }, { name: "Nonfarm payrolls", importance: 0.17 }, { name: "Unemployment rate", importance: 0.14 },
+        { name: "Job openings (JOLTS)", importance: 0.11 }, { name: "Avg hourly earnings", importance: 0.09 }, { name: "U-6 underemployment", importance: 0.08 },
+        { name: "Labor force participation", importance: 0.07 }, { name: "Avg weekly hours", importance: 0.06 }, { name: "Employment-population ratio", importance: 0.05 },
+        { name: "Consumer sentiment", importance: 0.03 }, { name: "ISM Services PMI", importance: 0.02 },
+      ]),
+      history: laborHist, updated: "2026-06-16",
     },
   ];
 }

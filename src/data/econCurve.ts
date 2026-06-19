@@ -40,6 +40,7 @@ const TENORS: [string, number, string][] = [
 /** Curve presets: yields by tenor index for several historical regimes. */
 const CURVE_PRESETS: { id: string; label: string; date: string; regime: string; yields: number[] }[] = [
   { id: "now", label: "Today", date: "2026-06-17", regime: "Normalizing / mild front inversion", yields: [4.3, 4.25, 4.15, 3.95, 3.74, 3.7, 3.8, 3.95, 4.11, 4.45, 4.35] },
+  { id: "1w", label: "1W Ago", date: "2026-06-10", regime: "Normalizing", yields: [4.31, 4.26, 4.16, 3.96, 3.76, 3.71, 3.81, 3.96, 4.12, 4.46, 4.36] },
   { id: "1m", label: "1M Ago", date: "2026-05-17", regime: "Normalizing", yields: [4.33, 4.29, 4.19, 3.99, 3.79, 3.74, 3.83, 3.98, 4.14, 4.47, 4.37] },
   { id: "3m", label: "3M Ago", date: "2026-03-17", regime: "Early steepening", yields: [4.4, 4.36, 4.25, 4.05, 3.86, 3.8, 3.87, 4.0, 4.16, 4.49, 4.39] },
   { id: "6m", label: "6M Ago", date: "2025-12-17", regime: "Bull steepening (cuts begin)", yields: [4.55, 4.5, 4.38, 4.18, 3.98, 3.9, 3.93, 4.04, 4.18, 4.5, 4.4] },
@@ -66,8 +67,10 @@ export function getCurrentCurve(): CurveSnapshot {
 /** Tenor definitions (label, months, FRED id) — used by the live history route. */
 export const CURVE_TENORS = TENORS;
 
-/** Month offsets (back from the latest data date) for the "recent" anchors.
- *  Presets without an entry (preHike, gfc) resolve at their absolute date. */
+/** Day / month offsets (back from the latest data date) for the "recent"
+ *  anchors. Presets without an entry (preHike, gfc) resolve at their absolute
+ *  date. Day anchors (1W) take precedence over month anchors. */
+const ANCHOR_DAYS: Record<string, number> = { "1w": 7 };
 const ANCHOR_MONTHS: Record<string, number> = { now: 0, "1m": 1, "3m": 3, "6m": 6, "1y": 12, "2y": 24 };
 
 export type CurveHistory = Record<string, { date: string; value: number }[]>; // fredId -> ascending daily
@@ -75,6 +78,12 @@ export type CurveHistory = Record<string, { date: string; value: number }[]>; //
 function shiftMonths(iso: string, months: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCMonth(d.getUTCMonth() - months);
+  return d.toISOString().slice(0, 10);
+}
+
+function shiftDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);
 }
 
@@ -102,8 +111,10 @@ export function buildLiveSnapshots(history: CurveHistory): CurveSnapshot[] {
   const latest = lastDates[lastDates.length - 1];
 
   return presets.map((snap) => {
+    const days = ANCHOR_DAYS[snap.id];
     const months = ANCHOR_MONTHS[snap.id];
-    const anchor = months !== undefined ? shiftMonths(latest, months) : snap.date;
+    const anchor =
+      days !== undefined ? shiftDays(latest, days) : months !== undefined ? shiftMonths(latest, months) : snap.date;
     let refDate = months === 0 ? latest : anchor;
     let matched = false;
     const points = snap.points.map((p) => {

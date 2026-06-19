@@ -53,6 +53,7 @@ export default function TreasuryCurveLab() {
   const [overlay, setOverlay] = useState<Set<string>>(new Set(["now", "1y", "2y"]));
   const [focusedId, setFocusedId] = useState<string>("now");
   const [spreadId, setSpreadId] = useState<string>("10Y2Y");
+  const [showTable, setShowTable] = useState<boolean>(false);
   const focused = snapshots.find((s) => s.id === focusedId) ?? today;
   const focusedMetrics = getCurveMetrics(focused);
 
@@ -76,6 +77,9 @@ export default function TreasuryCurveLab() {
       dashed: s.id !== "now",
       points: s.points.map((p) => ({ months: p.months, tenor: p.tenor, yield: p.yield })),
     }));
+
+  // Overlaid snapshots (in snapshot order) → columns of the comparison table.
+  const overlaySnaps = snapshots.filter((s) => overlay.has(s.id));
 
   // Tenor table for the focused snapshot.
   interface TenorRow extends CurvePoint {
@@ -209,20 +213,60 @@ export default function TreasuryCurveLab() {
                   {s.label}
                 </button>
               ))}
+              <button
+                onClick={() => setShowTable((v) => !v)}
+                className={`term-btn ml-1 ${showTable ? "term-btn-active" : ""}`}
+                title="Toggle a tenor × period comparison table"
+              >
+                ⊞ Table
+              </button>
             </div>
           }
         >
-          <div className="p-2">
-            <YieldCurve lines={lines} height={300} shadeInversion />
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 px-1 text-2xs">
-              {legendItems.map((l) => (
-                <span key={l.id} className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-3" style={{ background: l.color }} />
-                  <span className="text-term-text-dim">{l.label}</span>
-                  <span className={`tnum ${pnlClass(l.s2s10)}`}>2s10s {fmtSigned(l.s2s10, 0)}</span>
-                </span>
-              ))}
+          <div className="flex flex-col gap-2 p-2 lg:flex-row">
+            <div className="min-w-0 flex-1">
+              <YieldCurve lines={lines} height={300} shadeInversion />
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 px-1 text-2xs">
+                {legendItems.map((l) => (
+                  <span key={l.id} className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-3" style={{ background: l.color }} />
+                    <span className="text-term-text-dim">{l.label}</span>
+                    <span className={`tnum ${pnlClass(l.s2s10)}`}>2s10s {fmtSigned(l.s2s10, 0)}</span>
+                  </span>
+                ))}
+              </div>
             </div>
+            {showTable && (
+              <div className="shrink-0 overflow-x-auto border-t border-term-border pt-2 lg:border-l lg:border-t-0 lg:pl-2 lg:pt-0">
+                <table className="tnum text-2xs">
+                  <thead>
+                    <tr className="border-b border-term-border">
+                      <th className="px-1.5 py-1 text-left text-3xs uppercase tracking-wide text-term-text-mute">Tenor</th>
+                      {overlaySnaps.map((s) => (
+                        <th key={s.id} className="px-1.5 py-1 text-right text-3xs font-semibold" style={{ color: colorFor(s.id, snapshots.findIndex((x) => x.id === s.id)) }} title={`${s.label} · ${s.date}`}>
+                          {s.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {today.points.map((p) => (
+                      <tr key={p.tenor} className="border-b border-term-border-soft hover:bg-term-panel-2">
+                        <td className="px-1.5 py-0.5 font-semibold text-term-text-dim">{p.tenor}</td>
+                        {overlaySnaps.map((s) => {
+                          const v = s.points.find((pp) => pp.tenor === p.tenor)?.yield;
+                          return (
+                            <td key={s.id} className="px-1.5 py-0.5 text-right text-term-text">
+                              {v !== undefined ? v.toFixed(2) : "—"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </Panel>
 

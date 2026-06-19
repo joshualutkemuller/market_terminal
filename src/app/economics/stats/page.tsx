@@ -10,6 +10,7 @@ import { BarChart } from "@/components/charts/BarChart";
 import { LineChart } from "@/components/charts/LineChart";
 import { SourceBadge } from "@/components/econ/SourceBadge";
 import { getStatStudyPacks, type StatStudyPack } from "@/data/econEnhancements";
+import { STAT_LABELS, STAT_DEFAULT_LABELS } from "@/data/statsConfig";
 import { useStatsData } from "@/lib/useStats";
 import { buildStatsPayload, ols, histogram, moments, rollingCorr, acf, alignPair, type Obs } from "@/lib/stats";
 import { fmtNum, fmtPct, pnlClass } from "@/lib/format";
@@ -48,7 +49,11 @@ export default function StatisticalAnalysis() {
   const [transform, setTransform] = useState<Transform>("level");
   const [lag, setLag] = useState(2);
   const [win, setWin] = useState(12);
-  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  // Default to a representative ~10-series subset so the correlation matrix stays
+  // readable; everything else in STAT_SERIES starts excluded but is togglable.
+  const [excluded, setExcluded] = useState<Set<string>>(
+    () => new Set(STAT_LABELS.filter((l) => !STAT_DEFAULT_LABELS.includes(l)))
+  );
   const [xL, setXL] = useState("2s10s");
   const [yL, setYL] = useState("HY OAS");
   const [distL, setDistL] = useState("10Y");
