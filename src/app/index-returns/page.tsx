@@ -70,8 +70,6 @@ export default function IndexReturnAnalyticsPage() {
   const bestYear = matrix.summaries.filter((s) => !s.isYtd).sort((a, b) => (b.annualReturn ?? -999) - (a.annualReturn ?? -999))[0];
   const worstYear = matrix.summaries.filter((s) => !s.isYtd).sort((a, b) => (a.annualReturn ?? 999) - (b.annualReturn ?? 999))[0];
   const ytd = matrix.summaries.find((s) => s.isYtd);
-  const avgMonthly = matrix.rows.reduce((a, r) => a + (r.monthAverage ?? 0), 0) / matrix.rows.length;
-
   return (
     <div className="flex min-h-full flex-col">
       <PageHeader
@@ -84,11 +82,11 @@ export default function IndexReturnAnalyticsPage() {
 
       <KpiStrip>
         <Stat label="Index" value={matrix.index.symbol} sub={matrix.index.name} tone="amber" />
+        <Stat label="Underlying" value={matrix.index.proxy ?? matrix.index.symbol} sub={basis === "total" ? "adjusted close" : "raw close"} tone="neutral" />
         <Stat label="Current YTD" value={ytd?.annualReturn === null ? "—" : fmtSignedPct(ytd?.annualReturn ?? 0, 2)} sub={`${matrix.ytdYear} through Jun`} tone={(ytd?.annualReturn ?? 0) >= 0 ? "up" : "down"} />
         <Stat label="Best Full Year" value={`${bestYear.year}`} sub={fmtSignedPct(bestYear.annualReturn ?? 0, 2)} tone="up" />
         <Stat label="Worst Full Year" value={`${worstYear.year}`} sub={fmtSignedPct(worstYear.annualReturn ?? 0, 2)} tone="down" />
         <Stat label="Avg Annual*" value={fmtSignedPct(matrix.averageAnnualReturn, 2)} sub="excludes current YTD" />
-        <Stat label="Avg Month" value={fmtSignedPct(avgMonthly, 2)} sub="all full years" tone="neutral" />
       </KpiStrip>
 
       <div className="flex flex-wrap gap-1 border-b border-term-border bg-term-panel px-2 py-1">
@@ -100,7 +98,13 @@ export default function IndexReturnAnalyticsPage() {
       </div>
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-12">
-        <Panel title={`${matrix.index.name} Monthly Return Matrix`} code="MATRIX" className="xl:col-span-12" accent>
+        <Panel
+          title={`${matrix.index.name} Monthly Return Matrix`}
+          code="MATRIX"
+          className="xl:col-span-12"
+          accent
+          right={<span className="text-3xs text-term-text-mute">Proxy {matrix.index.proxy ?? matrix.index.symbol} · {basis === "total" ? "adjusted close" : "raw close"} · {asof || liveData?.asof || "latest"}</span>}
+        >
           <div className="overflow-auto">
             <table className="w-full min-w-[1040px] border-collapse">
               <thead className="sticky top-0 z-10">
@@ -147,7 +151,7 @@ export default function IndexReturnAnalyticsPage() {
             <p>The `Annual / YTD` row compounds monthly returns within each year. The current year column is YTD only.</p>
             <p>The `Month Avg` column averages each month across the ten completed full years only.</p>
             <p><span className="text-term-amber">Avg Annual*</span> is the arithmetic average of completed annual returns and explicitly excludes the current YTD return.</p>
-            <p>Default view uses adjusted-close total returns from the market data pipeline. Switch to price return to use raw-close performance.</p>
+            <p>The selected index is calculated from the visible proxy ticker. SPX uses SPY, NDX uses QQQ, RUT uses IWM, INDU uses DIA, EAFE uses EFA, and EM uses EEM.</p>
           </div>
         </Panel>
       </div>

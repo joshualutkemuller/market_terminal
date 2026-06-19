@@ -217,7 +217,7 @@ export default function LiveMarkets() {
             title="Live Quote Board"
             code="WEI"
             accent
-            right={<span className="tnum text-3xs text-term-text-mute">{rows.length} instruments · {basis === "total" ? "adj close" : "raw close"}</span>}
+            right={<span className="tnum text-3xs text-term-text-mute">{source} · {rows.length} instruments · {basis === "total" ? "adjusted close" : "raw close"} · {asof || dataAsOf || "latest"}</span>}
           >
             <div className="flex flex-wrap gap-px border-b border-term-border bg-term-border">
               {TABS.map((t) => (

@@ -346,7 +346,7 @@ function indexReturnsFromRows(rows: MarketObservation[], basis: ReturnBasis) {
     const annualReturns = Object.fromEntries(columns.map((year) => [String(year), compound(monthly[year])]));
     const fullAnnuals = fullYears.map((year) => annualReturns[String(year)]).filter((v): v is number => v !== null);
     matrices[symbol] = {
-      index: { symbol, name, base, drift, vol },
+      index: { symbol, proxy: seriesId, name, base, drift, vol },
       years: fullYears,
       ytdYear,
       rows: rowsOut,
@@ -356,7 +356,7 @@ function indexReturnsFromRows(rows: MarketObservation[], basis: ReturnBasis) {
     };
   }
   const latest = rows.reduce<string | null>((acc, row) => (!acc || row.date > acc ? row.date : acc), null);
-  return { return_basis: basis, asof: latest, indices: INDEX_MAP.map(([symbol, , name, base, drift, vol]) => ({ symbol, name, base, drift, vol })), matrices };
+  return { return_basis: basis, asof: latest, indices: INDEX_MAP.map(([symbol, proxy, name, base, drift, vol]) => ({ symbol, proxy, name, base, drift, vol })), matrices };
 }
 
 function computedView(view: MarketView, rows: MarketObservation[], basis: ReturnBasis): unknown | null {

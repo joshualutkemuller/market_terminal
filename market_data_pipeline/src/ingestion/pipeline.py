@@ -432,12 +432,12 @@ def _cards_to_frame(cards: list[dict], run_id: str) -> pl.DataFrame:
 
 
 INDEX_RETURN_SERIES = [
-    {"symbol": "SPX", "series_id": "SPY", "name": "S&P 500", "base": 5975, "drift": 0.75, "vol": 4.2},
-    {"symbol": "NDX", "series_id": "QQQ", "name": "Nasdaq 100", "base": 21450, "drift": 0.95, "vol": 6.0},
-    {"symbol": "RUT", "series_id": "IWM", "name": "Russell 2000", "base": 2380, "drift": 0.62, "vol": 5.8},
-    {"symbol": "INDU", "series_id": "DIA", "name": "Dow Jones Industrial Average", "base": 43400, "drift": 0.58, "vol": 3.8},
-    {"symbol": "EAFE", "series_id": "EFA", "name": "MSCI EAFE Proxy", "base": 2450, "drift": 0.46, "vol": 4.6},
-    {"symbol": "EM", "series_id": "EEM", "name": "MSCI Emerging Markets Proxy", "base": 1080, "drift": 0.52, "vol": 6.4},
+    {"symbol": "SPX", "series_id": "SPY", "proxy": "SPY", "name": "S&P 500", "base": 5975, "drift": 0.75, "vol": 4.2},
+    {"symbol": "NDX", "series_id": "QQQ", "proxy": "QQQ", "name": "Nasdaq 100", "base": 21450, "drift": 0.95, "vol": 6.0},
+    {"symbol": "RUT", "series_id": "IWM", "proxy": "IWM", "name": "Russell 2000", "base": 2380, "drift": 0.62, "vol": 5.8},
+    {"symbol": "INDU", "series_id": "DIA", "proxy": "DIA", "name": "Dow Jones Industrial Average", "base": 43400, "drift": 0.58, "vol": 3.8},
+    {"symbol": "EAFE", "series_id": "EFA", "proxy": "EFA", "name": "MSCI EAFE Proxy", "base": 2450, "drift": 0.46, "vol": 4.6},
+    {"symbol": "EM", "series_id": "EEM", "proxy": "EEM", "name": "MSCI Emerging Markets Proxy", "base": 1080, "drift": 0.52, "vol": 6.4},
 ]
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]

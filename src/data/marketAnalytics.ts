@@ -5,6 +5,8 @@ export type QuiltAsset = string;
 export interface QuiltCell {
   year: number;
   asset: QuiltAsset;
+  displayName?: string;
+  assetClass?: string;
   returnPct: number;
   rank: number;
 }
@@ -61,7 +63,7 @@ const QUILT_BASE: Record<string, { drift: number; vol: number; color: string }> 
 };
 
 export function quiltColor(asset: QuiltAsset): string {
-  return QUILT_BASE[asset]?.color ?? ASSET_CLASS_COLORS[asset] ?? "#94A3B8";
+  return QUILT_BASE[asset]?.color ?? ASSET_CLASS_COLORS[asset] ?? colorForTicker(asset);
 }
 
 const ASSET_CLASS_COLORS: Record<string, string> = {
@@ -72,6 +74,15 @@ const ASSET_CLASS_COLORS: Record<string, string> = {
   VOLATILITY: "#EF4444",
   CURRENCY: "#9CA3AF",
 };
+
+function colorForTicker(ticker: string): string {
+  let hash = 0;
+  for (let i = 0; i < ticker.length; i++) hash = (hash * 31 + ticker.charCodeAt(i)) >>> 0;
+  const hue = hash % 360;
+  const sat = 58 + (hash % 18);
+  const light = 52 + ((hash >> 4) % 12);
+  return `hsl(${hue} ${sat}% ${light}%)`;
+}
 
 export function getAssetQuilt(): QuiltYear[] {
   const rng = new Rng("asset-quilt");
