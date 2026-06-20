@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fetchJson, peekFresh } from "@/lib/fetchCache";
 import { getSeriesHistory, type Observation } from "@/data/econSeries";
 import {
   getCurrentCurve,
@@ -22,14 +23,22 @@ export type DataSource = "FRED" | "SIM" | "LOADING" | "ETL";
  * LIVE/SIM badge in the UI.
  */
 function useEconResource<T>(url: string, fallback: T, pick: (json: any) => T): { data: T; source: DataSource } {
-  const [data, setData] = useState<T>(fallback);
-  const [source, setSource] = useState<DataSource>("SIM");
+  // Seed from a recently-cached response so re-navigation renders real data
+  // instantly instead of flashing the SIM fallback.
+  const cached = peekFresh<any>(url);
+  const [data, setData] = useState<T>(cached ? pick(cached) : fallback);
+  const [source, setSource] = useState<DataSource>(cached ? (cached.source === "FRED" ? "FRED" : "SIM") : "SIM");
 
   useEffect(() => {
     let alive = true;
-    setSource("LOADING");
-    fetch(url)
-      .then((r) => r.json())
+    const seed = peekFresh<any>(url);
+    if (seed) {
+      setData(pick(seed));
+      setSource(seed.source === "FRED" ? "FRED" : "SIM");
+    } else {
+      setSource("LOADING");
+    }
+    fetchJson<any>(url)
       .then((json) => {
         if (!alive) return;
         setData(pick(json));
