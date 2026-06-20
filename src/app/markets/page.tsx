@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
@@ -22,7 +22,7 @@ import {
   type Mover,
   type IndexQuote,
 } from "@/data/markets";
-import type { AssetClass } from "@/data/universe";
+import { bySymbol, type AssetClass } from "@/data/universe";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import type { ReturnBasis, SnapshotCard } from "@/data/marketPipeline";
 import { fmtNum, fmtInt, fmtAbbr, fmtSignedPct, pnlClass } from "@/lib/format";
@@ -63,11 +63,29 @@ function quotesForTab(tab: TabKey): Quote[] {
   return quotesByClass(tab as AssetClass);
 }
 
+/** Map a security's asset class to the markets monitor tab that lists it. */
+function tabForAssetClass(ac: AssetClass): TabKey {
+  if (ac === "CORP" || ac === "GOVT") return "FI";
+  return ac as TabKey;
+}
+
 export default function LiveMarkets() {
   const [tab, setTab] = useState<TabKey>("EQUITY");
   const [chartTicker, setChartTicker] = useState("AAPL");
   const [basis, setBasis] = useState<ReturnBasis>("total");
   const [asof, setAsOf] = useState("");
+
+  // Deep-link from the command palette / watchlists: /markets?sym=NVDA focuses
+  // the intraday chart on that security and switches to its asset-class tab.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sym = new URLSearchParams(window.location.search).get("sym")?.toUpperCase();
+    if (!sym) return;
+    const sec = bySymbol(sym);
+    setChartTicker(sym);
+    if (sec) setTab(tabForAssetClass(sec.assetClass));
+  }, []);
+
   const { data: marketData, source, earliestAsOf } = useMarketView<{ cards: SnapshotCard[] }>("market", basis, asof);
   const pipelineQuotes = useMemo(() => cardsToQuotes(marketData?.cards ?? []), [marketData]);
   const dataAsOf = marketData?.cards?.[0]?.asof ?? null;
@@ -272,7 +290,7 @@ export default function LiveMarkets() {
             }
           >
             <div className="flex flex-wrap gap-px border-b border-term-border bg-term-border">
-              {CHART_CHIPS.map((c) => (
+              {(CHART_CHIPS.includes(chartTicker) ? CHART_CHIPS : [chartTicker, ...CHART_CHIPS]).map((c) => (
                 <button
                   key={c}
                   onClick={() => setChartTicker(c)}
