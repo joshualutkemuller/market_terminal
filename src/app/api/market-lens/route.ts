@@ -82,13 +82,24 @@ async function proxyToBackend(path: string, method: string, body?: unknown): Pro
   return null;
 }
 
+/** Validate that a backend GET payload has the shape the UI expects. */
+function isValidGetShape(action: string, id: string, data: unknown): boolean {
+  if (data == null) return false;
+  if (action === "views" && id) return typeof data === "object" && "view_id" in (data as object);
+  if (action === "views" || action === "presets") return Array.isArray(data);
+  if (action === "catalog") return typeof data === "object" && Array.isArray((data as { entries?: unknown }).entries);
+  return false;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action") || "views";
   const id = searchParams.get("id") || "";
   const q = searchParams.get("q") || "";
 
-  // Try Python backend first
+  // Try Python backend first — but only trust a well-formed payload. Any error,
+  // unreachable backend, or unexpected shape falls through to embedded data so
+  // the UI never ends up with an empty/broken view library.
   if (LENS_URL) {
     let path = "/market-lens/views";
     if (action === "views" && id) path = `/market-lens/views/${id}`;
@@ -97,33 +108,41 @@ export async function GET(req: NextRequest) {
     else if (action === "catalog" && q) path = `/market-lens/catalog/search?q=${encodeURIComponent(q)}`;
     else if (action === "catalog") path = "/market-lens/catalog";
 
-    const backendRes = await proxyToBackend(path, "GET");
-    if (backendRes) {
-      const data = await backendRes.json();
-      return NextResponse.json({ source: "LIVE", data });
+    try {
+      const backendRes = await proxyToBackend(path, "GET");
+      if (backendRes) {
+        const data = await backendRes.json();
+        if (isValidGetShape(action, id, data)) {
+          return NextResponse.json({ source: "LIVE", data });
+        }
+      }
+    } catch {
+      // fall through to embedded data
     }
   }
 
-  // Fallback to embedded data
+  // Fallback to embedded data. `fallback: true` flags that the live backend was
+  // configured but unavailable/invalid, so the UI can surface a clear notice.
+  const fallback = Boolean(LENS_URL);
   if (action === "views" && id) {
     const view = VIEWS.find(v => v.view_id === id);
     if (!view) return NextResponse.json({ error: "View not found" }, { status: 404 });
-    return NextResponse.json({ source: "SNAPSHOT", data: view });
+    return NextResponse.json({ source: "SNAPSHOT", fallback, data: view });
   }
   if (action === "views") {
-    return NextResponse.json({ source: "SNAPSHOT", data: VIEWS });
+    return NextResponse.json({ source: "SNAPSHOT", fallback, data: VIEWS });
   }
   if (action === "presets") {
-    return NextResponse.json({ source: "SNAPSHOT", data: PRESETS });
+    return NextResponse.json({ source: "SNAPSHOT", fallback, data: PRESETS });
   }
   if (action === "catalog") {
     const filtered = q
       ? CATALOG.filter(c => c.series_id.toUpperCase().includes(q.toUpperCase()) || c.display_name.toUpperCase().includes(q.toUpperCase()))
       : CATALOG;
-    return NextResponse.json({ source: "SNAPSHOT", data: { total: filtered.length, entries: filtered } });
+    return NextResponse.json({ source: "SNAPSHOT", fallback, data: { total: filtered.length, entries: filtered } });
   }
 
-  return NextResponse.json({ source: "SNAPSHOT", data: VIEWS });
+  return NextResponse.json({ source: "SNAPSHOT", fallback, data: VIEWS });
 }
 
 export async function POST(req: NextRequest) {
