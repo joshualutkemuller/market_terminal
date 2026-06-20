@@ -6,6 +6,7 @@ import { Plus, X, Search, Save, Share2, Download, Image, Trash2, Minus, Trending
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
+import { Modal } from "@/components/ui/Modal";
 import { ChartCanvas, type ChartCanvasHandle } from "./ChartCanvas";
 import { useChartSeries } from "@/lib/charting/resolver";
 import { RANGE_PRESETS, SERIES_COLORS, type ChartType, type RangePreset, type SeriesRef } from "@/lib/charting/spec";
@@ -522,25 +523,21 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
       </div>
 
       {/* Save dialog */}
-      {saveDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setSaveDialog(false)}>
-          <div className="w-80 rounded border border-term-border bg-term-panel p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 text-sm font-semibold text-term-text">Save Template</div>
-            <input
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              placeholder="Template name…"
-              className="mb-3 w-full rounded-sm border border-term-border bg-term-panel-2 px-2 py-1.5 text-xs text-term-text outline-none focus:border-term-amber"
-              autoFocus
-              onKeyDown={(e) => e.key === "Enter" && handleSave()}
-            />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setSaveDialog(false)} className="rounded-sm border border-term-border px-3 py-1 text-2xs text-term-text-mute hover:text-term-text">Cancel</button>
-              <button onClick={handleSave} disabled={!saveName.trim()} className="rounded-sm border border-term-amber bg-term-amber px-3 py-1 text-2xs font-semibold text-black disabled:opacity-40">Save</button>
-            </div>
-          </div>
+      <Modal open={saveDialog} onClose={() => setSaveDialog(false)} label="Save chart template" className="w-80 rounded border border-term-border bg-term-panel p-4 shadow-xl">
+        <div className="mb-3 text-sm font-semibold text-term-text">Save Template</div>
+        <input
+          value={saveName}
+          onChange={(e) => setSaveName(e.target.value)}
+          placeholder="Template name…"
+          className="mb-3 w-full rounded-sm border border-term-border bg-term-panel-2 px-2 py-1.5 text-xs text-term-text outline-none focus:border-term-amber"
+          autoFocus
+          onKeyDown={(e) => e.key === "Enter" && handleSave()}
+        />
+        <div className="flex justify-end gap-2">
+          <button onClick={() => setSaveDialog(false)} className="rounded-sm border border-term-border px-3 py-1 text-2xs text-term-text-mute hover:text-term-text">Cancel</button>
+          <button onClick={handleSave} disabled={!saveName.trim()} className="rounded-sm border border-term-amber bg-term-amber px-3 py-1 text-2xs font-semibold text-black disabled:opacity-40">Save</button>
         </div>
-      )}
+      </Modal>
 
       <div className="flex flex-1 flex-col gap-2 p-2">
         <Panel title="Chart" code={code} accent>

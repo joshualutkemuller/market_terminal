@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { NAV } from "@/lib/nav";
 import { UNIVERSE } from "@/data/universe";
+import { Modal } from "@/components/ui/Modal";
 import { Search, CornerDownLeft } from "lucide-react";
 
 /** Bloomberg-style command line: type a mnemonic (SLAB, PB, MKT...) or a ticker. */
@@ -62,10 +63,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     return () => window.removeEventListener("keydown", handler);
   }, [open, results, idx, router, onClose]);
 
-  if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-[12vh]" onClick={onClose}>
-      <div className="w-[640px] max-w-[92vw] border border-term-amber/50 bg-term-panel shadow-glow" onClick={(e) => e.stopPropagation()}>
+    <Modal open={open} onClose={onClose} align="top" label="Command line — run a module or find a security" className="w-[640px] max-w-[92vw] border border-term-amber/50 bg-term-panel shadow-glow">
+      <div>
         <div className="flex items-center gap-2 border-b border-term-border px-3 py-2">
           <Search size={15} className="text-term-amber" />
           <input
@@ -110,6 +110,6 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           <span>SFX Command Line</span>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

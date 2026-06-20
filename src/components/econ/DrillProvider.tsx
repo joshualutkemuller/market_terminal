@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { LineChart } from "@/components/charts/LineChart";
 import { SourceBadge } from "./SourceBadge";
 import { ChartLink } from "@/components/charting/ChartLink";
+import { Modal } from "@/components/ui/Modal";
 import type { DataSource } from "@/lib/useEcon";
 import { fmtSigned, fmtNum, pnlClass } from "@/lib/format";
 
@@ -64,14 +65,6 @@ export function DrillProvider({ children }: { children: ReactNode }) {
     };
   }, [target]);
 
-  // close on escape
-  useEffect(() => {
-    if (!target) return;
-    const h = (e: KeyboardEvent) => e.key === "Escape" && setTarget(null);
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [target]);
-
   const dp = target?.decimals ?? 2;
   const values = obs.map((o) => o.value);
   const latest = values[values.length - 1];
@@ -81,9 +74,9 @@ export function DrillProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{ open }}>
       {children}
-      {target && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setTarget(null)}>
-          <div className="flex max-h-[86vh] w-[760px] max-w-[94vw] flex-col border border-term-amber/40 bg-term-panel shadow-glow" onClick={(e) => e.stopPropagation()}>
+      <Modal open={!!target} onClose={() => setTarget(null)} label={target ? `${target.id} — ${target.label}` : "Indicator detail"} className="flex max-h-[86vh] w-[760px] max-w-[94vw] flex-col border border-term-amber/40 bg-term-panel shadow-glow">
+        {target && (
+          <>
             <header className="flex items-center justify-between border-b border-term-border bg-term-panel-2 px-3 py-2">
               <div className="flex items-baseline gap-2">
                 <span className="font-mono text-sm font-bold text-term-amber">{target.id}</span>
@@ -140,9 +133,9 @@ export function DrillProvider({ children }: { children: ReactNode }) {
             <footer className="border-t border-term-border px-3 py-1.5 text-3xs text-term-text-mute">
               {source === "FRED" ? "Live observations from FRED · api.stlouisfed.org" : "Deterministic simulation — set FRED_API_KEY for live data"} · press ESC to close
             </footer>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </Ctx.Provider>
   );
 }
