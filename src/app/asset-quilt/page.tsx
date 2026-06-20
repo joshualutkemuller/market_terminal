@@ -6,6 +6,7 @@ import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { MarketDataControls } from "@/components/market/MarketDataControls";
 import { getAssetQuilt, quiltColor, type QuiltYear } from "@/data/marketAnalytics";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import type { BilelloView, ReturnBasis } from "@/data/marketPipeline";
 import { fmtNum, fmtSignedPct } from "@/lib/format";
 
@@ -152,5 +153,5 @@ function prettyAssetClass(assetClass: string): string {
 }
 
 function PipelineTag({ source }: { source: MarketSource }) {
-  return <Tag tone={source === "DB" || source === "LIVE" || source === "FILE" ? "up" : "blue"}>{source === "LOADING" ? "SYNC" : source}</Tag>;
+  return <ProvenanceBadge source={source} />;
 }

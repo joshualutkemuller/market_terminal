@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { Plus, X, Search, Save, Share2, Download, Image, Trash2, Minus, TrendingUp, GitBranch } from "lucide-react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { ChartCanvas, type ChartCanvasHandle } from "./ChartCanvas";
 import { useChartSeries } from "@/lib/charting/resolver";
 import { RANGE_PRESETS, SERIES_COLORS, type ChartType, type RangePreset, type SeriesRef } from "@/lib/charting/spec";
@@ -19,10 +20,6 @@ import type { CatalogItem } from "@/data/chartCatalog";
 const CHART_TYPES: ChartType[] = ["line", "area", "candles"];
 
 const MAX_SERIES = 6;
-
-const SOURCE_TONE: Record<string, "up" | "amber" | "blue" | "violet" | "neutral" | "down"> = {
-  FRED: "up", SNAPSHOT: "violet", ECON: "blue", SIM: "amber", ERR: "down",
-};
 
 interface ChartStudioProps {
   code: string;
@@ -270,7 +267,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
         right={
           <span className="flex items-center gap-1">
             {sources.map((s) => (
-              <Tag key={s} tone={SOURCE_TONE[s] ?? "neutral"}>{s}</Tag>
+              <ProvenanceBadge key={s} source={s} />
             ))}
           </span>
         }
@@ -556,7 +553,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
               <span key={refKey(s.ref)} className="flex items-center gap-1 rounded-sm border border-term-border bg-term-panel-2 px-1.5 py-0.5 text-2xs">
                 <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }} />
                 <span className="font-semibold text-term-text">{byId.get(s.ref.id)?.label ?? s.ref.id}</span>
-                <Tag tone={SOURCE_TONE[s.source] ?? "neutral"}>{s.source}</Tag>
+                <ProvenanceBadge source={s.source} />
                 <button onClick={() => removeRef(s.ref)} className="text-term-text-mute hover:text-term-down" aria-label="remove">
                   <X className="h-3 w-3" />
                 </button>
