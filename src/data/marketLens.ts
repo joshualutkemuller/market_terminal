@@ -1188,3 +1188,17 @@ export async function runMarketLens(req: LensRunRequest): Promise<AnalysisResult
     ...built,
   };
 }
+
+/**
+ * Single resolved series for the charting layer (`MGC`/`MKC`). Returns a price
+ * series (committed snapshots) or a macro level series (FRED/econ) with its
+ * provenance, reusing the same resolution the Market Lens views rely on.
+ */
+export async function getMarketLensSeries(
+  id: string,
+  assetClass?: string
+): Promise<{ id: string; dates: string[]; values: number[]; source: DataSource }> {
+  await resolveLevelSeries({ series_id: id, asset_class: assetClass });
+  const s = buildSeries({ series_id: id, asset_class: assetClass });
+  return { id: s.id, dates: s.dates, values: s.values, source: s.dataSource };
+}
