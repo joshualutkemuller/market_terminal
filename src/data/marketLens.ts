@@ -1,0 +1,964 @@
+import { Rng } from "@/lib/rng";
+
+/**
+ * Market Lens Studio — local analytics engine.
+ *
+ * This is the deterministic, no-backend fallback for the Market Lens "run"
+ * endpoint. It mirrors the pattern used by the other market modules
+ * (`/api/market/[view]`): when no external service is configured the terminal
+ * still renders meaningful, real-shaped analytics computed in TypeScript from a
+ * deterministic synthetic price/level series (seeded per series_id, so output is
+ * stable across renders). When `MARKET_LENS_URL` is set the route prefers the
+ * live Python engine; this engine is the graceful `SNAPSHOT` tier underneath.
+ *
+ * All synthetic series are clearly labelled `SNAPSHOT`/synthetic by the caller.
+ * ETF proxies are surfaced via `metadata.proxy_notes`.
+ */
+
+// ── Public contract (matches the frontend tile renderer) ────────────────────
+
+export interface LensSeriesInput {
+  series_id: string;
+  ticker?: string;
+  source?: string;
+  display_name?: string;
+  asset_class?: string;
+}
+
+export interface LensRunRequest {
+  view_id: string;
+  series?: LensSeriesInput[];
+  forward_windows?: string[];
+  selected_tiles?: string[];
+}
+
+export interface TilePayload {
+  tile_id: string;
+  chart_type: "table" | "boxplot" | "bar" | "heatmap" | "line" | "gauge" | "text";
+  title: string;
+  payload: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AnalysisResult {
+  view_id: string;
+  tiles: TilePayload[];
+  series_used: string[];
+  warnings: string[];
+  narrative: string;
+  metadata: Record<string, unknown>;
+  sample_size: number;
+}
+
+// ── Series generation ───────────────────────────────────────────────────────
+
+const HISTORY_YEARS = 12;
+const TRADING_DAYS = 252;
+const N = HISTORY_YEARS * TRADING_DAYS; // ~3024 points
+
+interface Series {
+  id: string;
+  name: string;
+  assetClass: string;
+  dates: string[];
+  values: number[]; // price/index level, or yield/spread level for RATE/CREDIT
+  kind: "price" | "level"; // "level" = yields/spreads where forward "return" is meaningless
+}
+
+const PROXY_FOR: Record<string, string> = {
+  SPY: "S&P 500 Index", QQQ: "Nasdaq 100", IWM: "Russell 2000", DIA: "Dow Jones Industrial Average",
+  EFA: "MSCI EAFE", EEM: "MSCI Emerging Markets", AGG: "US Aggregate Bond", HYG: "US High Yield Credit",
+  LQD: "US Investment Grade Credit", GLD: "Gold", VNQ: "US Real Estate",
+};
+
+const ANNUAL: Record<string, { drift: number; vol: number; start: number }> = {
+  EQUITY: { drift: 0.085, vol: 0.17, start: 100 },
+  BOND: { drift: 0.028, vol: 0.06, start: 100 },
+  COMMODITY: { drift: 0.04, vol: 0.20, start: 100 },
+  REIT: { drift: 0.065, vol: 0.21, start: 100 },
+  CURRENCY: { drift: 0.0, vol: 0.08, start: 100 },
+};
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Business-day date axis of length n ending at `anchor` (weekends skipped). */
+function businessDates(n: number, anchor: Date): string[] {
+  const out: string[] = [];
+  const d = new Date(anchor);
+  while (out.length < n) {
+    const day = d.getUTCDay();
+    if (day !== 0 && day !== 6) out.push(isoDate(d));
+    d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return out.reverse();
+}
+
+function vixSeries(rng: Rng, dates: string[]): number[] {
+  const mu = 18;
+  let x = mu;
+  return dates.map(() => {
+    const jump = rng.bool(0.012) ? rng.float(8, 32) : 0; // occasional panic spike
+    x = mu + (x - mu) * 0.94 + rng.normal(0, 2.0) + jump;
+    x = Math.max(9, Math.min(85, x));
+    return Number(x.toFixed(2));
+  });
+}
+
+function levelSeries(rng: Rng, dates: string[], base: number, sd: number, lo: number, hi: number): number[] {
+  let x = base;
+  return dates.map(() => {
+    x = base + (x - base) * 0.985 + rng.normal(0, sd);
+    x = Math.max(lo, Math.min(hi, x));
+    return Number(x.toFixed(3));
+  });
+}
+
+function macroIndex(rng: Rng, dates: string[]): number[] {
+  let x = 250;
+  const daily = 0.025 / TRADING_DAYS;
+  return dates.map(() => {
+    x = x * (1 + daily + rng.normal(0, 0.0006));
+    return Number(x.toFixed(3));
+  });
+}
+
+function priceSeries(rng: Rng, dates: string[], assetClass: string): number[] {
+  const p = ANNUAL[assetClass] ?? ANNUAL.EQUITY;
+  const mu = p.drift / TRADING_DAYS;
+  const sd = p.vol / Math.sqrt(TRADING_DAYS);
+  let x = p.start;
+  let vol = sd;
+  return dates.map(() => {
+    // light vol clustering for realistic drawdowns
+    vol = 0.94 * vol + 0.06 * sd * (1 + Math.abs(rng.normal(0, 1)));
+    x = x * (1 + rng.normal(mu, vol));
+    return Number(x.toFixed(4));
+  });
+}
+
+const SERIES_CACHE = new Map<string, Series>();
+
+function buildSeries(input: LensSeriesInput): Series {
+  const id = input.series_id;
+  const cached = SERIES_CACHE.get(id);
+  if (cached) return cached;
+
+  const anchor = new Date();
+  const dates = businessDates(N, anchor);
+  const rng = new Rng(`lens:${id}`);
+  const assetClass = (input.asset_class ?? "EQUITY").toUpperCase();
+  const name = input.display_name ?? id;
+
+  let values: number[];
+  let kind: Series["kind"] = "price";
+
+  if (id === "^VIX") {
+    values = vixSeries(rng, dates);
+    kind = "level";
+  } else if (id === "DGS2") {
+    values = levelSeries(rng, dates, 3.6, 0.04, 0.05, 8);
+    kind = "level";
+  } else if (id === "DGS10") {
+    values = levelSeries(rng, dates, 4.1, 0.035, 0.4, 8);
+    kind = "level";
+  } else if (id === "FEDFUNDS") {
+    values = levelSeries(rng, dates, 4.0, 0.02, 0, 7);
+    kind = "level";
+  } else if (id === "BAMLH0A0HYM2") {
+    values = levelSeries(rng, dates, 4.2, 0.05, 2.2, 12);
+    kind = "level";
+  } else if (id === "BAMLC0A0CM") {
+    values = levelSeries(rng, dates, 1.3, 0.02, 0.6, 4);
+    kind = "level";
+  } else if (id === "CPIAUCSL") {
+    values = macroIndex(rng, dates);
+    kind = "level";
+  } else if (assetClass === "VOLATILITY") {
+    values = vixSeries(rng, dates);
+    kind = "level";
+  } else if (assetClass === "RATE" || assetClass === "CREDIT" || assetClass === "MACRO") {
+    values = levelSeries(rng, dates, 4, 0.04, 0.1, 10);
+    kind = "level";
+  } else {
+    values = priceSeries(rng, dates, assetClass);
+    kind = "price";
+  }
+
+  const s: Series = { id, name, assetClass, dates, values, kind };
+  SERIES_CACHE.set(id, s);
+  return s;
+}
+
+// ── Math helpers ────────────────────────────────────────────────────────────
+
+const WINDOW_DAYS: Record<string, number> = {
+  "1W": 5, "1M": 21, "3M": 63, "6M": 126, "1Y": 252, "2Y": 504, "3Y": 756, "5Y": 1260,
+};
+
+interface Stat { mean: number | null; median: number | null; pct_positive: number | null; count: number; }
+
+function summarize(xs: number[]): Stat {
+  const v = xs.filter((x) => Number.isFinite(x));
+  if (!v.length) return { mean: null, median: null, pct_positive: null, count: 0 };
+  const sorted = [...v].sort((a, b) => a - b);
+  const mean = v.reduce((a, b) => a + b, 0) / v.length;
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  const pct_positive = v.filter((x) => x > 0).length / v.length;
+  return { mean, median, pct_positive, count: v.length };
+}
+
+function fwd(values: number[], i: number, h: number): number | null {
+  const j = i + h;
+  if (j >= values.length || values[i] === 0) return null;
+  return values[j] / values[i] - 1;
+}
+
+/** Forward-return statistics over windows for a set of event indices. */
+function fwdStatsAtEvents(values: number[], idx: number[], windows: string[]): Record<string, Stat> {
+  const out: Record<string, Stat> = {};
+  for (const w of windows) {
+    const h = WINDOW_DAYS[w] ?? 21;
+    const rs = idx.map((i) => fwd(values, i, h)).filter((r): r is number => r !== null);
+    out[w] = summarize(rs);
+  }
+  return out;
+}
+
+/** Unconditional baseline forward-return statistics over all observations. */
+function baselineStats(values: number[], windows: string[]): Record<string, Stat> {
+  const out: Record<string, Stat> = {};
+  for (const w of windows) {
+    const h = WINDOW_DAYS[w] ?? 21;
+    const rs: number[] = [];
+    for (let i = 0; i < values.length - h; i += 5) {
+      const r = fwd(values, i, h);
+      if (r !== null) rs.push(r);
+    }
+    out[w] = summarize(rs);
+  }
+  return out;
+}
+
+function drawdownPct(values: number[]): number[] {
+  let peak = values[0];
+  return values.map((v) => {
+    peak = Math.max(peak, v);
+    return peak > 0 ? (v / peak - 1) * 100 : 0;
+  });
+}
+
+function rollingReturns(values: number[], h: number): number[] {
+  const out: number[] = [];
+  for (let i = h; i < values.length; i++) {
+    if (values[i - h] !== 0) out.push((values[i] / values[i - h] - 1) * 100);
+  }
+  return out;
+}
+
+function movingAvg(values: number[], n: number): (number | null)[] {
+  const out: (number | null)[] = [];
+  let sum = 0;
+  for (let i = 0; i < values.length; i++) {
+    sum += values[i];
+    if (i >= n) sum -= values[i - n];
+    out.push(i >= n - 1 ? sum / n : null);
+  }
+  return out;
+}
+
+function pearson(a: number[], b: number[]): number {
+  const n = Math.min(a.length, b.length);
+  if (n < 2) return 0;
+  const am = a.slice(-n), bm = b.slice(-n);
+  const ma = am.reduce((s, x) => s + x, 0) / n;
+  const mb = bm.reduce((s, x) => s + x, 0) / n;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < n; i++) {
+    const x = am[i] - ma, y = bm[i] - mb;
+    num += x * y; da += x * x; db += y * y;
+  }
+  return da && db ? num / Math.sqrt(da * db) : 0;
+}
+
+function dailyReturns(values: number[]): number[] {
+  const out: number[] = [];
+  for (let i = 1; i < values.length; i++) out.push(values[i - 1] ? values[i] / values[i - 1] - 1 : 0);
+  return out;
+}
+
+function pct(x: number | null): number | null {
+  return x === null ? null : Number((x * 100).toFixed(2));
+}
+
+/** Current value's percentile within its own history (0..1). */
+function percentileOf(values: number[], x: number): number {
+  const below = values.filter((v) => v <= x).length;
+  return below / values.length;
+}
+
+// ── Tile assembly helpers ───────────────────────────────────────────────────
+
+function boxTile(tile_id: string, title: string, stats: Record<string, Stat>): TilePayload {
+  return { tile_id, chart_type: "boxplot", title, payload: { statistics: stats } };
+}
+
+function eventTableTile(tile_id: string, title: string, events: Record<string, unknown>[]): TilePayload {
+  return { tile_id, chart_type: "table", title, payload: { events } };
+}
+
+/** Object-mode table: rows keyed by label, columns = inner keys (percent units). */
+function returnTableTile(tile_id: string, title: string, returns: Record<string, Record<string, number | null>>): TilePayload {
+  return { tile_id, chart_type: "table", title, payload: { returns } };
+}
+
+function lineTile(tile_id: string, title: string, values: (number | null)[]): TilePayload {
+  return { tile_id, chart_type: "line", title, payload: { values } };
+}
+
+function barTile(tile_id: string, title: string, returns: Record<string, { mean: number }>): TilePayload {
+  return { tile_id, chart_type: "bar", title, payload: { returns } };
+}
+
+function heatTile(tile_id: string, title: string, months: Record<string, Stat | { latest: number }>): TilePayload {
+  return { tile_id, chart_type: "heatmap", title, payload: { months } };
+}
+
+function gaugeTile(tile_id: string, title: string, regime: string, composite: number): TilePayload {
+  return { tile_id, chart_type: "gauge", title, payload: { stress: { regime, composite_percentile: composite } } };
+}
+
+function regimeFromPercentile(p: number): string {
+  if (p >= 0.85) return "STRESS";
+  if (p >= 0.6) return "ELEVATED";
+  if (p <= 0.2) return "BENIGN";
+  return "NORMAL";
+}
+
+// ── Event detectors ─────────────────────────────────────────────────────────
+
+function detectATH(values: number[], cooldown = 21): number[] {
+  const idx: number[] = [];
+  let peak = -Infinity;
+  let last = -Infinity;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] > peak) {
+      peak = values[i];
+      if (i - last >= cooldown) { idx.push(i); last = i; }
+    }
+  }
+  return idx;
+}
+
+function detectThresholdCross(values: number[], threshold: number, cooldown = 21): number[] {
+  const idx: number[] = [];
+  let last = -Infinity;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i - 1] < threshold && values[i] >= threshold && i - last >= cooldown) {
+      idx.push(i); last = i;
+    }
+  }
+  return idx;
+}
+
+interface DrawdownEvent { peakDate: string; troughDate: string; depthPct: number; lengthDays: number; recoveryDays: number | null; }
+
+function drawdownEvents(s: Series, thresholdPct: number): DrawdownEvent[] {
+  const { values, dates } = s;
+  const events: DrawdownEvent[] = [];
+  let peak = values[0], peakIdx = 0, inDD = false, troughIdx = 0;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] >= peak) {
+      if (inDD) {
+        const depth = (values[troughIdx] / values[peakIdx] - 1) * 100;
+        if (depth <= thresholdPct) {
+          events.push({
+            peakDate: dates[peakIdx], troughDate: dates[troughIdx],
+            depthPct: Number(depth.toFixed(2)),
+            lengthDays: troughIdx - peakIdx,
+            recoveryDays: i - troughIdx,
+          });
+        }
+      }
+      peak = values[i]; peakIdx = i; inDD = false;
+    } else {
+      if (!inDD || values[i] < values[troughIdx]) troughIdx = i;
+      inDD = true;
+    }
+  }
+  // open drawdown not yet recovered
+  if (inDD) {
+    const depth = (values[troughIdx] / values[peakIdx] - 1) * 100;
+    if (depth <= thresholdPct) {
+      events.push({
+        peakDate: dates[peakIdx], troughDate: dates[troughIdx],
+        depthPct: Number(depth.toFixed(2)), lengthDays: troughIdx - peakIdx, recoveryDays: null,
+      });
+    }
+  }
+  return events.sort((a, b) => a.depthPct - b.depthPct);
+}
+
+// ── View builders ───────────────────────────────────────────────────────────
+
+type Builder = (ctx: { series: Series[]; windows: string[]; vix: Series }) => Omit<AnalysisResult, "view_id" | "series_used" | "warnings" | "metadata">;
+
+function statsRow(st: Record<string, Stat>, windows: string[]): Record<string, number | null> {
+  const row: Record<string, number | null> = {};
+  for (const w of windows) row[w] = pct(st[w]?.mean ?? null);
+  return row;
+}
+
+const BUILDERS: Record<string, Builder> = {
+  ath_forward_returns: ({ series, windows }) => {
+    const s = series[0];
+    const idx = detectATH(s.values);
+    const ev = fwdStatsAtEvents(s.values, idx, windows);
+    const base = baselineStats(s.values, windows);
+    const events = idx.slice(-40).map((i) => {
+      const row: Record<string, unknown> = { date: s.dates[i], level: Number(s.values[i].toFixed(2)) };
+      for (const w of windows) row[`${w} %`] = pct(fwd(s.values, i, WINDOW_DAYS[w] ?? 21));
+      return row;
+    });
+    return {
+      sample_size: idx.length,
+      narrative:
+        `All-time-high event study on ${s.name}.\n` +
+        `• Detected ${idx.length} fresh all-time highs (21-day cooldown) over ${HISTORY_YEARS}y of history.\n` +
+        `• 1Y forward median after an ATH: ${pct(ev["1Y"]?.median ?? null) ?? "—"}% vs baseline ${pct(base["1Y"]?.median ?? null) ?? "—"}%.\n` +
+        `Caveats:\nNew highs are not a sell signal on their own — forward returns are conditional and noisy.`,
+      tiles: [
+        eventTableTile("event_table", "All-Time High Events", events),
+        boxTile("forward_return_box", "Forward Returns After ATH", ev),
+        lineTile("cumulative_chart", `${s.id} Price`, s.values.slice(-120)),
+        returnTableTile("baseline_comparison", "Post-ATH vs Baseline (mean %)", {
+          "Post-ATH": statsRow(ev, windows), Baseline: statsRow(base, windows),
+        }),
+      ],
+    };
+  },
+
+  drawdown_analysis: ({ series }) => {
+    const s = series[0];
+    const events = drawdownEvents(s, -5);
+    const dd = drawdownPct(s.values);
+    const recov = summarize(events.filter((e) => e.recoveryDays !== null).map((e) => e.recoveryDays as number));
+    return {
+      sample_size: events.length,
+      narrative:
+        `Drawdown analysis on ${s.name} (threshold ≤ -5%).\n` +
+        `• ${events.length} drawdowns exceeded -5%; worst was ${events[0]?.depthPct ?? "—"}%.\n` +
+        `• Median recovery time: ${recov.median?.toFixed(0) ?? "—"} trading days.\n` +
+        `Caveats:\nSynthetic series — magnitudes are illustrative.`,
+      tiles: [
+        eventTableTile("drawdown_table", "Drawdowns ≤ -5%", events.slice(0, 40) as unknown as Record<string, unknown>[]),
+        lineTile("drawdown_chart", "Drawdown from Peak (%)", dd.slice(-250)),
+        eventTableTile("recovery_histogram", "Recovery Profile", events.slice(0, 40) as unknown as Record<string, unknown>[]),
+      ],
+    };
+  },
+
+  vix_spike_study: ({ series, windows, vix }) => {
+    const s = series.find((x) => x.assetClass !== "VOLATILITY") ?? series[0];
+    const idx = detectThresholdCross(vix.values, 30);
+    const ev = fwdStatsAtEvents(s.values, idx, windows);
+    const events = idx.slice(-40).map((i) => {
+      const row: Record<string, unknown> = { date: vix.dates[i], vix: Number(vix.values[i].toFixed(1)) };
+      for (const w of windows) row[`${w} %`] = pct(fwd(s.values, i, WINDOW_DAYS[w] ?? 21));
+      return row;
+    });
+    return {
+      sample_size: idx.length,
+      narrative:
+        `VIX spike event study — ${s.name} forward returns after VIX crosses above 30.\n` +
+        `• ${idx.length} spike events detected.\n` +
+        `• 3M forward median: ${pct(ev["3M"]?.median ?? null) ?? "—"}% (panic often precedes recovery).\n` +
+        `Caveats:\nVIX series is synthetic; thresholds illustrative.`,
+      tiles: [
+        eventTableTile("event_table", "VIX > 30 Events", events),
+        boxTile("forward_return_box", "Forward Returns After VIX Spike", ev),
+        lineTile("vix_overlay", "VIX (synthetic)", vix.values.slice(-250)),
+      ],
+    };
+  },
+
+  largest_vix_increases: ({ series, windows, vix }) => buildVixChange(series, windows, vix, true),
+  largest_vix_decreases: ({ series, windows, vix }) => buildVixChange(series, windows, vix, false),
+
+  rolling_returns: ({ series, windows }) => {
+    const s = series[0];
+    const stats: Record<string, Stat> = {};
+    const tableRows: Record<string, number | null> = {};
+    for (const w of windows) {
+      const rr = rollingReturns(s.values, WINDOW_DAYS[w] ?? 21).map((x) => x / 100);
+      stats[w] = summarize(rr);
+      tableRows[`${w} mean %`] = pct(stats[w].mean);
+    }
+    const oneY = rollingReturns(s.values, 252);
+    const cur = oneY[oneY.length - 1] ?? 0;
+    const p = percentileOf(oneY, cur);
+    return {
+      sample_size: oneY.length,
+      narrative:
+        `Rolling-return distribution for ${s.name}.\n` +
+        `• Current 1Y rolling return sits at the ${(p * 100).toFixed(0)}th percentile of its own history.\n` +
+        `Caveats:\nDistributions are backward-looking.`,
+      tiles: [
+        boxTile("histogram", "Rolling Return Distribution", stats),
+        gaugeTile("percentile_gauge", "1Y Rolling Return Percentile", regimeFromPercentile(p), p),
+        lineTile("rolling_chart", "1Y Rolling Return (%)", oneY.slice(-250)),
+        returnTableTile("statistics_table", "Rolling Return Stats", { [s.id]: tableRows }),
+      ],
+    };
+  },
+
+  monthly_seasonality: ({ series }) => {
+    const s = series[0];
+    const byMonth: Record<number, number[]> = {};
+    const dr = dailyReturns(s.values);
+    // monthly returns
+    const monthMap = new Map<string, number[]>();
+    for (let i = 1; i < s.values.length; i++) {
+      const key = s.dates[i].slice(0, 7);
+      const arr = monthMap.get(key) ?? [];
+      arr.push(dr[i - 1]);
+      monthMap.set(key, arr);
+    }
+    for (const [key, rets] of monthMap) {
+      const m = Number(key.slice(5, 7));
+      const compounded = rets.reduce((a, r) => a * (1 + r), 1) - 1;
+      (byMonth[m] ??= []).push(compounded);
+    }
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const months: Record<string, Stat> = {};
+    const bar: Record<string, { mean: number }> = {};
+    MONTHS.forEach((label, i) => {
+      const st = summarize(byMonth[i + 1] ?? []);
+      months[label] = st;
+      bar[label] = { mean: st.mean ?? 0 };
+    });
+    const mayOct = [4, 5, 6, 7, 8, 9].flatMap((m) => byMonth[m + 1] ?? []);
+    const novApr = [10, 11, 0, 1, 2, 3].flatMap((m) => byMonth[m + 1] ?? []);
+    // day-of-week
+    const dow: Record<string, number[]> = {};
+    const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    for (let i = 1; i < s.values.length; i++) {
+      const d = new Date(`${s.dates[i]}T00:00:00Z`).getUTCDay();
+      (dow[DOW[d]] ??= []).push(dr[i - 1]);
+    }
+    const dowBar: Record<string, { mean: number }> = {};
+    ["Mon", "Tue", "Wed", "Thu", "Fri"].forEach((d) => { dowBar[d] = { mean: summarize(dow[d] ?? []).mean ?? 0 }; });
+    return {
+      sample_size: monthMap.size,
+      narrative:
+        `Monthly seasonality for ${s.name}.\n` +
+        `• "Sell in May" check: May–Oct mean ${pct(summarize(mayOct).mean) ?? "—"}% vs Nov–Apr ${pct(summarize(novApr).mean) ?? "—"}% per month.\n` +
+        `Caveats:\nSeasonality is a weak, regime-dependent effect.`,
+      tiles: [
+        heatTile("seasonality_heatmap", "Average Return by Month", months),
+        barTile("monthly_bar", "Mean Monthly Return", bar),
+        barTile("sell_in_may", "Sell in May? (mean monthly)", { "May–Oct": { mean: summarize(mayOct).mean ?? 0 }, "Nov–Apr": { mean: summarize(novApr).mean ?? 0 } }),
+        barTile("day_of_week", "Mean Return by Weekday", dowBar),
+      ],
+    };
+  },
+
+  cross_asset_correlation: ({ series }) => {
+    const list = series.length >= 2 ? series : series;
+    const rets = list.map((s) => dailyReturns(s.values));
+    const correlations: Record<string, { latest: number }> = {};
+    for (let i = 0; i < list.length; i++)
+      for (let j = i + 1; j < list.length; j++)
+        correlations[`${list[i].id}/${list[j].id}`] = { latest: Number(pearson(rets[i], rets[j]).toFixed(2)) };
+    // rolling 63d corr of first pair
+    const rollCorr: (number | null)[] = [];
+    if (list.length >= 2) {
+      const a = rets[0], b = rets[1], win = 63;
+      for (let k = win; k < Math.min(a.length, b.length); k += 2)
+        rollCorr.push(Number((pearson(a.slice(k - win, k), b.slice(k - win, k)) * 100).toFixed(1)));
+    }
+    return {
+      sample_size: list[0]?.values.length ?? 0,
+      narrative:
+        `Cross-asset correlation across ${list.map((s) => s.id).join(", ")}.\n` +
+        `• ${Object.keys(correlations).length} pairwise correlations computed on daily returns.\n` +
+        `Caveats:\nCorrelations are regime-dependent and rise in stress.`,
+      tiles: [
+        heatTile("correlation_matrix", "Pairwise Correlation (latest)", correlations),
+        lineTile("rolling_corr_chart", "Rolling 63d Correlation (%)", rollCorr.slice(-120)),
+      ],
+    };
+  },
+
+  relative_strength: ({ series, windows }) => {
+    const a = series[0];
+    const b = series[1] ?? series[0];
+    const n = Math.min(a.values.length, b.values.length);
+    const ratio = a.values.slice(-n).map((v, i) => Number(((v / a.values[a.values.length - n]) / (b.values.slice(-n)[i] / b.values[b.values.length - n]) * 100).toFixed(2)));
+    const excess: Record<string, number | null> = {};
+    for (const w of windows) {
+      const h = WINDOW_DAYS[w] ?? 21;
+      const ra = fwd(a.values, a.values.length - 1 - h, h);
+      const rb = fwd(b.values, b.values.length - 1 - h, h);
+      excess[w] = ra !== null && rb !== null ? Number(((ra - rb) * 100).toFixed(2)) : null;
+    }
+    return {
+      sample_size: n,
+      narrative:
+        `Relative strength: ${a.name} vs ${b.name}.\n` +
+        `• Ratio rebased to 100 at window start; rising = ${a.id} outperforming.\n` +
+        `Caveats:\nLeadership rotates across regimes.`,
+      tiles: [
+        lineTile("relative_strength_chart", `${a.id} / ${b.id} (rebased)`, ratio.slice(-250)),
+        returnTableTile("excess_return_table", `Excess Return (${a.id} − ${b.id})`, { [`${a.id}−${b.id}`]: excess }),
+      ],
+    };
+  },
+
+  yield_curve_analysis: ({ series }) => {
+    const two = buildSeries({ series_id: "DGS2", asset_class: "RATE" });
+    const ten = buildSeries({ series_id: "DGS10", asset_class: "RATE" });
+    const n = Math.min(two.values.length, ten.values.length);
+    const slope = ten.values.slice(-n).map((v, i) => Number(((v - two.values.slice(-n)[i]) * 100).toFixed(1)));
+    const curCurve = [two.values[two.values.length - 1], (two.values[two.values.length - 1] + ten.values[ten.values.length - 1]) / 2, ten.values[ten.values.length - 1], ten.values[ten.values.length - 1] + 0.2];
+    const invEvents: Record<string, unknown>[] = [];
+    for (let i = 1; i < slope.length; i++)
+      if (slope[i - 1] >= 0 && slope[i] < 0) invEvents.push({ date: ten.dates.slice(-n)[i], "2s10s bps": slope[i] });
+    return {
+      sample_size: n,
+      narrative:
+        `Treasury curve deep dive (2s10s).\n` +
+        `• Current 2s10s slope: ${slope[slope.length - 1]} bps.\n` +
+        `• ${invEvents.length} inversion onsets in history.\n` +
+        `Caveats:\nSynthetic rates — for shape illustration only.`,
+      tiles: [
+        lineTile("curve_chart", "Current Curve (2Y·5Y·10Y·30Y, %)", curCurve.map((v) => Number(v.toFixed(2)))),
+        lineTile("slope_history", "2s10s Slope (bps)", slope.slice(-250)),
+        eventTableTile("inversion_events", "Inversion Onsets", invEvents.slice(-30)),
+      ],
+    };
+  },
+
+  credit_spread_stress: ({ series }) => {
+    const hy = buildSeries({ series_id: "BAMLH0A0HYM2", asset_class: "CREDIT" });
+    const ig = buildSeries({ series_id: "BAMLC0A0CM", asset_class: "CREDIT" });
+    const cur = hy.values[hy.values.length - 1];
+    const p = percentileOf(hy.values, cur);
+    const mean = hy.values.reduce((a, b) => a + b, 0) / hy.values.length;
+    const sd = Math.sqrt(hy.values.reduce((a, b) => a + (b - mean) ** 2, 0) / hy.values.length);
+    const z = hy.values.map((v) => Number(((v - mean) / (sd || 1)).toFixed(2)));
+    return {
+      sample_size: hy.values.length,
+      narrative:
+        `Credit-spread stress monitor (HY & IG OAS).\n` +
+        `• HY OAS at ${cur.toFixed(2)}% — ${(p * 100).toFixed(0)}th percentile of history.\n` +
+        `• Current HY z-score: ${z[z.length - 1]}.\n` +
+        `Caveats:\nSynthetic spreads; not a live credit feed.`,
+      tiles: [
+        gaugeTile("spread_gauge", "HY OAS Stress", regimeFromPercentile(p), p),
+        lineTile("spread_history", "HY vs IG OAS (HY %)", hy.values.slice(-250)),
+        lineTile("zscore_chart", "HY OAS Z-Score", z.slice(-250)),
+      ],
+    };
+  },
+
+  purchasing_power: ({ series }) => {
+    const asset = series.find((s) => s.kind === "price") ?? series[0];
+    const cpi = buildSeries({ series_id: "CPIAUCSL", asset_class: "MACRO" });
+    const n = Math.min(asset.values.length, cpi.values.length);
+    const real = asset.values.slice(-n).map((v, i) => Number((v / asset.values[asset.values.length - n] / (cpi.values.slice(-n)[i] / cpi.values[cpi.values.length - n]) * 100).toFixed(2)));
+    const nominalTotal = asset.values[asset.values.length - 1] / asset.values[0] - 1;
+    const cpiTotal = cpi.values[cpi.values.length - 1] / cpi.values[0] - 1;
+    return {
+      sample_size: n,
+      narrative:
+        `Purchasing-power erosion: ${asset.name} real vs nominal.\n` +
+        `• Nominal total return ${(nominalTotal * 100).toFixed(0)}% vs CPI ${(cpiTotal * 100).toFixed(0)}% over the sample.\n` +
+        `Caveats:\nSynthetic CPI path.`,
+      tiles: [
+        lineTile("purchasing_power_chart", "Real Value (CPI-adjusted, rebased)", real.slice(-250)),
+        returnTableTile("real_vs_nominal", "Nominal vs Real (total %)", {
+          Nominal: { Total: Number((nominalTotal * 100).toFixed(1)) },
+          Real: { Total: Number(((nominalTotal - cpiTotal) * 100).toFixed(1)) },
+        }),
+      ],
+    };
+  },
+
+  volatility_regime: ({ series, vix }) => {
+    const s = series.find((x) => x.assetClass !== "VOLATILITY") ?? series[0];
+    const dr = dailyReturns(s.values);
+    const buckets: Record<string, number[]> = { "Low (<15)": [], "Normal (15-25)": [], "Elevated (25-35)": [], "High (>35)": [] };
+    for (let i = 1; i < s.values.length; i++) {
+      const v = vix.values[i];
+      const r = dr[i - 1];
+      if (v < 15) buckets["Low (<15)"].push(r);
+      else if (v < 25) buckets["Normal (15-25)"].push(r);
+      else if (v < 35) buckets["Elevated (25-35)"].push(r);
+      else buckets["High (>35)"].push(r);
+    }
+    const regimeReturns: Record<string, Record<string, number | null>> = {};
+    for (const [k, arr] of Object.entries(buckets)) {
+      const st = summarize(arr);
+      regimeReturns[k] = { "Mean daily %": pct(st.mean), "% positive": st.pct_positive !== null ? Number((st.pct_positive * 100).toFixed(0)) : null, Days: st.count };
+    }
+    // rolling 21d realized vol annualized
+    const rv: (number | null)[] = [];
+    for (let i = 21; i < dr.length; i += 2) {
+      const w = dr.slice(i - 21, i);
+      const m = w.reduce((a, b) => a + b, 0) / w.length;
+      const sd = Math.sqrt(w.reduce((a, b) => a + (b - m) ** 2, 0) / w.length);
+      rv.push(Number((sd * Math.sqrt(252) * 100).toFixed(1)));
+    }
+    return {
+      sample_size: s.values.length,
+      narrative:
+        `Volatility-regime analysis of ${s.name} vs VIX buckets.\n` +
+        `• Mean daily return in high-vol (>35) regime: ${regimeReturns["High (>35)"]?.["Mean daily %"] ?? "—"}%.\n` +
+        `Caveats:\nVIX is synthetic.`,
+      tiles: [
+        lineTile("regime_chart", "VIX (synthetic)", vix.values.slice(-250)),
+        returnTableTile("regime_return_table", "Returns by VIX Regime", regimeReturns),
+        lineTile("rolling_vol", "21d Realized Vol (annualized %)", rv.slice(-150)),
+      ],
+    };
+  },
+
+  rate_cycle_analysis: ({ series }) => {
+    const asset = series.find((s) => s.kind === "price") ?? series[0];
+    const ff = buildSeries({ series_id: "FEDFUNDS", asset_class: "RATE" });
+    const n = Math.min(asset.values.length, ff.values.length);
+    const aV = asset.values.slice(-n), fV = ff.values.slice(-n);
+    const hiking: number[] = [], cutting: number[] = [];
+    const ar = dailyReturns(aV);
+    for (let i = 22; i < n; i++) {
+      const slope = fV[i] - fV[i - 21];
+      if (slope > 0.02) hiking.push(ar[i - 1]);
+      else if (slope < -0.02) cutting.push(ar[i - 1]);
+    }
+    return {
+      sample_size: n,
+      narrative:
+        `Rate-cycle impact on ${asset.name} (Fed funds path).\n` +
+        `• Mean daily return while hiking: ${pct(summarize(hiking).mean) ?? "—"}% vs cutting: ${pct(summarize(cutting).mean) ?? "—"}%.\n` +
+        `Caveats:\nSynthetic policy path.`,
+      tiles: [
+        lineTile("cycle_timeline", "Fed Funds (synthetic %)", fV.slice(-250)),
+        boxTile("hiking_returns", "Daily Returns — Hiking", { Hiking: summarize(hiking) }),
+        boxTile("cutting_returns", "Daily Returns — Cutting", { Cutting: summarize(cutting) }),
+      ],
+    };
+  },
+
+  asset_class_returns: ({ series, windows }) => {
+    const ws = windows.length ? windows : ["1M", "3M", "1Y"];
+    const table: Record<string, Record<string, number | null>> = {};
+    const bar: Record<string, { mean: number }> = {};
+    for (const s of series) {
+      const row: Record<string, number | null> = {};
+      for (const w of ws) {
+        const h = WINDOW_DAYS[w] ?? 21;
+        row[w] = pct(fwd(s.values, s.values.length - 1 - h, h));
+      }
+      table[s.id] = row;
+      const oneY = fwd(s.values, s.values.length - 1 - 252, 252);
+      bar[s.id] = { mean: oneY ?? 0 };
+    }
+    return {
+      sample_size: series.length,
+      narrative:
+        `Cross-asset return comparison across ${series.length} series (Bilello-style).\n` +
+        `• Trailing returns computed over ${ws.join(", ")}.\n` +
+        `Caveats:\nSynthetic series; ETF proxies labelled.`,
+      tiles: [
+        returnTableTile("return_table", "Trailing Returns (%)", table),
+        barTile("bar_chart", "Trailing 1Y Return", bar),
+        barTile("ranking_quilt", "1Y Ranking", bar),
+      ],
+    };
+  },
+
+  ma_crossover_study: ({ series, windows }) => {
+    const s = series[0];
+    const maS = movingAvg(s.values, 50);
+    const maL = movingAvg(s.values, 200);
+    const idx: number[] = [];
+    for (let i = 1; i < s.values.length; i++) {
+      const prev = (maS[i - 1] ?? 0) - (maL[i - 1] ?? 0);
+      const cur = (maS[i] ?? 0) - (maL[i] ?? 0);
+      if (maS[i] !== null && maL[i] !== null && prev <= 0 && cur > 0) idx.push(i);
+    }
+    const ev = fwdStatsAtEvents(s.values, idx, windows);
+    const events = idx.slice(-40).map((i) => {
+      const row: Record<string, unknown> = { date: s.dates[i], level: Number(s.values[i].toFixed(2)) };
+      for (const w of windows) row[`${w} %`] = pct(fwd(s.values, i, WINDOW_DAYS[w] ?? 21));
+      return row;
+    });
+    return {
+      sample_size: idx.length,
+      narrative:
+        `Golden-cross study on ${s.name} (50d over 200d).\n` +
+        `• ${idx.length} golden crosses detected.\n` +
+        `Caveats:\nTrend signals lag.`,
+      tiles: [
+        lineTile("crossover_chart", `${s.id} Price`, s.values.slice(-200)),
+        eventTableTile("event_table", "Golden Cross Events", events),
+        boxTile("forward_return_box", "Forward Returns After Cross", ev),
+      ],
+    };
+  },
+
+  drawdown_recovery: ({ series }) => {
+    const s = series[0];
+    const events = drawdownEvents(s, -10);
+    const dd = drawdownPct(s.values);
+    return {
+      sample_size: events.length,
+      narrative:
+        `Drawdown-recovery patterns for ${s.name} (≤ -10%).\n` +
+        `• ${events.length} major drawdowns; median recovery ${summarize(events.filter((e) => e.recoveryDays !== null).map((e) => e.recoveryDays as number)).median?.toFixed(0) ?? "—"} days.\n` +
+        `Caveats:\nRecovery time varies with regime.`,
+      tiles: [
+        eventTableTile("recovery_table", "Major Drawdowns & Recovery", events.slice(0, 40) as unknown as Record<string, unknown>[]),
+        lineTile("recovery_chart", "Drawdown from Peak (%)", dd.slice(-250)),
+      ],
+    };
+  },
+
+  inflation_surprise: ({ series, windows }) => {
+    const asset = series.find((s) => s.kind === "price") ?? series[0];
+    const cpi = buildSeries({ series_id: "CPIAUCSL", asset_class: "MACRO" });
+    // "surprises" = months where CPI MoM deviates strongly from trailing average
+    const idx: number[] = [];
+    for (let i = 252; i < cpi.values.length; i++) {
+      const mom = cpi.values[i] / cpi.values[i - 21] - 1;
+      const trail = cpi.values[i - 21] / cpi.values[i - 42] - 1;
+      if (Math.abs(mom - trail) > 0.004 && i - (idx[idx.length - 1] ?? -999) >= 21) idx.push(i);
+    }
+    const ev = fwdStatsAtEvents(asset.values, idx, windows);
+    const events = idx.slice(-30).map((i) => {
+      const row: Record<string, unknown> = { date: cpi.dates[i], "cpi mom %": Number(((cpi.values[i] / cpi.values[i - 21] - 1) * 100).toFixed(2)) };
+      for (const w of windows) row[`${w} %`] = pct(fwd(asset.values, i, WINDOW_DAYS[w] ?? 21));
+      return row;
+    });
+    return {
+      sample_size: idx.length,
+      narrative:
+        `Inflation-surprise study — ${asset.name} after CPI surprises.\n` +
+        `• ${idx.length} surprise months flagged.\n` +
+        `Caveats:\nSynthetic CPI; surprises are heuristic.`,
+      tiles: [
+        eventTableTile("surprise_table", "CPI Surprise Events", events),
+        boxTile("forward_return_box", "Forward Returns After Surprise", ev),
+      ],
+    };
+  },
+
+  zscore_extremes: ({ series, windows }) => {
+    const s = series[0];
+    const win = 63;
+    const z: number[] = new Array(s.values.length).fill(0);
+    const dr = dailyReturns(s.values);
+    for (let i = win; i < dr.length; i++) {
+      const w = dr.slice(i - win, i);
+      const m = w.reduce((a, b) => a + b, 0) / w.length;
+      const sd = Math.sqrt(w.reduce((a, b) => a + (b - m) ** 2, 0) / w.length);
+      z[i] = sd ? (dr[i] - m) / sd : 0;
+    }
+    const idx: number[] = [];
+    for (let i = win; i < z.length; i++) if (z[i] <= -2 && i - (idx[idx.length - 1] ?? -999) >= 10) idx.push(i);
+    const ev = fwdStatsAtEvents(s.values, idx, windows);
+    const events = idx.slice(-40).map((i) => {
+      const row: Record<string, unknown> = { date: s.dates[i], zscore: Number(z[i].toFixed(2)) };
+      for (const w of windows) row[`${w} %`] = pct(fwd(s.values, i, WINDOW_DAYS[w] ?? 21));
+      return row;
+    });
+    return {
+      sample_size: idx.length,
+      narrative:
+        `Z-score extreme study on ${s.name} (daily return ≤ -2σ).\n` +
+        `• ${idx.length} extreme down-days flagged.\n` +
+        `Caveats:\nMean-reversion is not guaranteed.`,
+      tiles: [
+        lineTile("zscore_chart", "Rolling Return Z-Score", z.slice(-250).map((x) => Number(x.toFixed(2)))),
+        eventTableTile("extreme_events", "Extreme Down-Days (≤ -2σ)", events),
+        boxTile("forward_return_box", "Forward Returns After Extreme", ev),
+      ],
+    };
+  },
+};
+
+function buildVixChange(series: Series[], windows: string[], vix: Series, increases: boolean): ReturnType<Builder> {
+  const s = series.find((x) => x.assetClass !== "VOLATILITY") ?? series[0];
+  const changes: { i: number; chg: number }[] = [];
+  const period = 5;
+  for (let i = period; i < vix.values.length; i++)
+    changes.push({ i, chg: vix.values[i] / vix.values[i - period] - 1 });
+  changes.sort((a, b) => (increases ? b.chg - a.chg : a.chg - b.chg));
+  const top = changes.slice(0, 30);
+  const idx = top.map((c) => c.i);
+  const ev = fwdStatsAtEvents(s.values, idx, windows);
+  const events = top.map((c) => {
+    const row: Record<string, unknown> = { date: vix.dates[c.i], "vix chg %": Number((c.chg * 100).toFixed(1)) };
+    for (const w of windows) row[`${w} %`] = pct(fwd(s.values, c.i, WINDOW_DAYS[w] ?? 21));
+    return row;
+  });
+  return {
+    sample_size: idx.length,
+    narrative:
+      `Largest VIX ${increases ? "increases" : "decreases"} (5d) and ${s.name} forward returns.\n` +
+      `• Top ${top.length} ${increases ? "spikes" : "collapses"} ranked by 5-day VIX change.\n` +
+      `Caveats:\nSynthetic VIX series.`,
+    tiles: [
+      eventTableTile("event_table", `Largest VIX ${increases ? "Increases" : "Decreases"}`, events),
+      boxTile("forward_return_box", "Forward Returns", ev),
+      eventTableTile("vix_change_scatter", "VIX Change vs Forward Return", events),
+    ],
+  };
+}
+
+// ── Entry point ─────────────────────────────────────────────────────────────
+
+export function runMarketLens(req: LensRunRequest): AnalysisResult {
+  const inputs = (req.series ?? []).length ? req.series! : [{ series_id: "SPY", asset_class: "EQUITY" }];
+  const series = inputs.map(buildSeries);
+  const windows = (req.forward_windows ?? ["1W", "1M", "3M", "6M", "1Y"]).filter((w) => w in WINDOW_DAYS);
+  const vix = buildSeries({ series_id: "^VIX", asset_class: "VOLATILITY" });
+
+  const builder = BUILDERS[req.view_id];
+  const proxyNotes = inputs
+    .map((s) => (PROXY_FOR[s.series_id] ? `${s.series_id} = ${PROXY_FOR[s.series_id]} (ETF proxy)` : null))
+    .filter((x): x is string => x !== null);
+
+  const warnings = ["Synthetic data — deterministic local model. Set MARKET_LENS_URL to connect the live Yahoo/FRED engine."];
+
+  if (!builder) {
+    // Generic fallback: forward-return study on the first series.
+    const s = series[0];
+    const idx = Array.from({ length: Math.floor((s.values.length - 252) / 21) }, (_, k) => k * 21);
+    const ev = fwdStatsAtEvents(s.values, idx, windows);
+    return {
+      view_id: req.view_id,
+      series_used: series.map((x) => x.id),
+      warnings,
+      sample_size: idx.length,
+      narrative: `Generic forward-return study on ${s.name} (view "${req.view_id}" not specialised locally).`,
+      metadata: { proxy_notes: proxyNotes, engine: "local-ts" },
+      tiles: [
+        boxTile("forward_return_box", "Forward Returns", ev),
+        lineTile("cumulative_chart", `${s.id} Price`, s.values.slice(-120)),
+      ],
+    };
+  }
+
+  const built = builder({ series, windows, vix });
+  return {
+    view_id: req.view_id,
+    series_used: series.map((x) => x.id),
+    warnings,
+    metadata: { proxy_notes: proxyNotes, engine: "local-ts" },
+    ...built,
+  };
+}
