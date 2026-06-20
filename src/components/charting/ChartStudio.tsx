@@ -5,10 +5,11 @@ import clsx from "clsx";
 import { Plus, X, Search } from "lucide-react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
-import { fmtNum } from "@/lib/format";
 import { ChartCanvas } from "./ChartCanvas";
 import { useChartSeries } from "@/lib/charting/resolver";
 import { RANGE_PRESETS, SERIES_COLORS, type ChartType, type RangePreset, type SeriesRef } from "@/lib/charting/spec";
+import { TRANSFORMS, TRANSFORM_LABELS, transformFmt, type Transform } from "@/lib/charting/transforms";
+import { US_RECESSIONS } from "@/lib/charting/recessions";
 import type { CatalogItem } from "@/data/chartCatalog";
 
 const MAX_SERIES = 6;
@@ -25,20 +26,23 @@ interface ChartStudioProps {
   defaultRefs: SeriesRef[];
   allowChartType?: boolean;
   defaultChartType?: ChartType;
+  /** Show the NBER recession-shading toggle (macro studio). */
+  recessionShading?: boolean;
 }
 
 function refKey(r: SeriesRef): string {
   return `${r.source}:${r.id}`;
 }
 
-export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChartType = false, defaultChartType = "line" }: ChartStudioProps) {
+export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChartType = false, defaultChartType = "line", recessionShading = false }: ChartStudioProps) {
   const [refs, setRefs] = useState<SeriesRef[]>(defaultRefs);
   const [range, setRange] = useState<RangePreset>("2Y");
-  const [normalize, setNormalize] = useState(false);
+  const [transform, setTransform] = useState<Transform>("none");
   const [chartType, setChartType] = useState<ChartType>(defaultChartType);
+  const [showRecession, setShowRecession] = useState(recessionShading);
   const [query, setQuery] = useState("");
 
-  const { axis, series, loading } = useChartSeries(refs, range, normalize ? "index100" : "none");
+  const { axis, series, loading } = useChartSeries(refs, range, transform);
 
   const byId = useMemo(() => new Map(catalog.map((c) => [c.id, c])), [catalog]);
 
@@ -64,7 +68,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
     area: chartType === "area",
   }));
 
-  const yFmt = normalize ? (v: number) => v.toFixed(0) : (v: number) => fmtNum(v, 2);
+  const yFmt = transformFmt(transform);
   const sources = Array.from(new Set(series.map((s) => s.source)));
 
   const btn = "rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide transition-colors";
@@ -87,7 +91,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
       <KpiStrip>
         <Stat label="Series" value={refs.length} sub={`of ${MAX_SERIES} max`} tone="amber" />
         <Stat label="Range" value={range} sub="lookback" />
-        <Stat label="Mode" value={normalize ? "Indexed" : "Level"} sub={normalize ? "rebased to 100" : "native units"} tone={normalize ? "amber" : "neutral"} />
+        <Stat label="Transform" value={TRANSFORM_LABELS[transform]} sub={transform === "none" ? "native units" : "applied"} tone={transform === "none" ? "neutral" : "amber"} />
         <Stat label="Points" value={axis.length} sub={loading ? "loading…" : "observations"} tone={axis.length ? "up" : "neutral"} />
         <Stat label="Sources" value={sources.join(", ") || "—"} sub="provenance" />
       </KpiStrip>
@@ -134,10 +138,23 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
           ))}
         </div>
 
-        {/* Normalize toggle */}
-        <button onClick={() => setNormalize((v) => !v)} className={clsx(btn, normalize ? "border-term-amber bg-term-amber/15 text-term-amber" : "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")}>
-          Normalize ·100
-        </button>
+        {/* Transform */}
+        <select
+          value={transform}
+          onChange={(e) => setTransform(e.target.value as Transform)}
+          className="h-6 rounded-sm border border-term-border bg-term-panel-2 px-1.5 text-2xs text-term-text outline-none focus:border-term-amber"
+        >
+          {TRANSFORMS.map((t) => (
+            <option key={t} value={t}>{TRANSFORM_LABELS[t]}</option>
+          ))}
+        </select>
+
+        {/* Recession shading (macro) */}
+        {recessionShading && (
+          <button onClick={() => setShowRecession((v) => !v)} className={clsx(btn, showRecession ? "border-term-amber bg-term-amber/15 text-term-amber" : "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")}>
+            Recessions
+          </button>
+        )}
 
         {/* Chart type (MKC) */}
         {allowChartType && (
@@ -154,7 +171,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
       <div className="flex flex-1 flex-col gap-2 p-2">
         <Panel title="Chart" code={code} accent>
           <div className="p-2">
-            <ChartCanvas axis={axis} series={canvasSeries} height={380} yFmt={yFmt} />
+            <ChartCanvas axis={axis} series={canvasSeries} height={380} yFmt={yFmt} recessions={showRecession ? US_RECESSIONS : undefined} />
           </div>
           {/* Legend */}
           <div className="flex flex-wrap gap-1.5 border-t border-term-border px-2 py-1.5">

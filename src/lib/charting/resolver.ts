@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { type SeriesRef, type RangePreset, type Transform, rangeMonths } from "./spec";
+import { type SeriesRef, type RangePreset, rangeMonths } from "./spec";
+import { applyPointTransform, applyWindowTransform, type Transform } from "./transforms";
 
 export interface ResolvedSeries {
   ref: SeriesRef;
@@ -75,22 +76,31 @@ export function useChartSeries(refs: SeriesRef[], range: RangePreset, transform:
   const { axis, series } = useMemo(() => {
     if (!raw.length) return { axis: [] as string[], series: [] as ResolvedSeries[] };
 
+    // 1. point transform (pct/yoy/mom/log) on each series' own dense history
+    const transformed = raw.map((r) => {
+      const clean = r.obs.filter((o) => o.value != null) as { date: string; value: number }[];
+      const dates = clean.map((o) => o.date);
+      const values = clean.map((o) => o.value);
+      const tv = applyPointTransform(transform, dates, values);
+      const m = new Map<string, number | null>();
+      dates.forEach((d, i) => m.set(d, tv[i]));
+      return { ref: r.ref, label: r.label, source: r.source, dates, map: m };
+    });
+
+    // 2. shared axis across all (transformed) series
     const dateSet = new Set<string>();
-    for (const r of raw) for (const o of r.obs) dateSet.add(o.date);
+    for (const t of transformed) for (const d of t.dates) dateSet.add(d);
     const axisAll = [...dateSet].sort();
     if (!axisAll.length) return { axis: [], series: [] };
 
+    // 3. range filter
     const start = rangeStart(axisAll[axisAll.length - 1], range);
     const axis = start ? axisAll.filter((d) => d >= start) : axisAll;
 
-    const series: ResolvedSeries[] = raw.map((r) => {
-      const m = new Map(r.obs.map((o) => [o.date, o.value]));
-      let values: (number | null)[] = axis.map((d) => (m.has(d) ? m.get(d)! : null));
-      if (transform === "index100") {
-        const base = values.find((v) => v != null && v !== 0) as number | undefined;
-        if (base) values = values.map((v) => (v == null ? null : (v / base) * 100));
-      }
-      return { ref: r.ref, label: r.label, source: r.source, values };
+    // 4. align + window transform (index100/zscore over the visible window)
+    const series: ResolvedSeries[] = transformed.map((t) => {
+      const aligned: (number | null)[] = axis.map((d) => (t.map.has(d) ? t.map.get(d)! : null));
+      return { ref: t.ref, label: t.label, source: t.source, values: applyWindowTransform(transform, aligned) };
     });
 
     return { axis, series };

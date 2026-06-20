@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import clsx from "clsx";
+import type { RecessionBand } from "@/lib/charting/recessions";
 
 export interface CanvasSeries {
   label: string;
@@ -15,6 +16,7 @@ interface ChartCanvasProps {
   series: CanvasSeries[];
   height?: number;
   yFmt?: (n: number) => string;
+  recessions?: RecessionBand[];
   className?: string;
 }
 
@@ -35,7 +37,7 @@ function pathWithGaps(values: (number | null)[], x: (i: number) => number, y: (v
  * hover tooltip. SVG-based, matching the terminal's existing chart styling.
  * The shared engine renderer behind both charting studios (Phase 0).
  */
-export function ChartCanvas({ axis, series, height = 320, yFmt, className }: ChartCanvasProps) {
+export function ChartCanvas({ axis, series, height = 320, yFmt, recessions, className }: ChartCanvasProps) {
   const gid = useId();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -58,6 +60,23 @@ export function ChartCanvas({ axis, series, height = 320, yFmt, className }: Cha
   const gridVals = Array.from({ length: yticks + 1 }, (_, i) => min + (range * i) / yticks);
   const fmt = yFmt ?? ((v: number) => v.toFixed(2));
 
+  // Recession bands (clipped to the visible axis)
+  const tAxis = axis.map((d) => Date.parse(`${d}T00:00:00Z`));
+  const dateToX = (iso: string): number => {
+    const t = Date.parse(`${iso}T00:00:00Z`);
+    if (!tAxis.length) return padL;
+    if (t <= tAxis[0]) return x(0);
+    if (t >= tAxis[n - 1]) return x(n - 1);
+    for (let i = 1; i < n; i++) {
+      if (t <= tAxis[i]) return x(i - 1 + (t - tAxis[i - 1]) / (tAxis[i] - tAxis[i - 1] || 1));
+    }
+    return x(n - 1);
+  };
+  const recBands =
+    hasData && recessions
+      ? recessions.filter((r) => Date.parse(`${r.end}T00:00:00Z`) >= tAxis[0] && Date.parse(`${r.start}T00:00:00Z`) <= tAxis[n - 1])
+      : [];
+
   const onMove = (e: React.MouseEvent) => {
     const el = wrapRef.current;
     if (!el || n < 2) return;
@@ -73,6 +92,13 @@ export function ChartCanvas({ axis, series, height = 320, yFmt, className }: Cha
   return (
     <div ref={wrapRef} className={clsx("relative", className)} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height }}>
+        {/* recession bands */}
+        {recBands.map((r, i) => {
+          const x0 = dateToX(r.start);
+          const x1 = dateToX(r.end);
+          return <rect key={`rec-${i}`} x={x0} y={padT} width={Math.max(1, x1 - x0)} height={H - padT - padB} fill="#3B9DFF" opacity={0.1} />;
+        })}
+
         {/* grid + y labels */}
         {gridVals.map((v, i) => (
           <g key={i}>

@@ -13,6 +13,7 @@ export default function MacroChartPage() {
         { source: "econ", id: "DGS10" },
         { source: "econ", id: "DGS2" },
       ]}
+      recessionShading
     />
   );
 }
