@@ -1,4 +1,7 @@
 import { Rng } from "@/lib/rng";
+import indexReturnsRaw from "./market/index_returns.json";
+import bilelloRaw from "./market/bilello.json";
+import marketSnapshotRaw from "./market/market_snapshot.json";
 
 /**
  * Market Lens Studio — local analytics engine.
@@ -56,6 +59,8 @@ const HISTORY_YEARS = 12;
 const TRADING_DAYS = 252;
 const N = HISTORY_YEARS * TRADING_DAYS; // ~3024 points
 
+type DataSource = "index-monthly" | "bilello-yearly" | "synthetic";
+
 interface Series {
   id: string;
   name: string;
@@ -63,6 +68,7 @@ interface Series {
   dates: string[];
   values: number[]; // price/index level, or yield/spread level for RATE/CREDIT
   kind: "price" | "level"; // "level" = yields/spreads where forward "return" is meaningless
+  dataSource: DataSource;
 }
 
 const PROXY_FOR: Record<string, string> = {
@@ -138,6 +144,114 @@ function priceSeries(rng: Rng, dates: string[], assetClass: string): number[] {
   });
 }
 
+// ── Real committed-snapshot data (preferred over synthetic) ─────────────────
+// Reuses the same gold JSON the other market modules ship (`src/data/market/*`):
+//   • index_returns.json — monthly total returns for the 6 index proxies
+//   • bilello.json       — yearly total returns for ~48 ETFs/asset classes
+//   • market_snapshot.json — current price levels (for realistic anchoring)
+// A daily series is reconstructed so its segment returns match the committed
+// data exactly, with seeded intra-segment fill for daily-granularity analytics.
+
+const IDX = indexReturnsRaw as unknown as { matrices?: Record<string, any> };
+const BIL = bilelloRaw as unknown as { asset_class_returns_by_year?: any[] };
+const SNAP = marketSnapshotRaw as unknown as { cards?: any[] };
+
+const MONTHS3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const MATRIX_BY_PROXY: Record<string, any> = {};
+for (const sym of Object.keys(IDX.matrices ?? {})) {
+  const mtx = IDX.matrices![sym];
+  const proxy = mtx?.index?.proxy;
+  if (proxy) MATRIX_BY_PROXY[proxy] = mtx;
+}
+
+const SNAP_PRICE: Record<string, number> = {};
+for (const c of SNAP.cards ?? []) if (typeof c.price === "number") SNAP_PRICE[c.series_id] = c.price;
+
+interface Anchor { date: Date; ret: number; }
+
+function lastBusinessDay(year: number, monthIdx0: number): Date {
+  const d = new Date(Date.UTC(year, monthIdx0 + 1, 0)); // last calendar day of month
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
+  return d;
+}
+
+/** Chronological monthly return anchors for an index proxy (index_returns.json). */
+function indexMonthlyAnchors(seriesId: string): Anchor[] | null {
+  const m = MATRIX_BY_PROXY[seriesId];
+  if (!m) return null;
+  const cols: number[] = [...(m.years ?? []), m.ytdYear].filter((y: any) => y != null);
+  const valsByMonth: Record<string, any> = {};
+  for (const row of m.rows ?? []) valsByMonth[row.month] = row.values;
+  const anchors: Anchor[] = [];
+  for (const year of cols) {
+    for (let mi = 0; mi < 12; mi++) {
+      const v = valsByMonth[MONTHS3[mi]]?.[String(year)];
+      if (v == null) continue;
+      anchors.push({ date: lastBusinessDay(year, mi), ret: v / 100 });
+    }
+  }
+  return anchors.length >= 24 ? anchors : null;
+}
+
+/** Chronological yearly return anchors for an ETF (bilello.json). */
+function bilelloYearlyAnchors(seriesId: string): Anchor[] | null {
+  const rows = (BIL.asset_class_returns_by_year ?? []).filter((r: any) => r.series_id === seriesId);
+  if (rows.length < 4) return null;
+  rows.sort((a: any, b: any) => a.year - b.year);
+  return rows.map((r: any) => ({ date: lastBusinessDay(r.year, 11), ret: r.total_return }));
+}
+
+function businessDaysBetween(d0: Date, d1: Date): string[] {
+  const out: string[] = [];
+  const d = new Date(d0);
+  d.setUTCDate(d.getUTCDate() + 1);
+  while (d <= d1) {
+    const w = d.getUTCDay();
+    if (w !== 0 && w !== 6) out.push(isoDate(d));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}
+
+/**
+ * Reconstruct a daily price series whose per-segment compounded return matches
+ * the committed anchors exactly (endpoints forced), with deterministic seeded
+ * intra-segment fill so daily-granularity views (drawdowns, event studies)
+ * have realistic texture. Optionally scaled to end at the snapshot price.
+ */
+function realDailySeries(seriesId: string, anchors: Anchor[], endPrice: number | null): { dates: string[]; values: number[] } {
+  const aPrice: number[] = [];
+  let p = 100;
+  for (const a of anchors) { p = p * (1 + a.ret); aPrice.push(p); }
+
+  const dates: string[] = [isoDate(anchors[0].date)];
+  const values: number[] = [Number(aPrice[0].toFixed(4))];
+
+  for (let i = 1; i < anchors.length; i++) {
+    const segDates = businessDaysBetween(anchors[i - 1].date, anchors[i].date);
+    if (!segDates.length) { dates.push(isoDate(anchors[i].date)); values.push(Number(aPrice[i].toFixed(4))); continue; }
+    const k = segDates.length;
+    const R = aPrice[i - 1] !== 0 ? aPrice[i] / aPrice[i - 1] - 1 : 0;
+    const L = Math.log(1 + R);
+    const rng = new Rng(`lens:${seriesId}:seg${i}`);
+    const noise = Array.from({ length: k }, () => rng.normal(0, 0.008));
+    const mean = noise.reduce((a, b) => a + b, 0) / k;
+    let prev = aPrice[i - 1];
+    for (let j = 0; j < k; j++) {
+      prev = j === k - 1 ? aPrice[i] : prev * Math.exp(L / k + (noise[j] - mean));
+      dates.push(segDates[j]);
+      values.push(Number(prev.toFixed(4)));
+    }
+  }
+
+  if (endPrice && values[values.length - 1] > 0) {
+    const scale = endPrice / values[values.length - 1];
+    for (let i = 0; i < values.length; i++) values[i] = Number((values[i] * scale).toFixed(4));
+  }
+  return { dates, values };
+}
+
 const SERIES_CACHE = new Map<string, Series>();
 
 function buildSeries(input: LensSeriesInput): Series {
@@ -152,7 +266,9 @@ function buildSeries(input: LensSeriesInput): Series {
   const name = input.display_name ?? id;
 
   let values: number[];
+  let outDates = dates;
   let kind: Series["kind"] = "price";
+  let dataSource: DataSource = "synthetic";
 
   if (id === "^VIX") {
     values = vixSeries(rng, dates);
@@ -182,11 +298,21 @@ function buildSeries(input: LensSeriesInput): Series {
     values = levelSeries(rng, dates, 4, 0.04, 0.1, 10);
     kind = "level";
   } else {
-    values = priceSeries(rng, dates, assetClass);
+    // Price series — prefer real committed return snapshots, else synthesize.
+    const monthly = indexMonthlyAnchors(id);
+    const anchors = monthly ?? bilelloYearlyAnchors(id);
+    if (anchors) {
+      const real = realDailySeries(id, anchors, SNAP_PRICE[id] ?? null);
+      values = real.values;
+      outDates = real.dates;
+      dataSource = monthly ? "index-monthly" : "bilello-yearly";
+    } else {
+      values = priceSeries(rng, dates, assetClass);
+    }
     kind = "price";
   }
 
-  const s: Series = { id, name, assetClass, dates, values, kind };
+  const s: Series = { id, name, assetClass, dates: outDates, values, kind, dataSource };
   SERIES_CACHE.set(id, s);
   return s;
 }
@@ -932,7 +1058,20 @@ export function runMarketLens(req: LensRunRequest): AnalysisResult {
     .map((s) => (PROXY_FOR[s.series_id] ? `${s.series_id} = ${PROXY_FOR[s.series_id]} (ETF proxy)` : null))
     .filter((x): x is string => x !== null);
 
-  const warnings = ["Synthetic data — deterministic local model. Set MARKET_LENS_URL to connect the live Yahoo/FRED engine."];
+  const SOURCE_LABEL: Record<DataSource, string> = {
+    "index-monthly": "committed monthly returns (index_returns)",
+    "bilello-yearly": "committed yearly returns (bilello)",
+    synthetic: "synthetic",
+  };
+  const provenance = series.map((s) => ({ series_id: s.id, basis: SOURCE_LABEL[s.dataSource] }));
+  const realCount = series.filter((s) => s.dataSource !== "synthetic").length;
+  const warnings =
+    realCount === series.length
+      ? ["Computed from committed market return snapshots (index_returns/bilello), the same data the other market modules ship. Set MARKET_LENS_URL for the live Yahoo/FRED engine."]
+      : realCount > 0
+      ? ["Mixed sources: equity series derived from committed return snapshots; rates/vol/credit/macro series synthetic. Set MARKET_LENS_URL for live data."]
+      : ["Synthetic data — deterministic local model (no committed series for this selection). Set MARKET_LENS_URL to connect the live Yahoo/FRED engine."];
+  const meta = { proxy_notes: proxyNotes, engine: "local-ts", series_provenance: provenance };
 
   if (!builder) {
     // Generic fallback: forward-return study on the first series.
@@ -945,7 +1084,7 @@ export function runMarketLens(req: LensRunRequest): AnalysisResult {
       warnings,
       sample_size: idx.length,
       narrative: `Generic forward-return study on ${s.name} (view "${req.view_id}" not specialised locally).`,
-      metadata: { proxy_notes: proxyNotes, engine: "local-ts" },
+      metadata: meta,
       tiles: [
         boxTile("forward_return_box", "Forward Returns", ev),
         lineTile("cumulative_chart", `${s.id} Price`, s.values.slice(-120)),
@@ -958,7 +1097,7 @@ export function runMarketLens(req: LensRunRequest): AnalysisResult {
     view_id: req.view_id,
     series_used: series.map((x) => x.id),
     warnings,
-    metadata: { proxy_notes: proxyNotes, engine: "local-ts" },
+    metadata: meta,
     ...built,
   };
 }
