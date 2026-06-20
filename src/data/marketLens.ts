@@ -2,6 +2,8 @@ import { Rng } from "@/lib/rng";
 import indexReturnsRaw from "./market/index_returns.json";
 import bilelloRaw from "./market/bilello.json";
 import marketSnapshotRaw from "./market/market_snapshot.json";
+import { getSeriesHistory as econHistory, seriesById as econMeta, resolveFred } from "@/data/econSeries";
+import { fredEnabled, fredSeries } from "@/lib/server/fred";
 
 /**
  * Market Lens Studio — local analytics engine.
@@ -59,7 +61,7 @@ const HISTORY_YEARS = 12;
 const TRADING_DAYS = 252;
 const N = HISTORY_YEARS * TRADING_DAYS; // ~3024 points
 
-type DataSource = "index-monthly" | "bilello-yearly" | "synthetic";
+type DataSource = "index-monthly" | "bilello-yearly" | "fred" | "econ-sim" | "synthetic";
 
 interface Series {
   id: string;
@@ -315,6 +317,73 @@ function buildSeries(input: LensSeriesInput): Series {
   const s: Series = { id, name, assetClass, dates: outDates, values, kind, dataSource };
   SERIES_CACHE.set(id, s);
   return s;
+}
+
+// ── Macro level series from the existing econ/FRED layer ────────────────────
+// VIX, rates, credit spreads and CPI are sourced from the same catalog the
+// econ pages use: live FRED when FRED_API_KEY is set, otherwise the terminal's
+// deterministic econ model (getSeriesHistory) — never bespoke synthetic noise.
+// These are resolved (async) into SERIES_CACHE before the sync builders run.
+
+const ECON_ID: Record<string, string> = { "^VIX": "VIXCLS" };
+const SPREAD_BPS = new Set(["BAMLH0A0HYM2", "BAMLC0A0CM"]); // catalog bps -> percent for builders
+const MACRO_LEVEL_IDS = ["^VIX", "DGS2", "DGS10", "FEDFUNDS", "BAMLH0A0HYM2", "BAMLC0A0CM", "CPIAUCSL"];
+
+function nForFreq(freq: "D" | "W" | "M" | "Q"): number {
+  return freq === "D" ? 2600 : freq === "W" ? 520 : freq === "M" ? 130 : 44;
+}
+
+async function resolveLevelSeries(input: LensSeriesInput): Promise<void> {
+  const id = input.series_id;
+  if (SERIES_CACHE.has(id)) return;
+  const econId = ECON_ID[id] ?? id;
+  const meta = econMeta(econId);
+  if (!meta) return; // unknown macro id — leave to synthetic buildSeries
+  const n = nForFreq(meta.freq);
+
+  let obs: { date: string; value: number }[] = [];
+  let dataSource: DataSource = "econ-sim";
+  if (fredEnabled()) {
+    try {
+      const r = resolveFred(econId);
+      if (!r.simOnly) {
+        const f = await fredSeries(econId, { limit: n, units: "lin", scale: SPREAD_BPS.has(id) ? 1 : r.scale });
+        const clean = f.filter((o) => o.value !== null) as { date: string; value: number }[];
+        if (clean.length) { obs = clean; dataSource = "fred"; }
+      }
+    } catch { /* fall through to the deterministic econ model */ }
+  }
+  if (!obs.length) obs = econHistory(econId, n);
+
+  let dates = obs.map((o) => o.date);
+  let values = obs.map((o) => o.value);
+  if (SPREAD_BPS.has(id)) values = values.map((v) => v / 100); // bps -> percent
+
+  // CPI: the builders need an index level. FRED `lin` returns the index; the
+  // econ model returns YoY %, so synthesize a deterministic index in that case.
+  if (id === "CPIAUCSL" && dataSource !== "fred") {
+    dates = businessDates(N, new Date());
+    values = macroIndex(new Rng(`lens:${id}`), dates);
+    dataSource = "synthetic";
+  }
+
+  SERIES_CACHE.set(id, {
+    id, name: input.display_name ?? meta.label ?? id,
+    assetClass: (input.asset_class ?? "").toUpperCase(),
+    dates, values, kind: "level", dataSource,
+  });
+}
+
+/** Level value as-of each target date (last-observation-carried-forward). */
+function alignLevel(level: Series, dates: string[]): number[] {
+  const out: number[] = [];
+  let li = 0;
+  let last = level.values[0] ?? 0;
+  for (const d of dates) {
+    while (li < level.dates.length && level.dates[li] <= d) { last = level.values[li]; li++; }
+    out.push(last);
+  }
+  return out;
 }
 
 // ── Math helpers ────────────────────────────────────────────────────────────
@@ -588,10 +657,11 @@ const BUILDERS: Record<string, Builder> = {
 
   vix_spike_study: ({ series, windows, vix }) => {
     const s = series.find((x) => x.assetClass !== "VOLATILITY") ?? series[0];
-    const idx = detectThresholdCross(vix.values, 30);
+    const v = alignLevel(vix, s.dates);
+    const idx = detectThresholdCross(v, 30);
     const ev = fwdStatsAtEvents(s.values, idx, windows);
     const events = idx.slice(-40).map((i) => {
-      const row: Record<string, unknown> = { date: vix.dates[i], vix: Number(vix.values[i].toFixed(1)) };
+      const row: Record<string, unknown> = { date: s.dates[i], vix: Number(v[i].toFixed(1)) };
       for (const w of windows) row[`${w} %`] = pct(fwd(s.values, i, WINDOW_DAYS[w] ?? 21));
       return row;
     });
@@ -601,11 +671,11 @@ const BUILDERS: Record<string, Builder> = {
         `VIX spike event study — ${s.name} forward returns after VIX crosses above 30.\n` +
         `• ${idx.length} spike events detected.\n` +
         `• 3M forward median: ${pct(ev["3M"]?.median ?? null) ?? "—"}% (panic often precedes recovery).\n` +
-        `Caveats:\nVIX series is synthetic; thresholds illustrative.`,
+        `Caveats:\nVIX from FRED/econ layer; events aligned by date.`,
       tiles: [
         eventTableTile("event_table", "VIX > 30 Events", events),
         boxTile("forward_return_box", "Forward Returns After VIX Spike", ev),
-        lineTile("vix_overlay", "VIX (synthetic)", vix.values.slice(-250)),
+        lineTile("vix_overlay", "VIX", vix.values.slice(-250)),
       ],
     };
   },
@@ -746,19 +816,20 @@ const BUILDERS: Record<string, Builder> = {
   yield_curve_analysis: ({ series }) => {
     const two = buildSeries({ series_id: "DGS2", asset_class: "RATE" });
     const ten = buildSeries({ series_id: "DGS10", asset_class: "RATE" });
-    const n = Math.min(two.values.length, ten.values.length);
-    const slope = ten.values.slice(-n).map((v, i) => Number(((v - two.values.slice(-n)[i]) * 100).toFixed(1)));
-    const curCurve = [two.values[two.values.length - 1], (two.values[two.values.length - 1] + ten.values[ten.values.length - 1]) / 2, ten.values[ten.values.length - 1], ten.values[ten.values.length - 1] + 0.2];
+    const tenA = alignLevel(ten, two.dates);
+    const slope = two.values.map((v, i) => Number(((tenA[i] - v) * 100).toFixed(1)));
+    const lastTwo = two.values[two.values.length - 1], lastTen = tenA[tenA.length - 1];
+    const curCurve = [lastTwo, (lastTwo + lastTen) / 2, lastTen, lastTen + 0.2];
     const invEvents: Record<string, unknown>[] = [];
     for (let i = 1; i < slope.length; i++)
-      if (slope[i - 1] >= 0 && slope[i] < 0) invEvents.push({ date: ten.dates.slice(-n)[i], "2s10s bps": slope[i] });
+      if (slope[i - 1] >= 0 && slope[i] < 0) invEvents.push({ date: two.dates[i], "2s10s bps": slope[i] });
     return {
-      sample_size: n,
+      sample_size: slope.length,
       narrative:
         `Treasury curve deep dive (2s10s).\n` +
         `• Current 2s10s slope: ${slope[slope.length - 1]} bps.\n` +
         `• ${invEvents.length} inversion onsets in history.\n` +
-        `Caveats:\nSynthetic rates — for shape illustration only.`,
+        `Caveats:\nTreasury rates from FRED/econ layer.`,
       tiles: [
         lineTile("curve_chart", "Current Curve (2Y·5Y·10Y·30Y, %)", curCurve.map((v) => Number(v.toFixed(2)))),
         lineTile("slope_history", "2s10s Slope (bps)", slope.slice(-250)),
@@ -781,7 +852,7 @@ const BUILDERS: Record<string, Builder> = {
         `Credit-spread stress monitor (HY & IG OAS).\n` +
         `• HY OAS at ${cur.toFixed(2)}% — ${(p * 100).toFixed(0)}th percentile of history.\n` +
         `• Current HY z-score: ${z[z.length - 1]}.\n` +
-        `Caveats:\nSynthetic spreads; not a live credit feed.`,
+        `Caveats:\nOAS from FRED/econ layer (live when FRED_API_KEY set).`,
       tiles: [
         gaugeTile("spread_gauge", "HY OAS Stress", regimeFromPercentile(p), p),
         lineTile("spread_history", "HY vs IG OAS (HY %)", hy.values.slice(-250)),
@@ -793,16 +864,17 @@ const BUILDERS: Record<string, Builder> = {
   purchasing_power: ({ series }) => {
     const asset = series.find((s) => s.kind === "price") ?? series[0];
     const cpi = buildSeries({ series_id: "CPIAUCSL", asset_class: "MACRO" });
-    const n = Math.min(asset.values.length, cpi.values.length);
-    const real = asset.values.slice(-n).map((v, i) => Number((v / asset.values[asset.values.length - n] / (cpi.values.slice(-n)[i] / cpi.values[cpi.values.length - n]) * 100).toFixed(2)));
-    const nominalTotal = asset.values[asset.values.length - 1] / asset.values[0] - 1;
-    const cpiTotal = cpi.values[cpi.values.length - 1] / cpi.values[0] - 1;
+    const c = alignLevel(cpi, asset.dates);
+    const a0 = asset.values[0], c0 = c[0] || 1;
+    const real = asset.values.map((v, i) => Number((v / a0 / ((c[i] || c0) / c0) * 100).toFixed(2)));
+    const nominalTotal = asset.values[asset.values.length - 1] / a0 - 1;
+    const cpiTotal = (c[c.length - 1] || c0) / c0 - 1;
     return {
-      sample_size: n,
+      sample_size: asset.values.length,
       narrative:
         `Purchasing-power erosion: ${asset.name} real vs nominal.\n` +
         `• Nominal total return ${(nominalTotal * 100).toFixed(0)}% vs CPI ${(cpiTotal * 100).toFixed(0)}% over the sample.\n` +
-        `Caveats:\nSynthetic CPI path.`,
+        `Caveats:\nCPI from FRED when available, else modeled.`,
       tiles: [
         lineTile("purchasing_power_chart", "Real Value (CPI-adjusted, rebased)", real.slice(-250)),
         returnTableTile("real_vs_nominal", "Nominal vs Real (total %)", {
@@ -816,9 +888,10 @@ const BUILDERS: Record<string, Builder> = {
   volatility_regime: ({ series, vix }) => {
     const s = series.find((x) => x.assetClass !== "VOLATILITY") ?? series[0];
     const dr = dailyReturns(s.values);
+    const vAligned = alignLevel(vix, s.dates);
     const buckets: Record<string, number[]> = { "Low (<15)": [], "Normal (15-25)": [], "Elevated (25-35)": [], "High (>35)": [] };
     for (let i = 1; i < s.values.length; i++) {
-      const v = vix.values[i];
+      const v = vAligned[i];
       const r = dr[i - 1];
       if (v < 15) buckets["Low (<15)"].push(r);
       else if (v < 25) buckets["Normal (15-25)"].push(r);
@@ -843,9 +916,9 @@ const BUILDERS: Record<string, Builder> = {
       narrative:
         `Volatility-regime analysis of ${s.name} vs VIX buckets.\n` +
         `• Mean daily return in high-vol (>35) regime: ${regimeReturns["High (>35)"]?.["Mean daily %"] ?? "—"}%.\n` +
-        `Caveats:\nVIX is synthetic.`,
+        `Caveats:\nVIX from FRED/econ layer, aligned by date.`,
       tiles: [
-        lineTile("regime_chart", "VIX (synthetic)", vix.values.slice(-250)),
+        lineTile("regime_chart", "VIX", vix.values.slice(-250)),
         returnTableTile("regime_return_table", "Returns by VIX Regime", regimeReturns),
         lineTile("rolling_vol", "21d Realized Vol (annualized %)", rv.slice(-150)),
       ],
@@ -855,8 +928,9 @@ const BUILDERS: Record<string, Builder> = {
   rate_cycle_analysis: ({ series }) => {
     const asset = series.find((s) => s.kind === "price") ?? series[0];
     const ff = buildSeries({ series_id: "FEDFUNDS", asset_class: "RATE" });
-    const n = Math.min(asset.values.length, ff.values.length);
-    const aV = asset.values.slice(-n), fV = ff.values.slice(-n);
+    const fV = alignLevel(ff, asset.dates);
+    const aV = asset.values;
+    const n = aV.length;
     const hiking: number[] = [], cutting: number[] = [];
     const ar = dailyReturns(aV);
     for (let i = 22; i < n; i++) {
@@ -869,9 +943,9 @@ const BUILDERS: Record<string, Builder> = {
       narrative:
         `Rate-cycle impact on ${asset.name} (Fed funds path).\n` +
         `• Mean daily return while hiking: ${pct(summarize(hiking).mean) ?? "—"}% vs cutting: ${pct(summarize(cutting).mean) ?? "—"}%.\n` +
-        `Caveats:\nSynthetic policy path.`,
+        `Caveats:\nFed funds from FRED/econ layer, aligned by date.`,
       tiles: [
-        lineTile("cycle_timeline", "Fed Funds (synthetic %)", fV.slice(-250)),
+        lineTile("cycle_timeline", "Fed Funds (%)", fV.slice(-250)),
         boxTile("hiking_returns", "Daily Returns — Hiking", { Hiking: summarize(hiking) }),
         boxTile("cutting_returns", "Daily Returns — Cutting", { Cutting: summarize(cutting) }),
       ],
@@ -974,7 +1048,7 @@ const BUILDERS: Record<string, Builder> = {
       narrative:
         `Inflation-surprise study — ${asset.name} after CPI surprises.\n` +
         `• ${idx.length} surprise months flagged.\n` +
-        `Caveats:\nSynthetic CPI; surprises are heuristic.`,
+        `Caveats:\nCPI from FRED when available; surprises are heuristic.`,
       tiles: [
         eventTableTile("surprise_table", "CPI Surprise Events", events),
         boxTile("forward_return_box", "Forward Returns After Surprise", ev),
@@ -1018,16 +1092,17 @@ const BUILDERS: Record<string, Builder> = {
 
 function buildVixChange(series: Series[], windows: string[], vix: Series, increases: boolean): ReturnType<Builder> {
   const s = series.find((x) => x.assetClass !== "VOLATILITY") ?? series[0];
+  const v = alignLevel(vix, s.dates);
   const changes: { i: number; chg: number }[] = [];
   const period = 5;
-  for (let i = period; i < vix.values.length; i++)
-    changes.push({ i, chg: vix.values[i] / vix.values[i - period] - 1 });
+  for (let i = period; i < v.length; i++)
+    changes.push({ i, chg: v[i - period] !== 0 ? v[i] / v[i - period] - 1 : 0 });
   changes.sort((a, b) => (increases ? b.chg - a.chg : a.chg - b.chg));
   const top = changes.slice(0, 30);
   const idx = top.map((c) => c.i);
   const ev = fwdStatsAtEvents(s.values, idx, windows);
   const events = top.map((c) => {
-    const row: Record<string, unknown> = { date: vix.dates[c.i], "vix chg %": Number((c.chg * 100).toFixed(1)) };
+    const row: Record<string, unknown> = { date: s.dates[c.i], "vix chg %": Number((c.chg * 100).toFixed(1)) };
     for (const w of windows) row[`${w} %`] = pct(fwd(s.values, c.i, WINDOW_DAYS[w] ?? 21));
     return row;
   });
@@ -1036,7 +1111,7 @@ function buildVixChange(series: Series[], windows: string[], vix: Series, increa
     narrative:
       `Largest VIX ${increases ? "increases" : "decreases"} (5d) and ${s.name} forward returns.\n` +
       `• Top ${top.length} ${increases ? "spikes" : "collapses"} ranked by 5-day VIX change.\n` +
-      `Caveats:\nSynthetic VIX series.`,
+      `Caveats:\nVIX from FRED/econ layer, aligned by date.`,
     tiles: [
       eventTableTile("event_table", `Largest VIX ${increases ? "Increases" : "Decreases"}`, events),
       boxTile("forward_return_box", "Forward Returns", ev),
@@ -1047,8 +1122,20 @@ function buildVixChange(series: Series[], windows: string[], vix: Series, increa
 
 // ── Entry point ─────────────────────────────────────────────────────────────
 
-export function runMarketLens(req: LensRunRequest): AnalysisResult {
+export async function runMarketLens(req: LensRunRequest): Promise<AnalysisResult> {
   const inputs = (req.series ?? []).length ? req.series! : [{ series_id: "SPY", asset_class: "EQUITY" }];
+
+  // Resolve macro level series (VIX/rates/credit/CPI) from the existing
+  // econ/FRED data layer before the sync builders read them from the cache.
+  const LEVEL_ASSET_CLASSES = ["VOLATILITY", "RATE", "CREDIT", "MACRO"];
+  const userLevels = inputs.filter(
+    (i) => MACRO_LEVEL_IDS.includes(i.series_id) || LEVEL_ASSET_CLASSES.includes((i.asset_class ?? "").toUpperCase())
+  );
+  await Promise.all([
+    ...MACRO_LEVEL_IDS.map((id) => resolveLevelSeries({ series_id: id })),
+    ...userLevels.map(resolveLevelSeries),
+  ]);
+
   const series = inputs.map(buildSeries);
   const windows = (req.forward_windows ?? ["1W", "1M", "3M", "6M", "1Y"]).filter((w) => w in WINDOW_DAYS);
   const vix = buildSeries({ series_id: "^VIX", asset_class: "VOLATILITY" });
@@ -1061,16 +1148,16 @@ export function runMarketLens(req: LensRunRequest): AnalysisResult {
   const SOURCE_LABEL: Record<DataSource, string> = {
     "index-monthly": "committed monthly returns (index_returns)",
     "bilello-yearly": "committed yearly returns (bilello)",
+    fred: "FRED (live)",
+    "econ-sim": "econ model (deterministic)",
     synthetic: "synthetic",
   };
   const provenance = series.map((s) => ({ series_id: s.id, basis: SOURCE_LABEL[s.dataSource] }));
-  const realCount = series.filter((s) => s.dataSource !== "synthetic").length;
-  const warnings =
-    realCount === series.length
-      ? ["Computed from committed market return snapshots (index_returns/bilello), the same data the other market modules ship. Set MARKET_LENS_URL for the live Yahoo/FRED engine."]
-      : realCount > 0
-      ? ["Mixed sources: equity series derived from committed return snapshots; rates/vol/credit/macro series synthetic. Set MARKET_LENS_URL for live data."]
-      : ["Synthetic data — deterministic local model (no committed series for this selection). Set MARKET_LENS_URL to connect the live Yahoo/FRED engine."];
+  const committed = series.every((s) => s.dataSource !== "synthetic");
+  const macroBasis = fredEnabled() ? "live FRED" : "the deterministic econ model";
+  const warnings = committed
+    ? [`Computed from the terminal's existing data layer — committed return snapshots for prices and ${macroBasis} for macro series (VIX/rates/credit/CPI). Set MARKET_LENS_URL for the full live engine.`]
+    : [`Computed from the terminal's existing data layer; some selected series fall back to synthetic (no committed history). Macro series use ${macroBasis}. Set MARKET_LENS_URL for the full live engine.`];
   const meta = { proxy_notes: proxyNotes, engine: "local-ts", series_provenance: provenance };
 
   if (!builder) {

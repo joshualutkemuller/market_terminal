@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
     // Fallback: compute the analysis locally with the deterministic TypeScript
     // engine — same graceful-degradation pattern as /api/market/[view], so the
     // module renders real, configurable analytics with no backend configured.
-    const data = runMarketLens(body);
+    const data = await runMarketLens(body);
     return NextResponse.json({ source: "SNAPSHOT", data });
   } catch (e) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
