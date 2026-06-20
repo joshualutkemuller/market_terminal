@@ -7,6 +7,7 @@ import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { MarketDataControls } from "@/components/market/MarketDataControls";
 import { getIndexReturnMatrix, INDEXES as FALLBACK_INDEXES, type IndexYearSummary } from "@/data/marketAnalytics";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import type { IndexReturnsView, ReturnBasis } from "@/data/marketPipeline";
 import { fmtNum, fmtSignedPct } from "@/lib/format";
 
@@ -160,5 +161,5 @@ export default function IndexReturnAnalyticsPage() {
 }
 
 function PipelineTag({ source }: { source: MarketSource }) {
-  return <Tag tone={source === "DB" || source === "LIVE" || source === "FILE" ? "up" : "blue"}>{source === "LOADING" ? "SYNC" : source}</Tag>;
+  return <ProvenanceBadge source={source} />;
 }

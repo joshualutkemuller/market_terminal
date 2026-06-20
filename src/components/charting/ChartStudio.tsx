@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { Plus, X, Search, Save, Share2, Download, Image, Trash2, Minus, TrendingUp, GitBranch } from "lucide-react";
+import { Plus, X, Search, Save, Share2, Download, Image as ImageIcon, Trash2, Minus, TrendingUp, GitBranch } from "lucide-react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
+import { Modal } from "@/components/ui/Modal";
 import { ChartCanvas, type ChartCanvasHandle } from "./ChartCanvas";
 import { useChartSeries } from "@/lib/charting/resolver";
 import { RANGE_PRESETS, SERIES_COLORS, type ChartType, type RangePreset, type SeriesRef } from "@/lib/charting/spec";
@@ -19,10 +21,6 @@ import type { CatalogItem } from "@/data/chartCatalog";
 const CHART_TYPES: ChartType[] = ["line", "area", "candles"];
 
 const MAX_SERIES = 6;
-
-const SOURCE_TONE: Record<string, "up" | "amber" | "blue" | "violet" | "neutral" | "down"> = {
-  FRED: "up", SNAPSHOT: "violet", ECON: "blue", SIM: "amber", ERR: "down",
-};
 
 interface ChartStudioProps {
   code: string;
@@ -270,7 +268,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
         right={
           <span className="flex items-center gap-1">
             {sources.map((s) => (
-              <Tag key={s} tone={SOURCE_TONE[s] ?? "neutral"}>{s}</Tag>
+              <ProvenanceBadge key={s} source={s} />
             ))}
           </span>
         }
@@ -488,7 +486,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
 
         {/* Export */}
         <button onClick={exportPNG} className={clsx(btn, "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")} title="Export PNG">
-          <Image className="inline h-3 w-3" />
+          <ImageIcon className="inline h-3 w-3" />
         </button>
         <button onClick={exportCSV} className={clsx(btn, "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")} title="Export CSV">
           <Download className="inline h-3 w-3" />
@@ -525,25 +523,21 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
       </div>
 
       {/* Save dialog */}
-      {saveDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setSaveDialog(false)}>
-          <div className="w-80 rounded border border-term-border bg-term-panel p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 text-sm font-semibold text-term-text">Save Template</div>
-            <input
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              placeholder="Template name…"
-              className="mb-3 w-full rounded-sm border border-term-border bg-term-panel-2 px-2 py-1.5 text-xs text-term-text outline-none focus:border-term-amber"
-              autoFocus
-              onKeyDown={(e) => e.key === "Enter" && handleSave()}
-            />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setSaveDialog(false)} className="rounded-sm border border-term-border px-3 py-1 text-2xs text-term-text-mute hover:text-term-text">Cancel</button>
-              <button onClick={handleSave} disabled={!saveName.trim()} className="rounded-sm border border-term-amber bg-term-amber px-3 py-1 text-2xs font-semibold text-black disabled:opacity-40">Save</button>
-            </div>
-          </div>
+      <Modal open={saveDialog} onClose={() => setSaveDialog(false)} label="Save chart template" className="w-80 rounded border border-term-border bg-term-panel p-4 shadow-xl">
+        <div className="mb-3 text-sm font-semibold text-term-text">Save Template</div>
+        <input
+          value={saveName}
+          onChange={(e) => setSaveName(e.target.value)}
+          placeholder="Template name…"
+          className="mb-3 w-full rounded-sm border border-term-border bg-term-panel-2 px-2 py-1.5 text-xs text-term-text outline-none focus:border-term-amber"
+          autoFocus
+          onKeyDown={(e) => e.key === "Enter" && handleSave()}
+        />
+        <div className="flex justify-end gap-2">
+          <button onClick={() => setSaveDialog(false)} className="rounded-sm border border-term-border px-3 py-1 text-2xs text-term-text-mute hover:text-term-text">Cancel</button>
+          <button onClick={handleSave} disabled={!saveName.trim()} className="rounded-sm border border-term-amber bg-term-amber px-3 py-1 text-2xs font-semibold text-black disabled:opacity-40">Save</button>
         </div>
-      )}
+      </Modal>
 
       <div className="flex flex-1 flex-col gap-2 p-2">
         <Panel title="Chart" code={code} accent>
@@ -556,7 +550,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
               <span key={refKey(s.ref)} className="flex items-center gap-1 rounded-sm border border-term-border bg-term-panel-2 px-1.5 py-0.5 text-2xs">
                 <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }} />
                 <span className="font-semibold text-term-text">{byId.get(s.ref.id)?.label ?? s.ref.id}</span>
-                <Tag tone={SOURCE_TONE[s.source] ?? "neutral"}>{s.source}</Tag>
+                <ProvenanceBadge source={s.source} />
                 <button onClick={() => removeRef(s.ref)} className="text-term-text-mute hover:text-term-down" aria-label="remove">
                   <X className="h-3 w-3" />
                 </button>

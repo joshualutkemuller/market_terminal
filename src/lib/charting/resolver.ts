@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { fetchJson } from "@/lib/fetchCache";
 import { type SeriesRef, type RangePreset, rangeMonths } from "./spec";
 import { applyPointTransform, applyWindowTransform, type Transform } from "./transforms";
 
@@ -50,8 +51,7 @@ export function useChartSeries(refs: SeriesRef[], range: RangePreset, transform:
       refs.map((r) => {
         const qs = new URLSearchParams({ source: r.source, id: r.id });
         if (r.assetClass) qs.set("assetClass", r.assetClass);
-        return fetch(`/api/chart/series?${qs}`)
-          .then((x) => x.json())
+        return fetchJson<any>(`/api/chart/series?${qs}`)
           .then(
             (j): RawSeries => ({
               ref: r,

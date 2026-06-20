@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fetchJson, peekFresh } from "@/lib/fetchCache";
 import { PRICE_SNAPSHOTS, SNAPSHOTS, type MarketView, type ReturnBasis } from "@/data/marketPipeline";
 
 export type MarketSource = "LIVE" | "DB" | "FILE" | "SNAPSHOT" | "LOADING";
@@ -24,23 +25,29 @@ export function useMarketView<T>(view: MarketView, basis: ReturnBasis = "total",
 
   useEffect(() => {
     let alive = true;
-    setData(fallbackSnapshot(view, basis) as T);
-    setSource("LOADING");
     const params = new URLSearchParams({ basis });
     if (asof) params.set("asof", asof);
-    fetch(`/api/market/${view}?${params.toString()}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (!alive) return;
-        if (json?.data) setData(json.data as T);
-        const s = json?.source;
-        setSource(s === "LIVE" || s === "DB" || s === "FILE" ? s : "SNAPSHOT");
-        if (json?.earliestAsOf) setEarliestAsOf(json.earliestAsOf);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setSource("SNAPSHOT");
-      });
+    const url = `/api/market/${view}?${params.toString()}`;
+
+    const apply = (json: any) => {
+      if (json?.data) setData(json.data as T);
+      const s = json?.source;
+      setSource(s === "LIVE" || s === "DB" || s === "FILE" ? s : "SNAPSHOT");
+      if (json?.earliestAsOf) setEarliestAsOf(json.earliestAsOf);
+    };
+
+    // Render the committed snapshot immediately, upgrading to a cached response
+    // synchronously when one is fresh (avoids the snapshot→live flash on revisits).
+    const seed = peekFresh<any>(url);
+    if (seed) apply(seed);
+    else {
+      setData(fallbackSnapshot(view, basis) as T);
+      setSource("LOADING");
+    }
+
+    fetchJson<any>(url)
+      .then((json) => alive && apply(json))
+      .catch(() => alive && setSource("SNAPSHOT"));
     return () => {
       alive = false;
     };
