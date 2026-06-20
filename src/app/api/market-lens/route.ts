@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runMarketLens } from "@/data/marketLens";
 
 const LENS_URL = process.env.MARKET_LENS_URL || "";
 
@@ -136,19 +137,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ source: "LIVE", data });
     }
 
-    // Fallback: return a snapshot-mode response indicating the backend is needed
-    return NextResponse.json({
-      source: "SNAPSHOT",
-      data: {
-        view_id: body.view_id || "",
-        tiles: [],
-        series_used: (body.series || []).map((s: { series_id: string }) => s.series_id),
-        warnings: ["Market Lens Studio Python backend not available. Set MARKET_LENS_URL to connect."],
-        narrative: "The Market Lens Studio analytics engine is not connected. Configure MARKET_LENS_URL to enable live analysis. In snapshot mode, view definitions and presets are available but live analytics require the Python backend.",
-        metadata: {},
-        sample_size: 0,
-      },
-    });
+    // Fallback: compute the analysis locally with the deterministic TypeScript
+    // engine — same graceful-degradation pattern as /api/market/[view], so the
+    // module renders real, configurable analytics with no backend configured.
+    const data = await runMarketLens(body);
+    return NextResponse.json({ source: "SNAPSHOT", data });
   } catch (e) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
