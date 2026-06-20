@@ -19,6 +19,9 @@ import {
   type EconCategory,
 } from "@/data/econSeries";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
+import { econChartHref } from "@/components/charting/ChartLink";
+import Link from "next/link";
+import { AreaChart } from "lucide-react";
 
 type Tone = "up" | "down" | "amber" | "neutral";
 
@@ -284,8 +287,11 @@ export default function MacroDashboard() {
                 yFmt={(n) => fmtNum(n, selMeta?.decimals ?? 2)}
                 series={[{ name: selectedId, data: selValues, color: "#3B9DFF", area: true }]}
               />
-              <div className="mt-1 px-1 text-3xs text-term-text-mute">
-                {selMeta ? `${selMeta.label} · ${selMeta.unit}` : selectedId}
+              <div className="mt-1 flex items-center justify-between px-1 text-3xs text-term-text-mute">
+                <span>{selMeta ? `${selMeta.label} · ${selMeta.unit}` : selectedId}</span>
+                <Link href={econChartHref(selectedId)} className="inline-flex items-center gap-1 text-term-amber hover:text-term-text transition-colors">
+                  <AreaChart className="h-3 w-3" /> Open in Chart Studio
+                </Link>
               </div>
             </div>
           </Panel>

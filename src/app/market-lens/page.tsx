@@ -82,6 +82,7 @@ const WINDOW_OPTIONS = ["1W", "1M", "3M", "6M", "1Y", "2Y", "3Y", "5Y"];
 function useLensData<T>(action: string, id?: string) {
   const [data, setData] = useState<T | null>(null);
   const [source, setSource] = useState<Source>("LOADING");
+  const [fallback, setFallback] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -94,15 +95,17 @@ function useLensData<T>(action: string, id?: string) {
         if (!alive) return;
         setData(json.data as T);
         setSource(json.source === "LIVE" ? "LIVE" : "SNAPSHOT");
+        setFallback(Boolean(json.fallback));
       })
       .catch(() => {
         if (!alive) return;
         setSource("SNAPSHOT");
+        setFallback(true); // request failed entirely — embedded data in use
       });
     return () => { alive = false; };
   }, [action, id]);
 
-  return { data, source };
+  return { data, source, fallback };
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────
@@ -557,13 +560,13 @@ function NarrativePanel({ narrative, warnings }: { narrative: string; warnings: 
 // ── Main Page ──────────────────────────────────────────────────────────
 
 export default function MarketLensStudioPage() {
-  const { data: views } = useLensData<ViewDef[]>("views");
+  const { data: views, source: viewsSource, fallback: viewsFallback } = useLensData<ViewDef[]>("views");
   const { data: presets } = useLensData<PresetDef[]>("presets");
   const { data: catalogData } = useLensData<{ total: number; entries: CatalogEntry[] }>("catalog");
 
-  const catalog = catalogData?.entries ?? [];
-  const viewList = views ?? [];
-  const presetList = presets ?? [];
+  const catalog = Array.isArray(catalogData?.entries) ? catalogData!.entries : [];
+  const viewList = Array.isArray(views) ? views : [];
+  const presetList = Array.isArray(presets) ? presets : [];
 
   // Configuration state
   const [selectedViewId, setSelectedViewId] = useState("ath_forward_returns");
@@ -719,6 +722,26 @@ export default function MarketLensStudioPage() {
           </button>
         ))}
       </div>
+
+      {/* Data-source notice — clarifies when the embedded view library / local
+          engine is in use vs. the live Python backend. */}
+      {viewsSource !== "LOADING" && (
+        <div
+          className={clsx(
+            "flex items-center gap-2 border-b px-3 py-1 text-2xs",
+            viewsFallback
+              ? "border-term-down/40 bg-term-down/10 text-term-down"
+              : "border-term-border bg-term-panel text-term-text-mute"
+          )}
+        >
+          <span>{viewsFallback ? "⚠" : "ℹ"}</span>
+          <span>
+            {viewsFallback
+              ? "Live Market Lens backend unavailable — showing the built-in view library. Analytics run on the local engine (committed snapshots + FRED)."
+              : "Built-in view library — analytics run on the local engine (committed snapshots + FRED). Set MARKET_LENS_URL to connect the live Python engine."}
+          </span>
+        </div>
+      )}
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-12">
         {/* Left: Configuration panel */}

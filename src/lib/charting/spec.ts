@@ -19,7 +19,7 @@ export interface SeriesRef {
 
 export type Transform = "none" | "index100" | "pct_change" | "yoy" | "mom" | "zscore" | "log";
 export type RangePreset = "1M" | "3M" | "6M" | "1Y" | "2Y" | "5Y" | "MAX";
-export type ChartType = "line" | "area";
+export type ChartType = "line" | "area" | "candles";
 
 export interface SeriesLayer {
   ref: SeriesRef;

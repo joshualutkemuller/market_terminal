@@ -26,6 +26,9 @@ import type { AssetClass } from "@/data/universe";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import type { ReturnBasis, SnapshotCard } from "@/data/marketPipeline";
 import { fmtNum, fmtInt, fmtAbbr, fmtSignedPct, pnlClass } from "@/lib/format";
+import { marketChartHref } from "@/components/charting/ChartLink";
+import Link from "next/link";
+import { CandlestickChart } from "lucide-react";
 
 type TabKey = "EQUITY" | "ETF" | "FI" | "FUTURE" | "FX" | "COMMODITY" | "CRYPTO";
 
@@ -259,7 +262,14 @@ export default function LiveMarkets() {
           <Panel
             title={`Intraday — ${chartTicker}`}
             code="GIP"
-            right={<span className="text-3xs text-term-amber">VWAP overlay (dashed)</span>}
+            right={
+              <span className="flex items-center gap-3">
+                <Link href={marketChartHref(chartTicker, "EQUITY")} className="inline-flex items-center gap-1 text-3xs text-term-amber hover:text-term-text transition-colors">
+                  <CandlestickChart className="h-3 w-3" /> Full Chart
+                </Link>
+                <span className="text-3xs text-term-amber">VWAP overlay (dashed)</span>
+              </span>
+            }
           >
             <div className="flex flex-wrap gap-px border-b border-term-border bg-term-border">
               {CHART_CHIPS.map((c) => (

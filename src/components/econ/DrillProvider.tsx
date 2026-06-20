@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { X } from "lucide-react";
 import { LineChart } from "@/components/charts/LineChart";
 import { SourceBadge } from "./SourceBadge";
+import { ChartLink } from "@/components/charting/ChartLink";
 import type { DataSource } from "@/lib/useEcon";
 import { fmtSigned, fmtNum, pnlClass } from "@/lib/format";
 
@@ -90,6 +91,7 @@ export function DrillProvider({ children }: { children: ReactNode }) {
                 {target.unitLabel && <span className="text-2xs text-term-text-mute">{target.unitLabel}</span>}
               </div>
               <div className="flex items-center gap-2">
+                <ChartLink refs={[{ source: "econ", id: target.id }]} range="5Y" transform={target.units === "pc1" ? "yoy" : target.units === "pch" ? "mom" : "none"} />
                 <SourceBadge source={source} />
                 <button onClick={() => setTarget(null)} className="text-term-text-mute hover:text-term-amber">
                   <X size={16} />
