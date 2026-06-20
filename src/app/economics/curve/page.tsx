@@ -8,12 +8,9 @@ import { YieldCurve, type CurveLine } from "@/components/charts/YieldCurve";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { SourceBadge } from "@/components/econ/SourceBadge";
-import { useCurveSnapshots } from "@/lib/useEcon";
+import { useCurveSnapshots, useInversions } from "@/lib/useEcon";
 import {
   getCurveMetrics,
-  getInversionStats,
-  getSpreadSeriesFor,
-  getInversionsForSpread,
   currentSpreadBps,
   spreadDef,
   SPREAD_DEFS,
@@ -110,17 +107,35 @@ export default function TreasuryCurveLab() {
 
   // User-selectable spread for the inversion analysis (default 10Y-2Y).
   const def = spreadDef(spreadId);
-  const spreadHist = getSpreadSeriesFor(spreadId);
-  const recessionQuarters = spreadHist.filter((d) => d.recession).map((d) => d.date);
   const currentSpread = currentSpreadBps(spreadId, today);
   const termCarry = getTermFundingCarry();
 
-  // Historical inversions of the selected spread.
-  const inversions = getInversionsForSpread(spreadId);
-  const stats = getInversionStats(spreadId);
+  // Live inversion detection — real FRED daily history for the selected spread.
+  const { data: invData, source: invSource } = useInversions(spreadId);
+  const spreadHist = invData.timeline;
+  const inversions = invData.inversions;
+  const stats = invData.stats;
+  // Condense recession months into distinct period ranges for the footnote.
+  const recessionPeriods = (() => {
+    const out: string[] = [];
+    let runStart: string | null = null;
+    let prev: string | null = null;
+    for (const d of spreadHist) {
+      if (d.recession) {
+        if (!runStart) runStart = d.date;
+        prev = d.date;
+      } else if (runStart) {
+        out.push(runStart === prev ? runStart : `${runStart}–${prev}`);
+        runStart = null;
+        prev = null;
+      }
+    }
+    if (runStart) out.push(runStart === prev ? runStart : `${runStart}–${prev}`);
+    return out;
+  })();
 
   const invCols: Column<Inversion>[] = [
-    { key: "inv", header: "Inverted", render: (r) => <span className="text-term-text">{r.invertedDate}</span> },
+    { key: "inv", header: "Inverted", render: (r) => <span className="text-term-text">{r.invertedDate}</span>, sortVal: (r) => r.id },
     { key: "uninv", header: "Un-inverted", render: (r) => <span className="text-term-text-dim">{r.unInvertedDate}</span> },
     { key: "dur", header: "Dur (mo)", align: "right", render: (r) => <span className="text-term-text">{r.durationMonths}</span>, sortVal: (r) => r.durationMonths },
     { key: "depth", header: "Max Depth", align: "right", render: (r) => <span className="text-term-down">{fmtSigned(r.maxDepthBps, 0)}</span>, sortVal: (r) => r.maxDepthBps },
@@ -330,6 +345,7 @@ export default function TreasuryCurveLab() {
           code="HIST"
           right={
             <div className="flex items-center gap-2">
+              <SourceBadge source={invSource} />
               <span className={`tnum text-2xs ${pnlClass(currentSpread)}`}>{fmtSigned(currentSpread, 0)}bps</span>
               <select
                 value={spreadId}
@@ -358,8 +374,8 @@ export default function TreasuryCurveLab() {
               <span className="text-term-down">zero line</span> mark inverted regimes ({def.longT} below {def.shortT}).
             </div>
             <div className="mt-1 px-1 text-3xs text-term-text-dim">
-              <span className="text-term-text-mute">Recession quarters:</span>{" "}
-              <span className="tnum">{recessionQuarters.join(" · ") || "none in window"}</span>
+              <span className="text-term-text-mute">Recession periods:</span>{" "}
+              <span className="tnum">{recessionPeriods.join(" · ") || "none in window"}</span>
             </div>
           </div>
         </Panel>

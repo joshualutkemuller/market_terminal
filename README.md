@@ -108,7 +108,7 @@ analytics/model modules are computed layers. Honest per-module status:
 | Module | Card values | Drill-down (24m) | Notes |
 |--------|-------------|------------------|-------|
 | Macro Dashboard | 🟢 Live (FRED, units-corrected) | 🟢 Live | `/api/econ/indicators` |
-| Treasury Curve Lab | 🟢 Live (today + point-in-time) | 🟢 Live tenors | real curves as-of Today/1M/3M/6M/1Y/2Y from FRED daily history (`/api/econ/curve-history`); deep reference curves (2021/2009), inversions & term carry are curated/computed |
+| Treasury Curve Lab | 🟢 Live (today + point-in-time) | 🟢 Live tenors | real curves as-of Today/1M/3M/6M/1Y/2Y from FRED daily history (`/api/econ/curve-history`); **inversions live-detected** for every spread from real daily history + USREC (`/api/econ/inversions`); deep reference curves (2021/2009) & term carry curated |
 | Economic Calendar | 🟢 Live (FRED release dates) | — | `/api/econ/calendar`; release sensitivities and factor moves are computed |
 | Inflation Explorer | 🟢 Live (index → derived MoM/YoY/accel) | 🟢 Live | CPI/PCE component FRED ids; per-item fallback to sim |
 | Global Inflation | 🟢 Live (most countries) | 🟢 Live | OECD-on-FRED CPI; per-country fallback to sim |
