@@ -86,6 +86,24 @@ FRED_API_KEY=your_key_here npm run dev
 # On Vercel/Netlify: add FRED_API_KEY as a project environment variable.
 ```
 
+### AI Copilot (optional Claude integration)
+
+The **AI Copilot** (`AI`) answers natural-language questions over the securities-finance
+desks, and is **optional and resilient** the same way:
+
+- **With a key** — set `ANTHROPIC_API_KEY`. The `/api/copilot` route hands Claude
+  (`claude-opus-4-8`) a factual snapshot of the live desk data (securities-lending revenue,
+  borrower/security rankings, collateral savings, funding costs, internalization, hard-to-borrow)
+  and Claude answers **from those figures only**. Answers carry a green **Claude** badge; the
+  charts and tables are still computed deterministically from the real desk data.
+- **Without a key** — the Copilot falls back to its **deterministic keyword engine** over the
+  same datasets (amber **Local engine** badge). Fully functional offline.
+
+```bash
+ANTHROPIC_API_KEY=your_key_here npm run dev
+# On Vercel/Netlify: add ANTHROPIC_API_KEY as a project environment variable.
+```
+
 **Daily refresh (Vercel Cron).** FRED data is fetched on-access and cached (curve history 6h,
 indicators 10 min), so a busy site is always fresh — but to guarantee the curve/rates refresh
 **once a day even with no traffic**, `vercel.json` registers a cron that hits

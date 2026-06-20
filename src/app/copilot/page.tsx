@@ -31,6 +31,7 @@ interface ChatMsg {
   role: "user" | "assistant";
   text?: string; // raw text for user msgs
   answer?: Answer; // structured payload for assistant msgs
+  source?: "AI" | "LOCAL"; // provenance of the assistant answer
 }
 
 const SUGGESTED = [
@@ -297,18 +298,41 @@ export default function AICopilot() {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [messages, pending]);
 
-  const ask = (text: string) => {
+  const ask = async (text: string) => {
     const t = text.trim();
     if (!t || pending) return;
-    const userMsg: ChatMsg = { id: ++MSG_ID, role: "user", text: t };
-    setMessages((m) => [...m, userMsg]);
+    setMessages((m) => [...m, { id: ++MSG_ID, role: "user", text: t }]);
     setInput("");
     setPending(true);
-    const ans = answerFor(t);
-    setTimeout(() => {
-      setMessages((m) => [...m, { id: ++MSG_ID, role: "assistant", answer: ans }]);
+
+    // Deterministic answer is computed locally from real desk data — it supplies
+    // the charts/tables/actions and is the fallback when the model is unavailable.
+    const local = answerFor(t);
+    try {
+      const res = await fetch("/api/copilot", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question: t }),
+      });
+      const j = await res.json();
+      if (j?.source === "AI" && j.text) {
+        // Claude narrative + the deterministic (real-data) visuals.
+        const merged: Answer = {
+          text: j.text,
+          bullets: Array.isArray(j.bullets) && j.bullets.length ? j.bullets : undefined,
+          table: local.table,
+          chart: local.chart,
+          actions: local.actions,
+        };
+        setMessages((m) => [...m, { id: ++MSG_ID, role: "assistant", answer: merged, source: "AI" }]);
+      } else {
+        setMessages((m) => [...m, { id: ++MSG_ID, role: "assistant", answer: local, source: "LOCAL" }]);
+      }
+    } catch {
+      setMessages((m) => [...m, { id: ++MSG_ID, role: "assistant", answer: local, source: "LOCAL" }]);
+    } finally {
       setPending(false);
-    }, 500);
+    }
   };
 
   return (
@@ -333,6 +357,13 @@ export default function AICopilot() {
                       AI
                     </span>
                     <div className="min-w-0 max-w-[88%] rounded-sm border border-term-border bg-term-panel-2 px-2.5 py-2">
+                      {msg.source && (
+                        <div className="mb-1.5 flex items-center gap-1">
+                          <Tag tone={msg.source === "AI" ? "up" : "amber"}>
+                            {msg.source === "AI" ? "Claude · claude-opus-4-8" : "Local engine"}
+                          </Tag>
+                        </div>
+                      )}
                       {msg.answer && <AnswerView a={msg.answer} />}
                     </div>
                   </div>
