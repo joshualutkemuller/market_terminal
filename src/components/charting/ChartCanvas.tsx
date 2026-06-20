@@ -1,11 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useImperativeHandle, forwardRef } from "react";
 import clsx from "clsx";
 import type { RecessionBand } from "@/lib/charting/recessions";
 import type { CanvasSeries, OHLC, OscPane } from "@/lib/charting/canvasTypes";
+import { FIB_LEVELS, type Drawing, type DrawMode } from "@/lib/charting/drawings";
 
 export type { CanvasSeries } from "@/lib/charting/canvasTypes";
+
+export interface ChartCanvasHandle {
+  getSvgElement: () => SVGSVGElement | null;
+}
 
 interface ChartCanvasProps {
   axis: string[]; // ISO dates
@@ -16,6 +21,9 @@ interface ChartCanvasProps {
   height?: number; // main plot-area height
   yFmt?: (n: number) => string;
   recessions?: RecessionBand[];
+  drawings?: Drawing[];
+  drawMode?: DrawMode;
+  onDrawingAdd?: (d: Drawing) => void;
   className?: string;
 }
 
@@ -40,9 +48,13 @@ function extent(arrs: (number | null)[][]): [number, number] {
   return lo === hi ? [lo - 1, hi + 1] : [lo, hi];
 }
 
-export function ChartCanvas({ axis, series, candles, overlays = [], oscPanes = [], height = 300, yFmt, recessions, className }: ChartCanvasProps) {
+export const ChartCanvas = forwardRef<ChartCanvasHandle, ChartCanvasProps>(function ChartCanvas({ axis, series, candles, overlays = [], oscPanes = [], height = 300, yFmt, recessions, drawings = [], drawMode = "none", onDrawingAdd, className }, ref) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
+  const [drawStart, setDrawStart] = useState<{ idx: number; val: number } | null>(null);
+
+  useImperativeHandle(ref, () => ({ getSvgElement: () => svgRef.current }));
 
   const n = axis.length;
   const mainTop = 10;
@@ -86,17 +98,45 @@ export function ChartCanvas({ axis, series, candles, overlays = [], oscPanes = [
   const cw = Math.min(9, Math.max(1, ((W - padL - padR) / Math.max(1, n)) * 0.6));
   const xLabelEvery = Math.max(1, Math.ceil(n / 7));
 
-  const onMove = (e: React.MouseEvent) => {
+  const posFromEvent = (e: React.MouseEvent): { idx: number; val: number } | null => {
     const el = wrapRef.current;
-    if (!el || n < 2) return;
+    if (!el || n < 2) return null;
     const rect = el.getBoundingClientRect();
     const plotFrac = ((e.clientX - rect.left) / rect.width * W - padL) / (W - padL - padR);
-    setHover(Math.round(Math.min(1, Math.max(0, plotFrac)) * (n - 1)));
+    const idx = Math.round(Math.min(1, Math.max(0, plotFrac)) * (n - 1));
+    const yFrac = ((e.clientY - rect.top) / rect.height * totalH - mainTop) / (mainBot - mainTop);
+    const val = max - yFrac * range;
+    return { idx, val };
+  };
+
+  const onMove = (e: React.MouseEvent) => {
+    const pos = posFromEvent(e);
+    if (pos) setHover(pos.idx);
+  };
+
+  const onClick = (e: React.MouseEvent) => {
+    if (drawMode === "none" || !onDrawingAdd || !hasData) return;
+    const pos = posFromEvent(e);
+    if (!pos) return;
+    if (drawMode === "hline") {
+      onDrawingAdd({ type: "hline", id: Math.random().toString(36).slice(2, 8), value: pos.val, color: "#F5C518" });
+      return;
+    }
+    if (!drawStart) {
+      setDrawStart(pos);
+      return;
+    }
+    if (drawMode === "trendline") {
+      onDrawingAdd({ type: "trendline", id: Math.random().toString(36).slice(2, 8), x1: drawStart.idx, y1: drawStart.val, x2: pos.idx, y2: pos.val, color: "#3B9DFF" });
+    } else if (drawMode === "fib") {
+      onDrawingAdd({ type: "fib", id: Math.random().toString(36).slice(2, 8), high: Math.max(drawStart.val, pos.val), low: Math.min(drawStart.val, pos.val), x1: drawStart.idx, x2: pos.idx, color: "#A78BFA" });
+    }
+    setDrawStart(null);
   };
 
   return (
-    <div ref={wrapRef} className={clsx("relative", className)} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-      <svg viewBox={`0 0 ${W} ${totalH}`} preserveAspectRatio="none" style={{ width: "100%", height: totalH }}>
+    <div ref={wrapRef} className={clsx("relative", drawMode !== "none" && "cursor-crosshair", className)} onMouseMove={onMove} onMouseLeave={() => setHover(null)} onClick={onClick}>
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${totalH}`} preserveAspectRatio="none" style={{ width: "100%", height: totalH }}>
         {/* recession shading across all panes */}
         {recBands.map((r, i) => {
           const x0 = dateToX(r.start), x1 = dateToX(r.end);
@@ -168,6 +208,45 @@ export function ChartCanvas({ axis, series, candles, overlays = [], oscPanes = [
           );
         })}
 
+        {/* drawings */}
+        {hasData && drawings.map((d) => {
+          if (d.type === "hline") {
+            const cy = yMain(d.value);
+            return (
+              <g key={d.id}>
+                <line x1={padL} x2={W - padR} y1={cy} y2={cy} stroke={d.color} strokeWidth={1} strokeDasharray="6 3" />
+                <text x={W - padR + 2} y={cy + 3} fontSize={8} fill={d.color} fontFamily="var(--font-mono)">{d.label ?? fmt(d.value)}</text>
+              </g>
+            );
+          }
+          if (d.type === "trendline") {
+            return <line key={d.id} x1={x(d.x1)} y1={yMain(d.y1)} x2={x(d.x2)} y2={yMain(d.y2)} stroke={d.color} strokeWidth={1.2} />;
+          }
+          if (d.type === "fib") {
+            return (
+              <g key={d.id}>
+                {FIB_LEVELS.map((lvl) => {
+                  const val = d.low + (d.high - d.low) * (1 - lvl);
+                  const cy = yMain(val);
+                  return (
+                    <g key={lvl}>
+                      <line x1={padL} x2={W - padR} y1={cy} y2={cy} stroke={d.color} strokeWidth={0.8} strokeDasharray="4 3" opacity={0.7} />
+                      <text x={W - padR + 2} y={cy + 3} fontSize={7} fill={d.color} fontFamily="var(--font-mono)" opacity={0.8}>{(lvl * 100).toFixed(1)}%</text>
+                    </g>
+                  );
+                })}
+                <rect x={Math.min(x(d.x1), x(d.x2))} y={yMain(d.high)} width={Math.abs(x(d.x2) - x(d.x1))} height={yMain(d.low) - yMain(d.high)} fill={d.color} opacity={0.04} />
+              </g>
+            );
+          }
+          return null;
+        })}
+
+        {/* draw-in-progress indicator */}
+        {drawStart && hover != null && drawMode === "trendline" && (
+          <line x1={x(drawStart.idx)} y1={yMain(drawStart.val)} x2={x(hover)} y2={yMain(series[0]?.values[hover] ?? drawStart.val)} stroke="#3B9DFF" strokeWidth={1} strokeDasharray="3 2" opacity={0.6} />
+        )}
+
         {/* x labels */}
         {axis.map((d, i) => (i % xLabelEvery === 0 ? (
           <text key={`x${i}`} x={x(i)} y={totalH - 4} textAnchor="middle" fontSize={9} fill="#5E5E66" fontFamily="var(--font-mono)">{d.slice(0, 7)}</text>
@@ -213,4 +292,4 @@ export function ChartCanvas({ axis, series, candles, overlays = [], oscPanes = [
       {!hasData && <div className="absolute inset-0 flex items-center justify-center text-2xs text-term-text-mute">No data for this selection</div>}
     </div>
   );
-}
+});

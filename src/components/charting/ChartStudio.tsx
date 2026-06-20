@@ -1,17 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { Plus, X, Search } from "lucide-react";
+import { Plus, X, Search, Save, Share2, Download, Image, Trash2, Minus, TrendingUp, GitBranch } from "lucide-react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
-import { ChartCanvas } from "./ChartCanvas";
+import { ChartCanvas, type ChartCanvasHandle } from "./ChartCanvas";
 import { useChartSeries } from "@/lib/charting/resolver";
 import { RANGE_PRESETS, SERIES_COLORS, type ChartType, type RangePreset, type SeriesRef } from "@/lib/charting/spec";
 import { TRANSFORMS, TRANSFORM_LABELS, transformFmt, type Transform } from "@/lib/charting/transforms";
 import { US_RECESSIONS } from "@/lib/charting/recessions";
 import { INDICATOR_PRESETS, computeIndicator, synthOHLC, type IndicatorSpec } from "@/lib/charting/indicators";
 import { STUDY_PRESETS, computeStudy, monthlySeasonality, type StudySpec } from "@/lib/charting/studies";
+import { getPresetsForStudio, getSavedTemplates, saveTemplate, deleteTemplate, templateToURL, urlToChartState, type ChartTemplate } from "@/lib/charting/templates";
+import { type Drawing, type DrawMode } from "@/lib/charting/drawings";
 import type { CatalogItem } from "@/data/chartCatalog";
 
 const CHART_TYPES: ChartType[] = ["line", "area", "candles"];
@@ -30,9 +32,7 @@ interface ChartStudioProps {
   defaultRefs: SeriesRef[];
   allowChartType?: boolean;
   defaultChartType?: ChartType;
-  /** Show the NBER recession-shading toggle (macro studio). */
   recessionShading?: boolean;
-  /** Show the technical-indicator controls (MA/Bollinger/RSI/MACD). */
   allowIndicators?: boolean;
 }
 
@@ -41,6 +41,8 @@ function refKey(r: SeriesRef): string {
 }
 
 export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChartType = false, defaultChartType = "line", recessionShading = false, allowIndicators = false }: ChartStudioProps) {
+  const studioId = code === "MKC" ? "MKC" : "MGC";
+
   const [refs, setRefs] = useState<SeriesRef[]>(defaultRefs);
   const [range, setRange] = useState<RangePreset>("2Y");
   const [transform, setTransform] = useState<Transform>("none");
@@ -52,6 +54,35 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
   const [studyMenu, setStudyMenu] = useState(false);
   const [showSeasonality, setShowSeasonality] = useState(false);
   const [query, setQuery] = useState("");
+
+  // Phase 4: templates, drawings, export
+  const [tplMenu, setTplMenu] = useState(false);
+  const [saveDialog, setSaveDialog] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [shareNotice, setShareNotice] = useState<string | null>(null);
+  const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [drawMode, setDrawMode] = useState<DrawMode>("none");
+  const [drawMenu, setDrawMenu] = useState(false);
+
+  const canvasRef = useRef<ChartCanvasHandle>(null);
+
+  // Restore chart state from URL param on mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const state = params.get("chart");
+    if (!state) return;
+    const parsed = urlToChartState(state);
+    if (!parsed) return;
+    setRefs(parsed.refs);
+    setRange(parsed.range);
+    setTransform(parsed.transform);
+    setChartType(parsed.chartType);
+    if (parsed.indicators?.length) setIndicators(parsed.indicators);
+    if (parsed.studies?.length) setStudies(parsed.studies);
+    if (parsed.showRecession != null) setShowRecession(parsed.showRecession);
+    if (parsed.showSeasonality) setShowSeasonality(parsed.showSeasonality);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { axis, series, loading } = useChartSeries(refs, range, transform);
 
@@ -84,6 +115,116 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
   };
   const removeStudy = (id: string) => setStudies((prev) => prev.filter((s) => s.id !== id));
 
+  // Templates
+  const presets = useMemo(() => getPresetsForStudio(studioId), [studioId]);
+  const [savedTemplates, setSavedTemplates] = useState<ChartTemplate[]>([]);
+  useEffect(() => { setSavedTemplates(getSavedTemplates().filter((t) => t.studio === studioId || t.studio === "both")); }, [studioId]);
+
+  const applyTemplate = useCallback((t: ChartTemplate) => {
+    setRefs(t.refs);
+    setRange(t.range);
+    setTransform(t.transform);
+    setChartType(t.chartType);
+    setIndicators(t.indicators);
+    setStudies(t.studies);
+    if (t.showRecession != null) setShowRecession(t.showRecession);
+    if (t.showSeasonality != null) setShowSeasonality(t.showSeasonality);
+    setTplMenu(false);
+  }, []);
+
+  const handleSave = () => {
+    if (!saveName.trim()) return;
+    const t: ChartTemplate = {
+      id: `user-${Date.now()}`,
+      name: saveName.trim(),
+      desc: `${refs.map((r) => r.id).join(", ")} — ${range}`,
+      studio: studioId,
+      refs, range, transform, chartType, indicators, studies,
+      showRecession, showSeasonality,
+    };
+    saveTemplate(t);
+    setSavedTemplates(getSavedTemplates().filter((x) => x.studio === studioId || x.studio === "both"));
+    setSaveDialog(false);
+    setSaveName("");
+  };
+
+  const handleDelete = (id: string) => {
+    deleteTemplate(id);
+    setSavedTemplates(getSavedTemplates().filter((t) => t.studio === studioId || t.studio === "both"));
+  };
+
+  const handleShare = () => {
+    const url = templateToURL({ refs, range, transform, chartType, indicators, studies, showRecession, showSeasonality });
+    const base = typeof window !== "undefined" ? window.location.origin + window.location.pathname : "";
+    const full = `${base}?chart=${url}`;
+    navigator.clipboard.writeText(full).then(() => {
+      setShareNotice("Link copied!");
+      setTimeout(() => setShareNotice(null), 2000);
+    }).catch(() => {
+      setShareNotice("Copy failed");
+      setTimeout(() => setShareNotice(null), 2000);
+    });
+  };
+
+  // Export PNG
+  const exportPNG = useCallback(() => {
+    const svg = canvasRef.current?.getSvgElement();
+    if (!svg) return;
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    // set background
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("width", "100%");
+    bg.setAttribute("height", "100%");
+    bg.setAttribute("fill", "#0A0A0C");
+    clone.insertBefore(bg, clone.firstChild);
+    const data = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([data], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const img = new window.Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth * 2;
+      canvas.height = img.naturalHeight * 2;
+      const ctx = canvas.getContext("2d")!;
+      ctx.scale(2, 2);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      canvas.toBlob((b) => {
+        if (!b) return;
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(b);
+        a.download = `${code}-chart-${new Date().toISOString().slice(0, 10)}.png`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }, "image/png");
+    };
+    img.src = url;
+  }, [code]);
+
+  // Export CSV
+  const exportCSV = useCallback(() => {
+    if (!axis.length || !series.length) return;
+    const header = ["Date", ...series.map((s) => byId.get(s.ref.id)?.label ?? s.ref.id)].join(",");
+    const rows = axis.map((d, i) =>
+      [d, ...series.map((s) => s.values[i] == null ? "" : String(s.values[i]))].join(",")
+    );
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${code}-data-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, [axis, series, code, byId]);
+
+  // Drawings
+  const addDrawing = useCallback((d: Drawing) => {
+    setDrawings((prev) => [...prev, d]);
+    setDrawMode("none");
+  }, []);
+  const clearDrawings = () => setDrawings([]);
+
   const allSeries = series.map((s, i) => ({
     label: byId.get(s.ref.id)?.label ?? s.label,
     color: SERIES_COLORS[i % SERIES_COLORS.length],
@@ -91,7 +232,6 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
     area: chartType === "area",
   }));
 
-  // Indicators are computed on the primary (first) series.
   const primary = series[0];
   const indResults = useMemo(
     () => indicators.map((spec, i) => computeIndicator(spec, primary?.values ?? [], i)),
@@ -99,7 +239,6 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
   );
   const overlays = indResults.flatMap((r) => r.overlays);
 
-  // Studies (spread/ratio/rolling corr/beta/percentile) → oscillator panes.
   const studyPanes = useMemo(() => {
     const vals = series.map((s) => s.values);
     const labels = series.map((s) => byId.get(s.ref.id)?.label ?? s.label);
@@ -115,7 +254,6 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
   const seasonalityMax = seasonality ? Math.max(0.01, ...seasonality.map((m) => Math.abs(m.mean ?? 0))) : 1;
 
   const candles = chartType === "candles" && primary ? synthOHLC(primary.values) : undefined;
-  // In candle mode the primary is drawn as candlesticks; remaining series stay as lines.
   const mainSeries = candles ? allSeries.slice(1) : allSeries;
 
   const yFmt = transformFmt(transform);
@@ -236,7 +374,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
           </div>
         )}
 
-        {/* Studies (derived series / pair analytics) */}
+        {/* Studies */}
         <div className="relative">
           <button onClick={() => setStudyMenu((v) => !v)} className={clsx(btn, studyMenu ? "border-term-amber bg-term-amber/15 text-term-amber" : "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")}>
             + Study
@@ -267,6 +405,95 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
           Seasonality
         </button>
 
+        <div className="h-4 w-px bg-term-border" />
+
+        {/* Drawing tools */}
+        <div className="relative">
+          <button onClick={() => setDrawMenu((v) => !v)} className={clsx(btn, drawMode !== "none" ? "border-term-amber bg-term-amber/15 text-term-amber" : "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")}>
+            Draw
+          </button>
+          {drawMenu && (
+            <div className="absolute z-20 mt-1 w-44 overflow-hidden rounded-sm border border-term-border bg-term-panel shadow-xl">
+              <button onClick={() => { setDrawMode("hline"); setDrawMenu(false); }} className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-2xs text-term-text hover:bg-term-panel-3">
+                <Minus className="h-3 w-3 text-term-amber" /> Horizontal Level
+              </button>
+              <button onClick={() => { setDrawMode("trendline"); setDrawMenu(false); }} className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-2xs text-term-text hover:bg-term-panel-3">
+                <TrendingUp className="h-3 w-3 text-term-amber" /> Trend Line
+              </button>
+              <button onClick={() => { setDrawMode("fib"); setDrawMenu(false); }} className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-2xs text-term-text hover:bg-term-panel-3">
+                <GitBranch className="h-3 w-3 text-term-amber" /> Fibonacci Retracement
+              </button>
+              {drawings.length > 0 && (
+                <>
+                  <div className="border-t border-term-border" />
+                  <button onClick={() => { clearDrawings(); setDrawMenu(false); }} className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-2xs text-term-down hover:bg-term-panel-3">
+                    <Trash2 className="h-3 w-3" /> Clear All Drawings
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Templates */}
+        <div className="relative">
+          <button onClick={() => setTplMenu((v) => !v)} className={clsx(btn, "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")}>
+            Templates
+          </button>
+          {tplMenu && (
+            <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-sm border border-term-border bg-term-panel shadow-xl">
+              <div className="border-b border-term-border px-2 py-1 text-3xs font-semibold uppercase tracking-wider text-term-text-mute">Presets</div>
+              {presets.map((p) => (
+                <button key={p.id} onClick={() => applyTemplate(p)} className="flex w-full items-center gap-2 px-2 py-1 text-left text-2xs hover:bg-term-panel-3">
+                  <span className="font-semibold text-term-amber">{p.name}</span>
+                  <span className="truncate text-term-text-mute">{p.desc}</span>
+                </button>
+              ))}
+              {savedTemplates.length > 0 && (
+                <>
+                  <div className="border-b border-term-border px-2 py-1 text-3xs font-semibold uppercase tracking-wider text-term-text-mute">Saved</div>
+                  {savedTemplates.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between px-2 py-1 text-2xs hover:bg-term-panel-3">
+                      <button onClick={() => applyTemplate(t)} className="flex-1 text-left">
+                        <span className="font-semibold text-term-text">{t.name}</span>
+                        <span className="ml-2 truncate text-term-text-mute">{t.desc}</span>
+                      </button>
+                      <button onClick={() => handleDelete(t.id)} className="ml-1 text-term-text-mute hover:text-term-down" title="Delete">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Save */}
+        <button onClick={() => setSaveDialog(true)} className={clsx(btn, "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")} title="Save as template">
+          <Save className="inline h-3 w-3" />
+        </button>
+
+        {/* Share */}
+        <div className="relative">
+          <button onClick={handleShare} className={clsx(btn, "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")} title="Copy share link">
+            <Share2 className="inline h-3 w-3" />
+          </button>
+          {shareNotice && (
+            <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-sm bg-term-up px-2 py-0.5 text-3xs font-semibold text-black">
+              {shareNotice}
+            </div>
+          )}
+        </div>
+
+        {/* Export */}
+        <button onClick={exportPNG} className={clsx(btn, "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")} title="Export PNG">
+          <Image className="inline h-3 w-3" />
+        </button>
+        <button onClick={exportCSV} className={clsx(btn, "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")} title="Export CSV">
+          <Download className="inline h-3 w-3" />
+        </button>
+
         {/* Active indicator + study chips */}
         {indicators.map((ind) => (
           <span key={ind.id} className="flex items-center gap-1 rounded-sm border border-term-border bg-term-panel-2 px-1.5 py-0.5 text-3xs text-term-text-dim">
@@ -284,12 +511,44 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
             </button>
           </span>
         ))}
+        {drawings.length > 0 && (
+          <span className="text-3xs text-term-text-mute">{drawings.length} drawing{drawings.length > 1 ? "s" : ""}</span>
+        )}
+        {drawMode !== "none" && (
+          <span className="flex items-center gap-1 rounded-sm border border-term-amber/40 bg-term-amber/10 px-1.5 py-0.5 text-3xs text-term-amber">
+            Click chart to place {drawMode === "hline" ? "level" : drawMode === "trendline" ? "endpoints" : "swing points"}
+            <button onClick={() => setDrawMode("none")} className="text-term-text-mute hover:text-term-down" aria-label="cancel draw">
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </span>
+        )}
       </div>
+
+      {/* Save dialog */}
+      {saveDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setSaveDialog(false)}>
+          <div className="w-80 rounded border border-term-border bg-term-panel p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 text-sm font-semibold text-term-text">Save Template</div>
+            <input
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder="Template name…"
+              className="mb-3 w-full rounded-sm border border-term-border bg-term-panel-2 px-2 py-1.5 text-xs text-term-text outline-none focus:border-term-amber"
+              autoFocus
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setSaveDialog(false)} className="rounded-sm border border-term-border px-3 py-1 text-2xs text-term-text-mute hover:text-term-text">Cancel</button>
+              <button onClick={handleSave} disabled={!saveName.trim()} className="rounded-sm border border-term-amber bg-term-amber px-3 py-1 text-2xs font-semibold text-black disabled:opacity-40">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-1 flex-col gap-2 p-2">
         <Panel title="Chart" code={code} accent>
           <div className="p-2">
-            <ChartCanvas axis={axis} series={mainSeries} candles={candles} overlays={overlays} oscPanes={oscPanes} height={candles || overlays.length ? 340 : 360} yFmt={yFmt} recessions={showRecession ? US_RECESSIONS : undefined} />
+            <ChartCanvas ref={canvasRef} axis={axis} series={mainSeries} candles={candles} overlays={overlays} oscPanes={oscPanes} height={candles || overlays.length ? 340 : 360} yFmt={yFmt} recessions={showRecession ? US_RECESSIONS : undefined} drawings={drawings} drawMode={drawMode} onDrawingAdd={addDrawing} />
           </div>
           {/* Legend */}
           <div className="flex flex-wrap gap-1.5 border-t border-term-border px-2 py-1.5">
@@ -307,7 +566,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
           </div>
         </Panel>
 
-        {/* Seasonality — average % return by calendar month for the primary series */}
+        {/* Seasonality */}
         {seasonality && (
           <Panel title={`Seasonality — ${primary ? byId.get(primary.ref.id)?.label ?? primary.ref.id : ""}`} code="SEAS">
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 sm:grid-cols-3 lg:grid-cols-4">
