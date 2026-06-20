@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { Plus, X, Search, Save, Share2, Download, Image, Trash2, Minus, TrendingUp, GitBranch } from "lucide-react";
+import { Plus, X, Search, Save, Share2, Download, Image as ImageIcon, Trash2, Minus, TrendingUp, GitBranch } from "lucide-react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
@@ -486,7 +486,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
 
         {/* Export */}
         <button onClick={exportPNG} className={clsx(btn, "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")} title="Export PNG">
-          <Image className="inline h-3 w-3" />
+          <ImageIcon className="inline h-3 w-3" />
         </button>
         <button onClick={exportCSV} className={clsx(btn, "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")} title="Export CSV">
           <Download className="inline h-3 w-3" />

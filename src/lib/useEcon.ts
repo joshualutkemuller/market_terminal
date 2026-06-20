@@ -51,7 +51,8 @@ function useEconResource<T>(url: string, fallback: T, pick: (json: any) => T): {
     return () => {
       alive = false;
     };
-  }, [url]);
+    // `pick` is a stable per-call-site projection; re-running only on `url` is intended.
+  }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { data, source };
 }

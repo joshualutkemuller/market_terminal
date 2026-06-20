@@ -564,9 +564,10 @@ export default function MarketLensStudioPage() {
   const { data: presets } = useLensData<PresetDef[]>("presets");
   const { data: catalogData } = useLensData<{ total: number; entries: CatalogEntry[] }>("catalog");
 
-  const catalog = Array.isArray(catalogData?.entries) ? catalogData!.entries : [];
-  const viewList = Array.isArray(views) ? views : [];
-  const presetList = Array.isArray(presets) ? presets : [];
+  // Memoized so their identity is stable across renders (these feed hook deps below).
+  const catalog = useMemo(() => (Array.isArray(catalogData?.entries) ? catalogData!.entries : []), [catalogData]);
+  const viewList = useMemo(() => (Array.isArray(views) ? views : []), [views]);
+  const presetList = useMemo(() => (Array.isArray(presets) ? presets : []), [presets]);
 
   // Configuration state
   const [selectedViewId, setSelectedViewId] = useState("ath_forward_returns");
