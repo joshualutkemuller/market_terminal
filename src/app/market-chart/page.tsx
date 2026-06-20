@@ -11,7 +11,8 @@ export default function MarketChartPage() {
       catalog={MARKET_CATALOG}
       defaultRefs={[{ source: "market", id: "SPY", assetClass: "EQUITY" }]}
       allowChartType
-      defaultChartType="area"
+      defaultChartType="candles"
+      allowIndicators
     />
   );
 }

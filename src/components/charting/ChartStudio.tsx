@@ -10,7 +10,10 @@ import { useChartSeries } from "@/lib/charting/resolver";
 import { RANGE_PRESETS, SERIES_COLORS, type ChartType, type RangePreset, type SeriesRef } from "@/lib/charting/spec";
 import { TRANSFORMS, TRANSFORM_LABELS, transformFmt, type Transform } from "@/lib/charting/transforms";
 import { US_RECESSIONS } from "@/lib/charting/recessions";
+import { INDICATOR_PRESETS, computeIndicator, synthOHLC, type IndicatorSpec } from "@/lib/charting/indicators";
 import type { CatalogItem } from "@/data/chartCatalog";
+
+const CHART_TYPES: ChartType[] = ["line", "area", "candles"];
 
 const MAX_SERIES = 6;
 
@@ -28,18 +31,22 @@ interface ChartStudioProps {
   defaultChartType?: ChartType;
   /** Show the NBER recession-shading toggle (macro studio). */
   recessionShading?: boolean;
+  /** Show the technical-indicator controls (MA/Bollinger/RSI/MACD). */
+  allowIndicators?: boolean;
 }
 
 function refKey(r: SeriesRef): string {
   return `${r.source}:${r.id}`;
 }
 
-export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChartType = false, defaultChartType = "line", recessionShading = false }: ChartStudioProps) {
+export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChartType = false, defaultChartType = "line", recessionShading = false, allowIndicators = false }: ChartStudioProps) {
   const [refs, setRefs] = useState<SeriesRef[]>(defaultRefs);
   const [range, setRange] = useState<RangePreset>("2Y");
   const [transform, setTransform] = useState<Transform>("none");
   const [chartType, setChartType] = useState<ChartType>(defaultChartType);
   const [showRecession, setShowRecession] = useState(recessionShading);
+  const [indicators, setIndicators] = useState<IndicatorSpec[]>([]);
+  const [indMenu, setIndMenu] = useState(false);
   const [query, setQuery] = useState("");
 
   const { axis, series, loading } = useChartSeries(refs, range, transform);
@@ -61,12 +68,31 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
   };
   const removeRef = (r: SeriesRef) => setRefs((prev) => prev.filter((x) => refKey(x) !== refKey(r)));
 
-  const canvasSeries = series.map((s, i) => ({
+  const addIndicator = (spec: Omit<IndicatorSpec, "id">) => {
+    setIndicators((prev) => [...prev, { ...spec, id: `${spec.type}-${Math.random().toString(36).slice(2, 7)}` }]);
+    setIndMenu(false);
+  };
+  const removeIndicator = (id: string) => setIndicators((prev) => prev.filter((i) => i.id !== id));
+
+  const allSeries = series.map((s, i) => ({
     label: byId.get(s.ref.id)?.label ?? s.label,
     color: SERIES_COLORS[i % SERIES_COLORS.length],
     values: s.values,
     area: chartType === "area",
   }));
+
+  // Indicators are computed on the primary (first) series.
+  const primary = series[0];
+  const indResults = useMemo(
+    () => indicators.map((spec, i) => computeIndicator(spec, primary?.values ?? [], i)),
+    [indicators, primary?.values]
+  );
+  const overlays = indResults.flatMap((r) => r.overlays);
+  const oscPanes = indResults.flatMap((r) => r.oscPanes);
+
+  const candles = chartType === "candles" && primary ? synthOHLC(primary.values) : undefined;
+  // In candle mode the primary is drawn as candlesticks; remaining series stay as lines.
+  const mainSeries = candles ? allSeries.slice(1) : allSeries;
 
   const yFmt = transformFmt(transform);
   const sources = Array.from(new Set(series.map((s) => s.source)));
@@ -159,19 +185,48 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
         {/* Chart type (MKC) */}
         {allowChartType && (
           <div className="flex gap-1">
-            {(["line", "area"] as ChartType[]).map((t) => (
+            {CHART_TYPES.map((t) => (
               <button key={t} onClick={() => setChartType(t)} className={clsx(btn, chartType === t ? "border-term-amber bg-term-amber text-black" : "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")}>
                 {t}
               </button>
             ))}
           </div>
         )}
+
+        {/* Indicators */}
+        {allowIndicators && (
+          <div className="relative">
+            <button onClick={() => setIndMenu((v) => !v)} className={clsx(btn, indMenu ? "border-term-amber bg-term-amber/15 text-term-amber" : "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")}>
+              + Indicator
+            </button>
+            {indMenu && (
+              <div className="absolute z-20 mt-1 w-44 overflow-hidden rounded-sm border border-term-border bg-term-panel shadow-xl">
+                {INDICATOR_PRESETS.map((p) => (
+                  <button key={p.label} onClick={() => addIndicator(p.spec)} className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-2xs text-term-text hover:bg-term-panel-3">
+                    <Plus className="h-3 w-3 text-term-amber" />
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Active indicator chips */}
+        {indicators.map((ind) => (
+          <span key={ind.id} className="flex items-center gap-1 rounded-sm border border-term-border bg-term-panel-2 px-1.5 py-0.5 text-3xs text-term-text-dim">
+            {ind.type.toUpperCase()}{ind.length ? ` ${ind.length}` : ind.type === "macd" ? ` ${ind.fast}/${ind.slow}/${ind.signal}` : ""}
+            <button onClick={() => removeIndicator(ind.id)} className="text-term-text-mute hover:text-term-down" aria-label="remove indicator">
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </span>
+        ))}
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-2">
         <Panel title="Chart" code={code} accent>
           <div className="p-2">
-            <ChartCanvas axis={axis} series={canvasSeries} height={380} yFmt={yFmt} recessions={showRecession ? US_RECESSIONS : undefined} />
+            <ChartCanvas axis={axis} series={mainSeries} candles={candles} overlays={overlays} oscPanes={oscPanes} height={candles || overlays.length ? 340 : 360} yFmt={yFmt} recessions={showRecession ? US_RECESSIONS : undefined} />
           </div>
           {/* Legend */}
           <div className="flex flex-wrap gap-1.5 border-t border-term-border px-2 py-1.5">

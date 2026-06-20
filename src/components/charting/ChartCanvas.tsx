@@ -1,26 +1,27 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import clsx from "clsx";
 import type { RecessionBand } from "@/lib/charting/recessions";
+import type { CanvasSeries, OHLC, OscPane } from "@/lib/charting/canvasTypes";
 
-export interface CanvasSeries {
-  label: string;
-  color: string;
-  values: (number | null)[]; // aligned to `axis`
-  area?: boolean;
-}
+export type { CanvasSeries } from "@/lib/charting/canvasTypes";
 
 interface ChartCanvasProps {
   axis: string[]; // ISO dates
-  series: CanvasSeries[];
-  height?: number;
+  series: CanvasSeries[]; // main-pane line/area series
+  candles?: OHLC[]; // if set, primary instrument drawn as candlesticks
+  overlays?: CanvasSeries[]; // price-scale overlays (MAs, Bollinger)
+  oscPanes?: OscPane[]; // oscillator sub-panes (RSI, MACD)
+  height?: number; // main plot-area height
   yFmt?: (n: number) => string;
   recessions?: RecessionBand[];
   className?: string;
 }
 
-/** Build an SVG path with gaps for null values. */
+const W = 800, padL = 56, padR = 12;
+const UP = "#2ECC71", DOWN = "#FF3B3B";
+
 function pathWithGaps(values: (number | null)[], x: (i: number) => number, y: (v: number) => number): string {
   let d = "";
   let pen = false;
@@ -32,148 +33,184 @@ function pathWithGaps(values: (number | null)[], x: (i: number) => number, y: (v
   return d.trim();
 }
 
-/**
- * Multi-series line/area chart with grid, axis labels, crosshair and a
- * hover tooltip. SVG-based, matching the terminal's existing chart styling.
- * The shared engine renderer behind both charting studios (Phase 0).
- */
-export function ChartCanvas({ axis, series, height = 320, yFmt, recessions, className }: ChartCanvasProps) {
-  const gid = useId();
+function extent(arrs: (number | null)[][]): [number, number] {
+  const flat = arrs.flat().filter((v): v is number => v != null && Number.isFinite(v));
+  if (!flat.length) return [0, 1];
+  const lo = Math.min(...flat), hi = Math.max(...flat);
+  return lo === hi ? [lo - 1, hi + 1] : [lo, hi];
+}
+
+export function ChartCanvas({ axis, series, candles, overlays = [], oscPanes = [], height = 300, yFmt, recessions, className }: ChartCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
 
-  const W = 800;
-  const H = height;
-  const padL = 56, padR = 12, padT = 10, padB = 22;
-
-  const flat = series.flatMap((s) => s.values).filter((v): v is number => v != null && Number.isFinite(v));
-  const hasData = flat.length > 0 && axis.length > 1;
-  const min = hasData ? Math.min(...flat) : 0;
-  const max = hasData ? Math.max(...flat) : 1;
-  const range = max - min || 1;
   const n = axis.length;
+  const mainTop = 10;
+  const mainBot = mainTop + height;
+
+  // stack oscillator panes below the main pane
+  let cursor = mainBot;
+  const oscLayout = oscPanes.map((p) => {
+    const h = p.height ?? 80;
+    const top = cursor + 6 + 14; // gap + label row
+    const bot = top + h;
+    cursor = bot;
+    return { top, bot };
+  });
+  const totalH = cursor + 18; // x-axis labels
+
+  const candleVals: (number | null)[][] = candles ? [candles.map((c) => c.h), candles.map((c) => c.l)] : [];
+  const [min, max] = extent([...series.map((s) => s.values), ...overlays.map((s) => s.values), ...candleVals]);
+  const range = max - min || 1;
+  const hasData = n > 1 && (series.some((s) => s.values.some((v) => v != null)) || (candles?.some((c) => c.c != null) ?? false));
 
   const x = (i: number) => padL + (i / Math.max(1, n - 1)) * (W - padL - padR);
-  const y = (v: number) => padT + (1 - (v - min) / range) * (H - padT - padB);
+  const yMain = (v: number) => mainTop + (1 - (v - min) / range) * (mainBot - mainTop);
+  const yIn = (v: number, top: number, bot: number, dmin: number, dmax: number) => top + (1 - (v - dmin) / (dmax - dmin || 1)) * (bot - top);
 
-  const yticks = 5;
-  const gridVals = Array.from({ length: yticks + 1 }, (_, i) => min + (range * i) / yticks);
   const fmt = yFmt ?? ((v: number) => v.toFixed(2));
+  const gridVals = Array.from({ length: 5 }, (_, i) => min + (range * i) / 4);
 
-  // Recession bands (clipped to the visible axis)
+  // recession bands
   const tAxis = axis.map((d) => Date.parse(`${d}T00:00:00Z`));
   const dateToX = (iso: string): number => {
     const t = Date.parse(`${iso}T00:00:00Z`);
     if (!tAxis.length) return padL;
     if (t <= tAxis[0]) return x(0);
     if (t >= tAxis[n - 1]) return x(n - 1);
-    for (let i = 1; i < n; i++) {
-      if (t <= tAxis[i]) return x(i - 1 + (t - tAxis[i - 1]) / (tAxis[i] - tAxis[i - 1] || 1));
-    }
+    for (let i = 1; i < n; i++) if (t <= tAxis[i]) return x(i - 1 + (t - tAxis[i - 1]) / (tAxis[i] - tAxis[i - 1] || 1));
     return x(n - 1);
   };
-  const recBands =
-    hasData && recessions
-      ? recessions.filter((r) => Date.parse(`${r.end}T00:00:00Z`) >= tAxis[0] && Date.parse(`${r.start}T00:00:00Z`) <= tAxis[n - 1])
-      : [];
+  const recBands = hasData && recessions ? recessions.filter((r) => Date.parse(`${r.end}T00:00:00Z`) >= tAxis[0] && Date.parse(`${r.start}T00:00:00Z`) <= tAxis[n - 1]) : [];
+
+  const cw = Math.min(9, Math.max(1, ((W - padL - padR) / Math.max(1, n)) * 0.6));
+  const xLabelEvery = Math.max(1, Math.ceil(n / 7));
 
   const onMove = (e: React.MouseEvent) => {
     const el = wrapRef.current;
     if (!el || n < 2) return;
     const rect = el.getBoundingClientRect();
-    const frac = (e.clientX - rect.left) / rect.width;
-    const plotFrac = (frac * W - padL) / (W - padL - padR);
-    const idx = Math.round(Math.min(1, Math.max(0, plotFrac)) * (n - 1));
-    setHover(idx);
+    const plotFrac = ((e.clientX - rect.left) / rect.width * W - padL) / (W - padL - padR);
+    setHover(Math.round(Math.min(1, Math.max(0, plotFrac)) * (n - 1)));
   };
-
-  const xLabelEvery = Math.max(1, Math.ceil(n / 7));
 
   return (
     <div ref={wrapRef} className={clsx("relative", className)} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height }}>
-        {/* recession bands */}
+      <svg viewBox={`0 0 ${W} ${totalH}`} preserveAspectRatio="none" style={{ width: "100%", height: totalH }}>
+        {/* recession shading across all panes */}
         {recBands.map((r, i) => {
-          const x0 = dateToX(r.start);
-          const x1 = dateToX(r.end);
-          return <rect key={`rec-${i}`} x={x0} y={padT} width={Math.max(1, x1 - x0)} height={H - padT - padB} fill="#3B9DFF" opacity={0.1} />;
+          const x0 = dateToX(r.start), x1 = dateToX(r.end);
+          return <rect key={`rec-${i}`} x={x0} y={mainTop} width={Math.max(1, x1 - x0)} height={cursor - mainTop} fill="#3B9DFF" opacity={0.1} />;
         })}
 
-        {/* grid + y labels */}
+        {/* main grid + y labels */}
         {gridVals.map((v, i) => (
-          <g key={i}>
-            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#1F1F23" strokeWidth={1} />
-            <text x={padL - 6} y={y(v) + 3} textAnchor="end" fontSize={9} fill="#5E5E66" fontFamily="var(--font-mono)">
-              {fmt(v)}
-            </text>
+          <g key={`g${i}`}>
+            <line x1={padL} x2={W - padR} y1={yMain(v)} y2={yMain(v)} stroke="#1F1F23" strokeWidth={1} />
+            <text x={padL - 6} y={yMain(v) + 3} textAnchor="end" fontSize={9} fill="#5E5E66" fontFamily="var(--font-mono)">{fmt(v)}</text>
           </g>
         ))}
 
-        {/* x labels */}
-        {axis.map((d, i) =>
-          i % xLabelEvery === 0 ? (
-            <text key={i} x={x(i)} y={H - 6} textAnchor="middle" fontSize={9} fill="#5E5E66" fontFamily="var(--font-mono)">
-              {d.slice(0, 7)}
-            </text>
-          ) : null
-        )}
+        {/* candles */}
+        {hasData && candles && candles.map((c, i) => {
+          if (c.o == null || c.h == null || c.l == null || c.c == null) return null;
+          const up = c.c >= c.o;
+          const col = up ? UP : DOWN;
+          const bodyTop = yMain(Math.max(c.o, c.c)), bodyBot = yMain(Math.min(c.o, c.c));
+          return (
+            <g key={`c${i}`}>
+              <line x1={x(i)} x2={x(i)} y1={yMain(c.h)} y2={yMain(c.l)} stroke={col} strokeWidth={0.8} />
+              <rect x={x(i) - cw / 2} y={bodyTop} width={cw} height={Math.max(0.6, bodyBot - bodyTop)} fill={col} />
+            </g>
+          );
+        })}
 
-        {/* series */}
-        {hasData &&
-          series.map((s, si) => {
-            const d = pathWithGaps(s.values, x, y);
-            return (
-              <g key={si}>
-                {s.area && d && (
-                  <>
-                    <defs>
-                      <linearGradient id={`${gid}-a${si}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={s.color} stopOpacity={0.22} />
-                        <stop offset="100%" stopColor={s.color} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <path d={`${d} L${x(n - 1).toFixed(1)},${y(min).toFixed(1)} L${x(0).toFixed(1)},${y(min).toFixed(1)} Z`} fill={`url(#${gid}-a${si})`} />
-                  </>
-                )}
-                <path d={d} fill="none" stroke={s.color} strokeWidth={1.4} strokeLinejoin="round" />
-              </g>
-            );
-          })}
+        {/* main line/area series */}
+        {hasData && series.map((s, si) => {
+          const d = pathWithGaps(s.values, x, yMain);
+          return (
+            <g key={`s${si}`}>
+              {s.area && d && <path d={`${d} L${x(n - 1).toFixed(1)},${yMain(min).toFixed(1)} L${x(0).toFixed(1)},${yMain(min).toFixed(1)} Z`} fill={s.color} fillOpacity={0.12} />}
+              <path d={d} fill="none" stroke={s.color} strokeWidth={1.4} strokeLinejoin="round" strokeDasharray={s.dashed ? "4 3" : undefined} />
+            </g>
+          );
+        })}
+
+        {/* price-scale overlays (MAs, Bollinger) */}
+        {hasData && overlays.map((s, si) => (
+          <path key={`o${si}`} d={pathWithGaps(s.values, x, yMain)} fill="none" stroke={s.color} strokeWidth={1.1} strokeDasharray={s.dashed ? "3 2" : undefined} strokeLinejoin="round" opacity={0.9} />
+        ))}
+
+        {/* oscillator sub-panes */}
+        {hasData && oscPanes.map((p, pi) => {
+          const { top, bot } = oscLayout[pi];
+          const [dmin, dmax] = p.domain ?? extent([...p.lines.map((l) => l.values), ...(p.bars ? [p.bars.values] : [])]);
+          const yo = (v: number) => yIn(v, top, bot, dmin, dmax);
+          return (
+            <g key={`p${p.id}`}>
+              <text x={padL} y={top - 4} fontSize={9} fill="#8A8A92" fontFamily="var(--font-mono)">{p.label}</text>
+              <line x1={padL} x2={W - padR} y1={top} y2={top} stroke="#1F1F23" />
+              <line x1={padL} x2={W - padR} y1={bot} y2={bot} stroke="#1F1F23" />
+              <text x={padL - 6} y={top + 3} textAnchor="end" fontSize={8} fill="#5E5E66" fontFamily="var(--font-mono)">{(p.fmt ?? ((v) => v.toFixed(1)))(dmax)}</text>
+              <text x={padL - 6} y={bot} textAnchor="end" fontSize={8} fill="#5E5E66" fontFamily="var(--font-mono)">{(p.fmt ?? ((v) => v.toFixed(1)))(dmin)}</text>
+              {p.refLines?.map((r, ri) => (
+                <line key={`r${ri}`} x1={padL} x2={W - padR} y1={yo(r.v)} y2={yo(r.v)} stroke="#3A3A40" strokeDasharray="2 3" />
+              ))}
+              {p.bars && p.bars.values.map((v, i) => {
+                if (v == null) return null;
+                const y0 = yo(0), y1 = yo(v);
+                return <rect key={`b${i}`} x={x(i) - cw / 2} y={Math.min(y0, y1)} width={cw} height={Math.max(0.6, Math.abs(y1 - y0))} fill={v >= 0 ? p.bars!.pos : p.bars!.neg} opacity={0.55} />;
+              })}
+              {p.lines.map((l, li) => (
+                <path key={`l${li}`} d={pathWithGaps(l.values, x, yo)} fill="none" stroke={l.color} strokeWidth={1.1} strokeLinejoin="round" />
+              ))}
+            </g>
+          );
+        })}
+
+        {/* x labels */}
+        {axis.map((d, i) => (i % xLabelEvery === 0 ? (
+          <text key={`x${i}`} x={x(i)} y={totalH - 4} textAnchor="middle" fontSize={9} fill="#5E5E66" fontFamily="var(--font-mono)">{d.slice(0, 7)}</text>
+        ) : null))}
 
         {/* crosshair */}
         {hover != null && hasData && (
           <g>
-            <line x1={x(hover)} x2={x(hover)} y1={padT} y2={H - padB} stroke="#5E5E66" strokeWidth={1} strokeDasharray="3 2" />
-            {series.map((s, si) => {
-              const v = s.values[hover];
-              return v == null ? null : <circle key={si} cx={x(hover)} cy={y(v)} r={2.6} fill={s.color} />;
-            })}
+            <line x1={x(hover)} x2={x(hover)} y1={mainTop} y2={cursor} stroke="#5E5E66" strokeWidth={1} strokeDasharray="3 2" />
+            {!candles && series.map((s, si) => { const v = s.values[hover]; return v == null ? null : <circle key={si} cx={x(hover)} cy={yMain(v)} r={2.4} fill={s.color} />; })}
           </g>
         )}
       </svg>
 
       {/* tooltip */}
       {hover != null && hasData && (
-        <div
-          className="pointer-events-none absolute top-2 z-10 min-w-32 -translate-x-1/2 rounded-sm border border-term-border bg-term-panel/95 px-2 py-1 text-2xs shadow-lg"
-          style={{ left: `${(x(hover) / W) * 100}%` }}
-        >
+        <div className="pointer-events-none absolute top-2 z-10 min-w-32 -translate-x-1/2 rounded-sm border border-term-border bg-term-panel/95 px-2 py-1 text-2xs shadow-lg" style={{ left: `${(x(hover) / W) * 100}%` }}>
           <div className="mb-0.5 text-3xs text-term-text-mute">{axis[hover]}</div>
+          {candles && candles[hover]?.c != null && (
+            <div className="tnum text-term-text">O {fmt(candles[hover].o as number)} · H {fmt(candles[hover].h as number)} · L {fmt(candles[hover].l as number)} · C {fmt(candles[hover].c as number)}</div>
+          )}
           {series.map((s, si) => (
             <div key={si} className="flex items-center justify-between gap-3 tnum">
-              <span className="flex items-center gap-1">
-                <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: s.color }} />
-                <span className="text-term-text-dim">{s.label}</span>
-              </span>
+              <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: s.color }} /><span className="text-term-text-dim">{s.label}</span></span>
               <span className="text-term-text">{s.values[hover] == null ? "—" : fmt(s.values[hover] as number)}</span>
+            </div>
+          ))}
+          {overlays.map((s, si) => (
+            <div key={`ov${si}`} className="flex items-center justify-between gap-3 tnum">
+              <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: s.color }} /><span className="text-term-text-dim">{s.label}</span></span>
+              <span className="text-term-text">{s.values[hover] == null ? "—" : fmt(s.values[hover] as number)}</span>
+            </div>
+          ))}
+          {oscPanes.flatMap((p) => p.lines).map((l, li) => (
+            <div key={`os${li}`} className="flex items-center justify-between gap-3 tnum">
+              <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: l.color }} /><span className="text-term-text-dim">{l.label}</span></span>
+              <span className="text-term-text">{l.values[hover] == null ? "—" : (l.values[hover] as number).toFixed(2)}</span>
             </div>
           ))}
         </div>
       )}
 
-      {!hasData && (
-        <div className="absolute inset-0 flex items-center justify-center text-2xs text-term-text-mute">No data for this selection</div>
-      )}
+      {!hasData && <div className="absolute inset-0 flex items-center justify-center text-2xs text-term-text-mute">No data for this selection</div>}
     </div>
   );
 }
