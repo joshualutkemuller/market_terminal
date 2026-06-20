@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { getSeriesHistory, type Observation } from "@/data/econSeries";
-import { getCurrentCurve, getCurveSnapshots, type CurveSnapshot } from "@/data/econCurve";
+import {
+  getCurrentCurve,
+  getCurveSnapshots,
+  getInversionsForSpread,
+  getInversionStats,
+  getSpreadSeriesFor,
+  type CurveSnapshot,
+  type Inversion,
+} from "@/data/econCurve";
 import { getEconEvents, type EconEvent } from "@/data/econRates";
 
 export type DataSource = "FRED" | "SIM" | "LOADING" | "ETL";
@@ -62,6 +70,33 @@ export function useCurveSnapshots(years = 7): { data: CurveSnapshot[]; source: D
 
 export function useEconCalendar(): { data: EconEvent[]; source: DataSource } {
   return useEconResource<EconEvent[]>(`/api/econ/calendar`, getEconEvents(), (j) => j.events ?? []);
+}
+
+export interface InversionData {
+  inversions: Inversion[];
+  stats: ReturnType<typeof getInversionStats>;
+  timeline: { date: string; value: number; recession: boolean }[];
+}
+
+/**
+ * Live inversion detection for any curve spread — pulls the spread's real daily
+ * FRED history server-side and detects every unique inversion period. Falls back
+ * to the curated/simulated record without a key.
+ */
+export function useInversions(spreadId: string): { data: InversionData; source: DataSource } {
+  return useEconResource<InversionData>(
+    `/api/econ/inversions?spread=${encodeURIComponent(spreadId)}`,
+    {
+      inversions: getInversionsForSpread(spreadId),
+      stats: getInversionStats(spreadId),
+      timeline: getSpreadSeriesFor(spreadId),
+    },
+    (j) => ({
+      inversions: j.inversions ?? [],
+      stats: j.stats ?? getInversionStats(spreadId),
+      timeline: j.timeline ?? [],
+    })
+  );
 }
 
 export interface LiveIndicator {

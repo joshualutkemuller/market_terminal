@@ -225,7 +225,11 @@ export function getInversionHistory(): Inversion[] {
 }
 
 export function getInversionStats(spreadId = "10Y2Y") {
-  const all = getInversionsForSpread(spreadId);
+  return computeInversionStats(getInversionsForSpread(spreadId));
+}
+
+/** Aggregate stats over a set of inversions (shared by sim + live paths). */
+export function computeInversionStats(all: Inversion[]) {
   const leads = all.filter((i) => i.leadTimeMonths !== null).map((i) => i.leadTimeMonths!) as number[];
   const depths = all.map((i) => i.maxDepthBps);
   return {
@@ -365,4 +369,134 @@ export function getInversionsForSpread(spreadId: string): Inversion[] {
     } else i++;
   }
   return out;
+}
+
+/* ─────────────── Live inversion detection (from real FRED daily series) ─────────────── */
+
+const _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const _TENOR_FRED: Record<string, string> = Object.fromEntries(TENORS.map(([t, , id]) => [t, id]));
+
+/** FRED constant-maturity id for a tenor label (e.g. "10Y" -> "DGS10"). */
+export function tenorToFredId(tenor: string): string | undefined {
+  return _TENOR_FRED[tenor];
+}
+
+function _isoMonthLabel(iso: string): string {
+  const [y, m] = iso.split("-");
+  return `${_MONTHS[Number(m) - 1]} ${y}`;
+}
+
+function _daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
+}
+
+function _inRecession(date: string, ranges: [string, string][]): boolean {
+  return ranges.some(([a, b]) => date >= a && date <= b);
+}
+
+/** Build NBER recession ranges [startISO, endISO] from the monthly USREC 0/1 flag. */
+export function recessionRangesFromUsrec(obs: { date: string; value: number }[]): [string, string][] {
+  const s = [...obs].sort((a, b) => a.date.localeCompare(b.date));
+  const ranges: [string, string][] = [];
+  let start: string | null = null;
+  let prev: string | null = null;
+  for (const o of s) {
+    const inRec = o.value >= 0.5;
+    if (inRec && !start) start = o.date;
+    if (!inRec && start) {
+      ranges.push([start, prev ?? start]);
+      start = null;
+    }
+    prev = o.date;
+  }
+  if (start) ranges.push([start, prev ?? start]);
+  return ranges;
+}
+
+export interface InvDetectOpts {
+  minDays?: number;    // ignore episodes shorter than this (noise floor)
+  bridgeObs?: number;  // merge inverted runs split by ≤ this many positive prints
+  recWindowMonths?: number; // inversion "leads" a recession if it starts within this window
+}
+
+/**
+ * Detect every distinct inversion period from a real daily spread series (bps).
+ * An episode is a run where the spread is < 0; brief positive blips (≤ bridgeObs
+ * prints) are bridged so one inversion isn't split into many, and sub-minDays
+ * flickers are dropped — yielding clean, unique inversion periods. Recession
+ * lead-time is computed against the supplied NBER ranges.
+ */
+export function detectInversions(
+  series: { date: string; bps: number }[],
+  recessions: [string, string][],
+  opts: InvDetectOpts = {}
+): Inversion[] {
+  const minDays = opts.minDays ?? 5;
+  const bridgeObs = opts.bridgeObs ?? 10;
+  const recWin = opts.recWindowMonths ?? 36;
+  const pts = series
+    .filter((p) => Number.isFinite(p.bps))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const out: Inversion[] = [];
+  const lastDate = pts.length ? pts[pts.length - 1].date : "";
+  let i = 0;
+  while (i < pts.length) {
+    if (pts[i].bps >= 0) {
+      i++;
+      continue;
+    }
+    const startIdx = i;
+    let depth = pts[i].bps;
+    let lastNeg = i;
+    let j = i + 1;
+    while (j < pts.length) {
+      if (pts[j].bps < 0) {
+        depth = Math.min(depth, pts[j].bps);
+        lastNeg = j;
+        j++;
+      } else {
+        let k = j;
+        while (k < pts.length && pts[k].bps >= 0) k++;
+        if (k < pts.length && k - j <= bridgeObs) j = k; // bridge a brief un-inversion
+        else break;
+      }
+    }
+    const startDate = pts[startIdx].date;
+    const endDate = pts[lastNeg].date;
+    i = lastNeg + 1;
+    const durDays = _daysBetween(startDate, endDate);
+    if (durDays < minDays) continue;
+    const rec = recessions.find(([rs]) => rs >= startDate);
+    const lead = rec ? Math.round(_daysBetween(startDate, rec[0]) / 30.44) : null;
+    const followed = lead !== null && lead >= 0 && lead <= recWin;
+    const ongoing = endDate === lastDate;
+    out.push({
+      id: startDate.slice(0, 7),
+      invertedDate: _isoMonthLabel(startDate),
+      unInvertedDate: ongoing ? "ongoing" : _isoMonthLabel(endDate),
+      durationMonths: Math.max(1, Math.round(durDays / 30.44)),
+      maxDepthBps: Math.round(depth),
+      recessionFollowed: followed,
+      recessionStart: followed && rec ? _isoMonthLabel(rec[0]) : null,
+      leadTimeMonths: followed ? lead : null,
+      note: ongoing ? "ongoing inversion" : followed ? "recession followed" : "no recession within 36m",
+    });
+  }
+  return out;
+}
+
+/** Monthly downsample of a daily spread series + recession flag, for the timeline chart. */
+export function monthlySpreadTimeline(
+  series: { date: string; bps: number }[],
+  recessions: [string, string][]
+): { date: string; value: number; recession: boolean }[] {
+  const byMonth = new Map<string, { date: string; bps: number }>();
+  for (const p of [...series].sort((a, b) => a.date.localeCompare(b.date))) {
+    byMonth.set(p.date.slice(0, 7), p); // keep last obs of each month
+  }
+  return [...byMonth.values()].map((p) => ({
+    date: p.date.slice(0, 7),
+    value: Math.round(p.bps),
+    recession: _inRecession(p.date, recessions),
+  }));
 }
