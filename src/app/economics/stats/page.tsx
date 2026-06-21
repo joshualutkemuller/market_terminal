@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
+import { ChartLink } from "@/components/charting/ChartLink";
 import { CorrelationMatrix, HeatGrid } from "@/components/charts/Matrix";
 import { ScatterPlot } from "@/components/charts/ScatterPlot";
 import { BarChart } from "@/components/charts/BarChart";
@@ -120,7 +121,7 @@ export default function StatisticalAnalysis() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="STAT" title="Statistical Analysis" desc="Correlation · Granger · regression · stationarity · distributions" right={<SourceBadge source={source} />} />
+      <PageHeader code="STAT" title="Statistical Analysis" desc="Correlation · Granger · regression · stationarity · distributions" right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "DGS10" }, { source: "econ", id: "CPIAUCSL" }]} range="5Y" /><SourceBadge source={source} /></span>} />
 
       {/* SETTINGS BAR */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-term-border bg-term-panel-2 px-3 py-1.5 text-2xs">

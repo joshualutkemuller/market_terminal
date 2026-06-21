@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
+import { ChartLink } from "@/components/charting/ChartLink";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
@@ -267,7 +268,7 @@ export default function SecFinanceEconomics() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="SFE" title="Sec-Finance Economics" desc="How rates flow into repo, funding, collateral & lending" right={<SourceBadge source={source} />} />
+      <PageHeader code="SFE" title="Sec-Finance Economics" desc="How rates flow into repo, funding, collateral & lending" right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "FEDFUNDS" }, { source: "econ", id: "DGS10" }]} range="5Y" /><SourceBadge source={source} /></span>} />
 
       <KpiStrip>
         <Stat label="SOFR" value={`${fmtNum(sofr, 2)}%`} sub="secured O/N" tone="amber" />

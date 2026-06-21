@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
+import { ChartLink } from "@/components/charting/ChartLink";
 import { BarChart } from "@/components/charts/BarChart";
 import { useDrill } from "@/components/econ/DrillProvider";
 import { SourceBadge } from "@/components/econ/SourceBadge";
@@ -235,7 +236,7 @@ export default function InflationExplorer() {
         code="INFL"
         title="Inflation Explorer"
         desc="CPI · Core CPI · PCE · Core PCE to item level"
-        right={<SourceBadge source={source} />}
+        right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "CPIAUCSL" }, { source: "econ", id: "PCEPI" }]} range="5Y" transform="yoy" /><SourceBadge source={source} /></span>}
       />
 
       <KpiStrip>

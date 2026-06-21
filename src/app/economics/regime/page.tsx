@@ -3,6 +3,7 @@
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
+import { ChartLink } from "@/components/charting/ChartLink";
 import { BarChart } from "@/components/charts/BarChart";
 import { HeatGrid } from "@/components/charts/Matrix";
 import {
@@ -87,7 +88,7 @@ export default function RegimePage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="REGIME" title="Macro Regime Playbook" desc="Macro state to desk-level actions" right={<Tag tone="up">FRED/YAHOO/LOCAL</Tag>} />
+      <PageHeader code="REGIME" title="Macro Regime Playbook" desc="Macro state to desk-level actions" right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "UNRATE" }, { source: "econ", id: "T10Y2Y" }, { source: "econ", id: "VIXCLS" }]} range="5Y" /><Tag tone="up">FRED/YAHOO/LOCAL</Tag></span>} />
 
       <KpiStrip>
         <Stat label="Current State" value={summary.state.replace("_", " ")} sub={`${fmtPct(summary.probability, 0)} confidence`} tone="amber" />

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
+import { ChartLink } from "@/components/charting/ChartLink";
 import { YieldCurve, type CurveLine } from "@/components/charts/YieldCurve";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
@@ -193,7 +194,7 @@ export default function TreasuryCurveLab() {
         title="Treasury Curve Lab"
         desc="Curve shape, history & inversions"
         asOf={today.date}
-        right={<SourceBadge source={source} />}
+        right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "DGS10" }, { source: "econ", id: "DGS2" }]} range="5Y" /><SourceBadge source={source} /></span>}
       />
 
       <KpiStrip>

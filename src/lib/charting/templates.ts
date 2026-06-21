@@ -229,6 +229,49 @@ export function deleteTemplate(id: string): void {
   localStorage.setItem(LS_KEY, JSON.stringify(remaining));
 }
 
+/**
+ * Optional shared persistence via /api/chart/templates (DB-backed when
+ * CHART_DB_URL / MARKET_DB_URL is configured). localStorage stays the offline
+ * tier; these calls are best-effort and never throw to the caller.
+ */
+export async function fetchRemoteTemplates(studio: "MGC" | "MKC"): Promise<ChartTemplate[]> {
+  try {
+    const res = await fetch(`/api/chart/templates?studio=${studio}`);
+    const j = await res.json();
+    return Array.isArray(j?.templates) ? (j.templates as ChartTemplate[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveTemplateRemote(t: ChartTemplate): Promise<void> {
+  try {
+    await fetch("/api/chart/templates", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ template: t }),
+    });
+  } catch {
+    /* offline — localStorage already holds it */
+  }
+}
+
+export async function deleteTemplateRemote(id: string): Promise<void> {
+  try {
+    await fetch(`/api/chart/templates?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  } catch {
+    /* offline */
+  }
+}
+
+/** Merge two template lists by id (DB/remote wins on conflict). */
+export function mergeTemplates(local: ChartTemplate[], remote: ChartTemplate[]): ChartTemplate[] {
+  const byId = new Map<string, ChartTemplate>();
+  for (const t of local) byId.set(t.id, t);
+  for (const t of remote) byId.set(t.id, t);
+  return [...byId.values()];
+}
+
 /** Encode a template's chart state into a URL-safe query string. */
 export function templateToURL(t: Omit<ChartTemplate, "id" | "name" | "desc" | "studio" | "builtIn">): string {
   const payload = JSON.stringify({

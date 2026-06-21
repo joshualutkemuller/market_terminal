@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
+import { ChartLink } from "@/components/charting/ChartLink";
 import { BarChart } from "@/components/charts/BarChart";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { Donut } from "@/components/charts/Radial";
@@ -164,7 +165,7 @@ export default function GlobalPolicyRates() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="GPOL" title="Global Policy Rates" desc="Central-bank rates, cycles & streaks" right={<SourceBadge source={source} />} />
+      <PageHeader code="GPOL" title="Global Policy Rates" desc="Central-bank rates, cycles & streaks" right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "FEDFUNDS" }, { source: "econ", id: "DGS2" }]} range="5Y" /><SourceBadge source={source} /></span>} />
 
       <KpiStrip>
         <Stat label="Global Avg Policy Rate" value={`${fmtNum(summary.avgPolicyRate, 2)}%`} sub={`${total} central banks`} tone="amber" />
