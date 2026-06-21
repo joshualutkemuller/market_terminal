@@ -13,7 +13,17 @@ import { NAV } from "@/lib/nav";
 export function AppShell({ children }: { children: ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const router = useRouter();
+
+  // The command-bar toggle collapses the rail on md+, opens the drawer on mobile.
+  const toggleSidebar = () => {
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches) {
+      setCollapsed((c) => !c);
+    } else {
+      setMobileNavOpen((o) => !o);
+    }
+  };
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -47,9 +57,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-term-bg">
       <Ticker />
-      <CommandBar onOpenPalette={() => setPaletteOpen(true)} onToggleSidebar={() => setCollapsed((c) => !c)} />
+      <CommandBar onOpenPalette={() => setPaletteOpen(true)} onToggleSidebar={toggleSidebar} />
       <div className="flex min-h-0 flex-1">
-        <Sidebar collapsed={collapsed} />
+        <Sidebar collapsed={collapsed} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
         <main className="min-w-0 flex-1 overflow-auto bg-term-bg">{children}</main>
       </div>
       <StatusBar />
