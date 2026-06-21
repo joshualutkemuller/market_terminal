@@ -171,7 +171,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, ChartCanvasProps>(funct
           return (
             <g key={`s${si}`}>
               {s.area && d && <path d={`${d} L${x(n - 1).toFixed(1)},${yMain(min).toFixed(1)} L${x(0).toFixed(1)},${yMain(min).toFixed(1)} Z`} fill={s.color} fillOpacity={0.12} />}
-              <path d={d} fill="none" stroke={s.color} strokeWidth={1.4} strokeLinejoin="round" strokeDasharray={s.dashed ? "4 3" : undefined} />
+              <path d={d} fill="none" stroke={s.color} strokeWidth={s.ghost ? 1 : 1.4} strokeLinejoin="round" strokeDasharray={s.ghost ? "2 4" : s.dashed ? "4 3" : undefined} opacity={s.ghost ? 0.28 : 1} />
             </g>
           );
         })}
@@ -256,7 +256,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, ChartCanvasProps>(funct
         {hover != null && hasData && (
           <g>
             <line x1={x(hover)} x2={x(hover)} y1={mainTop} y2={cursor} stroke="#5E5E66" strokeWidth={1} strokeDasharray="3 2" />
-            {!candles && series.map((s, si) => { const v = s.values[hover]; return v == null ? null : <circle key={si} cx={x(hover)} cy={yMain(v)} r={2.4} fill={s.color} />; })}
+            {!candles && series.map((s, si) => { const v = s.values[hover]; return v == null || s.ghost ? null : <circle key={si} cx={x(hover)} cy={yMain(v)} r={2.4} fill={s.color} />; })}
           </g>
         )}
       </svg>
@@ -268,7 +268,7 @@ export const ChartCanvas = forwardRef<ChartCanvasHandle, ChartCanvasProps>(funct
           {candles && candles[hover]?.c != null && (
             <div className="tnum text-term-text">O {fmt(candles[hover].o as number)} · H {fmt(candles[hover].h as number)} · L {fmt(candles[hover].l as number)} · C {fmt(candles[hover].c as number)}</div>
           )}
-          {series.map((s, si) => (
+          {series.filter((s) => !s.ghost).map((s, si) => (
             <div key={si} className="flex items-center justify-between gap-3 tnum">
               <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: s.color }} /><span className="text-term-text-dim">{s.label}</span></span>
               <span className="text-term-text">{s.values[hover] == null ? "—" : fmt(s.values[hover] as number)}</span>
