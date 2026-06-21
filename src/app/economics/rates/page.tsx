@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
+import { ChartLink } from "@/components/charting/ChartLink";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { Donut } from "@/components/charts/Radial";
@@ -109,7 +110,7 @@ export default function RateProbabilitiesPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="FOMC" title="Rate Probabilities" desc="Fed path & hike/cut odds" asOf={useEtl ? etlFedAsOf() : null} right={<SourceBadge source={fedSource} />} />
+      <PageHeader code="FOMC" title="Rate Probabilities" desc="Fed path & hike/cut odds" asOf={useEtl ? etlFedAsOf() : null} right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "FEDFUNDS" }, { source: "econ", id: "DGS3MO" }]} range="5Y" /><SourceBadge source={fedSource} /></span>} />
 
       <KpiStrip>
         <Stat label="Current Target" value={targetStr} sub={`mid ${fmtNum(CURRENT_TARGET.mid, 3)}%`} tone="amber" />

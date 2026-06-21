@@ -14,7 +14,7 @@ import { TRANSFORMS, TRANSFORM_LABELS, transformFmt, type Transform } from "@/li
 import { US_RECESSIONS } from "@/lib/charting/recessions";
 import { INDICATOR_PRESETS, computeIndicator, synthOHLC, type IndicatorSpec } from "@/lib/charting/indicators";
 import { STUDY_PRESETS, computeStudy, monthlySeasonality, type StudySpec } from "@/lib/charting/studies";
-import { getPresetsForStudio, getSavedTemplates, saveTemplate, deleteTemplate, templateToURL, urlToChartState, type ChartTemplate } from "@/lib/charting/templates";
+import { getPresetsForStudio, getSavedTemplates, saveTemplate, deleteTemplate, fetchRemoteTemplates, saveTemplateRemote, deleteTemplateRemote, mergeTemplates, templateToURL, urlToChartState, type ChartTemplate } from "@/lib/charting/templates";
 import { type Drawing, type DrawMode } from "@/lib/charting/drawings";
 import type { CatalogItem } from "@/data/chartCatalog";
 
@@ -116,7 +116,23 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
   // Templates
   const presets = useMemo(() => getPresetsForStudio(studioId), [studioId]);
   const [savedTemplates, setSavedTemplates] = useState<ChartTemplate[]>([]);
-  useEffect(() => { setSavedTemplates(getSavedTemplates().filter((t) => t.studio === studioId || t.studio === "both")); }, [studioId]);
+
+  /** localStorage templates for this studio (the always-available offline tier). */
+  const localTemplates = useCallback(
+    () => getSavedTemplates().filter((t) => t.studio === studioId || t.studio === "both"),
+    [studioId]
+  );
+
+  // Render local templates instantly, then merge in any DB-backed ones (shared
+  // across devices when CHART_DB_URL is configured) — render-local-then-upgrade.
+  useEffect(() => {
+    let alive = true;
+    setSavedTemplates(localTemplates());
+    fetchRemoteTemplates(studioId).then((remote) => {
+      if (alive && remote.length) setSavedTemplates((cur) => mergeTemplates(cur, remote));
+    });
+    return () => { alive = false; };
+  }, [studioId, localTemplates]);
 
   const applyTemplate = useCallback((t: ChartTemplate) => {
     setRefs(t.refs);
@@ -141,14 +157,16 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
       showRecession, showSeasonality,
     };
     saveTemplate(t);
-    setSavedTemplates(getSavedTemplates().filter((x) => x.studio === studioId || x.studio === "both"));
+    saveTemplateRemote(t); // best-effort shared persistence
+    setSavedTemplates(localTemplates());
     setSaveDialog(false);
     setSaveName("");
   };
 
   const handleDelete = (id: string) => {
     deleteTemplate(id);
-    setSavedTemplates(getSavedTemplates().filter((t) => t.studio === studioId || t.studio === "both"));
+    deleteTemplateRemote(id);
+    setSavedTemplates((cur) => cur.filter((t) => t.id !== id));
   };
 
   const handleShare = () => {

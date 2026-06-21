@@ -3,6 +3,7 @@
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
+import { ChartLink } from "@/components/charting/ChartLink";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { ProgressBar } from "@/components/charts/Radial";
@@ -126,7 +127,7 @@ export default function CreditSpreadsPage() {
         code="CRDT"
         title="Credit Spreads"
         desc="IG / HY OAS deep dive · curve · stress · sec-finance linkage"
-        right={<div className="flex items-center gap-2"><SourceBadge source={source} /><Tag tone={REGIME_TONE[sum.regime]}>{sum.regime} REGIME</Tag></div>}
+        right={<div className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "BAMLH0A0HYM2" }, { source: "econ", id: "BAMLC0A0CM" }]} range="5Y" /><SourceBadge source={source} /><Tag tone={REGIME_TONE[sum.regime]}>{sum.regime} REGIME</Tag></div>}
       />
 
       <KpiStrip>
