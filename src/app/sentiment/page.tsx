@@ -15,16 +15,25 @@ import {
   getAaiiSnapshot,
   getNaaimHistory,
   getSocialIntel,
+  getBehavior,
+  getContrarianSignals,
+  getAnalogStudy,
+  getSurveySocialDivergence,
   type SentRegime,
   type SentSource,
 } from "@/data/sentiment";
 
-type View = "DASH" | "AAII" | "SOCIAL";
+type View = "DASH" | "AAII" | "SOCIAL" | "POSITION" | "SIGNALS" | "DIVERGE";
 const VIEWS: { key: View; label: string }[] = [
   { key: "DASH", label: "Fear / Greed" },
   { key: "AAII", label: "AAII Survey" },
   { key: "SOCIAL", label: "Social Mood" },
+  { key: "POSITION", label: "Positioning" },
+  { key: "SIGNALS", label: "Contrarian" },
+  { key: "DIVERGE", label: "Divergence" },
 ];
+
+const DIR_TONE = { BULLISH: "up", BEARISH: "down", NEUTRAL: "neutral" } as const;
 
 function regimeColor(score: number): string {
   return score < 20 ? "#FF3B3B" : score < 40 ? "#FF6B3B" : score < 60 ? "#FF8C00" : score < 80 ? "#7FCA5B" : "#2ECC71";
@@ -81,6 +90,10 @@ export default function SentimentModule() {
   const aaiiSnap = useMemo(() => getAaiiSnapshot(), []);
   const naaim = useMemo(() => getNaaimHistory(), []);
   const social = useMemo(() => getSocialIntel(), []);
+  const behav = useMemo(() => getBehavior(), []);
+  const signals = useMemo(() => getContrarianSignals(), []);
+  const analog = useMemo(() => getAnalogStudy(), []);
+  const diverge = useMemo(() => getSurveySocialDivergence(), []);
   const btn = "rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide transition-colors";
   const recent = aaii.slice(-10).reverse();
 
@@ -257,6 +270,118 @@ export default function SentimentModule() {
               </div>
             </div>
           </div>
+        )}
+        {/* ── SENT-4 Behavior & Positioning ── */}
+        {view === "POSITION" && (
+          <div className="grid grid-cols-12 gap-2">
+            <div className="col-span-12 lg:col-span-8">
+              <Panel title="Retail vs Institutional Positioning" code="SENT-4" accent right={<Tag tone={behav.tone}>gap {fmtSigned(behav.gapNow, 0)} · {behav.gapZ}σ</Tag>}>
+                <div className="p-2">
+                  <LineChart
+                    height={220}
+                    labels={["Retail (AAII)", "Managers (NAAIM)"]}
+                    series={[
+                      { name: "Retail", data: behav.series.map((p) => p.retail), color: "#3B9DFF" },
+                      { name: "Managers", data: behav.series.map((p) => p.inst), color: "#A78BFA" },
+                    ]}
+                    yFmt={(n) => `${n.toFixed(0)}`}
+                  />
+                </div>
+                <div className="border-t border-term-border px-3 py-2 text-2xs leading-relaxed text-term-text-dim">{behav.signal}</div>
+              </Panel>
+            </div>
+            <div className="col-span-12 lg:col-span-4">
+              <Panel title="Positioning Now" code="POS">
+                <div className="grid grid-cols-2 divide-x divide-term-border border-b border-term-border">
+                  <div className="px-3 py-2"><div className="text-3xs text-term-text-mute">Retail mood</div><div className="tnum text-lg font-bold text-term-text">{behav.retailNow}</div></div>
+                  <div className="px-3 py-2"><div className="text-3xs text-term-text-mute">Manager exposure</div><div className="tnum text-lg font-bold text-term-text">{behav.instNow}%</div></div>
+                </div>
+                <div className="px-3 py-2 text-2xs">
+                  <span className="text-term-text-mute">Put/Call now </span>
+                  <span className="tnum font-semibold text-term-text">{behav.putCallNow}</span>
+                  <span className="inline-flex ml-2 align-middle"><Sparkline data={behav.series.map((p) => p.putCall)} width={120} height={16} /></span>
+                </div>
+              </Panel>
+              <div className="mt-2">
+                <Panel title="Weekly Fund Flows" code="FLOWS" right={<span className="text-3xs text-term-text-mute">$B net</span>}>
+                  <div className="divide-y divide-term-border-soft">
+                    {behav.flows.map((f) => (
+                      <div key={f.label} className="flex items-center gap-2 px-3 py-1.5 text-2xs">
+                        <span className="w-28 shrink-0 text-term-text">{f.label}</span>
+                        <span className="h-1.5 flex-1 overflow-hidden rounded-sm bg-term-panel-3">
+                          <span className="block h-full rounded-sm" style={{ width: `${Math.min(100, Math.abs(f.value) * 4)}%`, background: f.value >= 0 ? "#2ECC71" : "#FF3B3B" }} />
+                        </span>
+                        <span className={clsx("tnum w-14 shrink-0 text-right font-semibold", pnlClass(f.value))}>{fmtSigned(f.value, 1)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Panel>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── SENT-5 Contrarian Signals & Analogs ── */}
+        {view === "SIGNALS" && (
+          <div className="grid grid-cols-12 gap-2">
+            <div className="col-span-12 lg:col-span-7">
+              <Panel title="Contrarian Signals" code="SENT-5" accent right={<span className="text-3xs text-term-text-mute">{signals.length} active</span>}>
+                <div className="divide-y divide-term-border-soft">
+                  {signals.map((s, i) => (
+                    <div key={i} className="flex items-start gap-2 px-3 py-2 text-2xs">
+                      <span className="w-16 shrink-0"><Tag tone={DIR_TONE[s.direction]}>{s.direction}</Tag></span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-term-text">{s.trigger}</div>
+                        <div className="text-3xs leading-relaxed text-term-text-mute">{s.rationale}</div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="tnum text-sm font-bold text-term-text">{s.confidence}</div>
+                        <div className="text-3xs text-term-text-mute">conf</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </div>
+            <div className="col-span-12 lg:col-span-5">
+              <Panel title="Historical Analog" code="ANALOG" accent right={<span className="text-3xs text-term-text-mute">forward returns</span>}>
+                <div className="px-3 py-2 text-2xs text-term-text-dim">{analog.condition}</div>
+                <table className="w-full border-collapse tnum">
+                  <thead className="bg-term-panel-2"><tr>{["Horizon", "Avg Ret", "Hit Rate", "n"].map((c, i) => <th key={c} className={clsx("border-b border-term-border px-3 py-1 text-3xs font-semibold uppercase tracking-wider text-term-text-mute", i === 0 ? "text-left" : "text-right")}>{c}</th>)}</tr></thead>
+                  <tbody>
+                    {analog.forward.map((f) => (
+                      <tr key={f.horizon} className="border-b border-term-border-soft">
+                        <td className="px-3 py-1.5 text-left text-2xs text-term-text">{f.horizon}</td>
+                        <td className={clsx("px-3 py-1.5 text-right text-2xs font-semibold", pnlClass(f.avgReturn))}>{fmtSigned(f.avgReturn, 1)}%</td>
+                        <td className="px-3 py-1.5 text-right text-2xs text-term-text-dim">{f.hitRate}%</td>
+                        <td className="px-3 py-1.5 text-right text-3xs text-term-text-mute">{f.n}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="border-t border-term-border px-3 py-2 text-3xs leading-relaxed text-term-text-mute">{analog.note}</div>
+              </Panel>
+            </div>
+          </div>
+        )}
+
+        {/* ── SENT-6 Survey vs Social Divergence ── */}
+        {view === "DIVERGE" && (
+          <Panel title="Survey vs Social Divergence" code="SENT-6" accent right={<Tag tone={diverge.tone}>{diverge.status} · gap {fmtSigned(diverge.gapNow, 0)}</Tag>}>
+            <div className="p-2">
+              <LineChart
+                height={240}
+                labels={["Survey (AAII)", "Social mood"]}
+                series={[
+                  { name: "Survey", data: diverge.series.map((p) => p.survey), color: "#A78BFA" },
+                  { name: "Social", data: diverge.series.map((p) => p.social), color: "#3B9DFF" },
+                ]}
+                yFmt={(n) => `${n.toFixed(0)}`}
+              />
+            </div>
+            <div className="border-t border-term-border px-3 py-2 text-2xs leading-relaxed text-term-text-dim">{diverge.note}</div>
+            <div className="border-t border-term-border px-3 py-1 text-3xs text-term-text-mute">When real-time social mood decouples from the weekly survey, one cohort typically converges to the other — an early-warning of a chase or a capitulation.</div>
+          </Panel>
         )}
       </div>
 
