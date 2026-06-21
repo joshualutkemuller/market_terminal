@@ -1,8 +1,18 @@
 # Build Prompt: NEWS Terminal Module (Market News, Social Intelligence & Signal Engine)
 
 Date: 2026-06-20
-Status: Plan / proposal
+Status: **Implemented (frontend, deterministic engine)** — live ingestion pending
 Module code: **`NEWS`** — Market News & Signal Intelligence
+
+> **Implementation status (2026-06-21).** The terminal-side module is shipped:
+> `src/data/news.ts` (deterministic gold-table engine), `src/app/news/page.tsx`
+> (all seven core views — Headline Tape, Narrative Monitor, Social Intelligence,
+> Market Impact, Attention Heatmap, Event Intelligence, Signal Engine), and the
+> `NEWS` nav entry in the INTELLIGENCE group. Data is seeded/SSR-safe and badged
+> `SIM`; the gold-table shapes match this plan so the Python pipeline can serve
+> them live (Alpha Vantage / Marketaux / Reddit / SEC EDGAR) without UI changes.
+> The NLP/clustering/historical-impact *backends* described below are the next
+> phase.
 Related: `docs/MARKET_TERMINAL_ROADMAP.md`, `docs/features/Feature Addition - Intelligence Layer (SEC Edgar, Stocktwits, X, and News).md`, `docs/features/Feature Addition - EDGAR Filing Intelligence (Regime, NLP & Exposure Analytics).md`
 
 ---

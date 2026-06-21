@@ -36,6 +36,7 @@ export function MotionStudio() {
   const [range, setRange] = useState<RangePreset>("MAX");
   const [transform, setTransform] = useState<Transform>("index100");
   const [mode, setMode] = useState<Mode>("race");
+  const [trail, setTrail] = useState(true);
   const [query, setQuery] = useState("");
 
   // Playback
@@ -110,26 +111,43 @@ export function MotionStudio() {
   const labelFor = useCallback((r: SeriesRef) => byId.get(r.id)?.label ?? r.id, [byId]);
   const colorFor = (i: number) => SERIES_COLORS[i % SERIES_COLORS.length];
 
-  // ── Race rows: current value per series at the playhead, ranked ──────────────
-  const rows = series.map((s, i) => ({
-    id: s.ref.id,
-    label: labelFor(s.ref),
-    sub: byId.get(s.ref.id)?.sub ?? "",
-    color: colorFor(i),
-    source: s.source,
-    value: s.values[frame] ?? null,
-  }));
+  // First non-null value of a series within the window — the "start" for deltas.
+  const startOf = (vals: (number | null)[]) => vals.find((v) => v != null) ?? null;
+
+  // ── Race rows: current value + since-start delta, ranked ─────────────────────
+  const rows = series.map((s, i) => {
+    const value = s.values[frame] ?? null;
+    const start = startOf(s.values);
+    const deltaPct = value != null && start != null && start !== 0 ? (value / start - 1) * 100 : null;
+    return {
+      id: s.ref.id,
+      label: labelFor(s.ref),
+      sub: byId.get(s.ref.id)?.sub ?? "",
+      color: colorFor(i),
+      source: s.source,
+      value,
+      deltaPct,
+    };
+  });
   const ranked = [...rows].filter((r) => r.value != null).sort((a, b) => (b.value as number) - (a.value as number));
   const rankById = new Map(ranked.map((r, rank) => [r.id, rank]));
   const maxAbs = Math.max(1, ...ranked.map((r) => Math.abs(r.value as number)));
   const rowH = 38;
 
   // ── Trace series: reveal each series only up to the playhead ─────────────────
-  const traceSeries = series.map((s, i) => ({
+  // With Trail on, a faint full-path "ghost" is drawn under the bright revealed
+  // line so you can see the whole trajectory the line is filling in. Ghosts also
+  // keep the y-axis stable (their full range is in the extent) so the revealed
+  // line doesn't rescale as it plays.
+  const revealedSeries = series.map((s, i) => ({
     label: labelFor(s.ref),
     color: colorFor(i),
     values: s.values.map((v, idx) => (idx <= frame ? v : null)),
   }));
+  const ghostSeries = trail
+    ? series.map((s, i) => ({ label: labelFor(s.ref), color: colorFor(i), values: s.values, ghost: true }))
+    : [];
+  const traceSeries = [...ghostSeries, ...revealedSeries];
 
   const sources = Array.from(new Set(series.map((s) => s.source)));
   const currentDate = axis[frame] ?? "—";
@@ -191,6 +209,13 @@ export function MotionStudio() {
             </button>
           ))}
         </div>
+
+        {/* Trail toggle (trace only) */}
+        {mode === "trace" && (
+          <button onClick={() => setTrail((v) => !v)} className={clsx(btn, trail ? "border-term-amber bg-term-amber/15 text-term-amber" : "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")}>
+            Trail
+          </button>
+        )}
 
         {/* Range */}
         <div className="flex flex-wrap gap-1">
@@ -260,7 +285,13 @@ export function MotionStudio() {
                       <div className="absolute inset-y-0 left-0 rounded-sm" style={{ width: `${width}%`, background: r.color, transition: "width 0.45s cubic-bezier(0.4,0,0.2,1)", opacity: 0.85 }} />
                       <span className="absolute inset-y-0 left-2 flex items-center text-3xs font-semibold text-white/90 mix-blend-difference">{r.sub}</span>
                     </div>
-                    <span className="tnum w-20 shrink-0 text-right text-2xs font-semibold text-term-text">{r.value == null ? "—" : fmt(r.value as number)}</span>
+                    <span className="tnum w-16 shrink-0 text-right text-2xs font-semibold text-term-text">{r.value == null ? "—" : fmt(r.value as number)}</span>
+                    <span
+                      className={clsx("tnum w-16 shrink-0 text-right text-2xs font-semibold", r.deltaPct == null ? "text-term-text-mute" : r.deltaPct >= 0 ? "text-term-up" : "text-term-down")}
+                      title="Change since the start of the visible window"
+                    >
+                      {r.deltaPct == null ? "—" : `${r.deltaPct >= 0 ? "▲ +" : "▼ "}${r.deltaPct.toFixed(1)}%`}
+                    </span>
                   </div>
                 );
               })}

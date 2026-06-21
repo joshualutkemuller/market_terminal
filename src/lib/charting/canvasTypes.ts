@@ -6,6 +6,8 @@ export interface CanvasSeries {
   values: (number | null)[]; // aligned to the chart axis
   area?: boolean;
   dashed?: boolean;
+  /** Faint guide line (e.g. a motion "trail" of the full path); excluded from tooltip/crosshair. */
+  ghost?: boolean;
 }
 
 export interface OHLC {
