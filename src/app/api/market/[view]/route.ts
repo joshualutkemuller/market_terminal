@@ -1,7 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
-import { PRICE_SNAPSHOTS, SNAPSHOTS, type MarketView, type ReturnBasis } from "@/data/marketPipeline";
+import {
+  PRICE_SNAPSHOTS,
+  SNAPSHOTS,
+  type MarketView,
+  type ReturnBasis,
+  type SnapshotCard,
+  type CrossAsset,
+  type BilelloView,
+  type IndexReturnsView,
+  type IndexReturnMatrix,
+} from "@/data/marketPipeline";
+
+/** Market-snapshot view computed from observations: return basis + per-series cards. */
+interface MarketSnapshotView {
+  return_basis: ReturnBasis;
+  cards: SnapshotCard[];
+}
+
+type ComputedView = MarketSnapshotView | CrossAsset | BilelloView | IndexReturnsView;
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs"; // needs fs + optional native DB drivers
@@ -146,6 +164,11 @@ function groupObs(rows: MarketObservation[]): Map<string, MarketObservation[]> {
   return grouped;
 }
 
+// Overloaded so a non-null numeric input keeps a `number` type (only NaN/Infinity
+// would yield null, which the callers below don't produce), while a nullable input
+// stays `number | null`. This keeps the typed view builders free of spurious nulls.
+function round(v: number, dp?: number): number;
+function round(v: number | null, dp?: number): number | null;
 function round(v: number | null, dp = 4): number | null {
   return v === null || !Number.isFinite(v) ? null : Number(v.toFixed(dp));
 }
@@ -210,8 +233,8 @@ function cagr(dates: string[], values: number[], years: number): number | null {
   return Math.pow(values[values.length - 1] / base, 1 / years) - 1;
 }
 
-function marketSnapshotFromObservations(rows: MarketObservation[], basis: ReturnBasis) {
-  const cards = [...groupObs(rows).entries()].map(([seriesId, obs]) => {
+function marketSnapshotFromObservations(rows: MarketObservation[], basis: ReturnBasis): MarketSnapshotView {
+  const cards: SnapshotCard[] = [...groupObs(rows).entries()].map(([seriesId, obs]) => {
     const dates = obs.map((o) => o.date);
     const values = obs.map((o) => o.value);
     const last = obs[obs.length - 1];
@@ -237,7 +260,7 @@ function marketSnapshotFromObservations(rows: MarketObservation[], basis: Return
   return { return_basis: basis, cards };
 }
 
-function crossAssetFromCards(cards: any[], basis: ReturnBasis) {
+function crossAssetFromCards(cards: SnapshotCard[], basis: ReturnBasis): CrossAsset & { return_basis: ReturnBasis } {
   const bucketMap: Record<string, string> = {
     EQUITY: "equities",
     BOND: "bonds",
@@ -256,8 +279,8 @@ function crossAssetFromCards(cards: any[], basis: ReturnBasis) {
   return out;
 }
 
-function yearlyReturns(rows: MarketObservation[]) {
-  const out = [];
+function yearlyReturns(rows: MarketObservation[]): BilelloView["asset_class_returns_by_year"] {
+  const out: BilelloView["asset_class_returns_by_year"] = [];
   for (const [seriesId, obs] of groupObs(rows)) {
     const byYear = new Map<number, number>();
     for (const row of obs) byYear.set(Number(row.date.slice(0, 4)), row.value);
@@ -277,10 +300,10 @@ function yearlyReturns(rows: MarketObservation[]) {
       }
     }
   }
-  return out.sort((a, b) => a.year - b.year || a.series_id.localeCompare(b.series_id));
+  return out.sort((a, b) => a.year - b.year || (a.series_id ?? "").localeCompare(b.series_id ?? ""));
 }
 
-function bilelloFromRows(rows: MarketObservation[], basis: ReturnBasis) {
+function bilelloFromRows(rows: MarketObservation[], basis: ReturnBasis): BilelloView {
   const cards = marketSnapshotFromObservations(rows, basis).cards;
   const asof = cards[0]?.asof ?? null;
   const ytdRows = cards.filter((c) => c.ytd !== null).map((c) => ({ series_id: c.series_id, display_name: c.display_name, ytd: c.ytd as number }));
@@ -308,9 +331,9 @@ const INDEX_MAP = [
 ] as const;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function indexReturnsFromRows(rows: MarketObservation[], basis: ReturnBasis) {
+function indexReturnsFromRows(rows: MarketObservation[], basis: ReturnBasis): IndexReturnsView {
   const grouped = groupObs(rows);
-  const matrices: Record<string, any> = {};
+  const matrices: Record<string, IndexReturnMatrix> = {};
   for (const [symbol, seriesId, name, base, drift, vol] of INDEX_MAP) {
     const obs = grouped.get(seriesId);
     if (!obs?.length) continue;
@@ -374,7 +397,7 @@ function indexReturnsFromRows(rows: MarketObservation[], basis: ReturnBasis) {
   return { return_basis: basis, asof: latest, indices: INDEX_MAP.map(([symbol, proxy, name, base, drift, vol]) => ({ symbol, proxy, name, base, drift, vol })), matrices };
 }
 
-function computedView(view: MarketView, rows: MarketObservation[], basis: ReturnBasis): unknown | null {
+function computedView(view: MarketView, rows: MarketObservation[], basis: ReturnBasis): ComputedView | null {
   if (!rows.length) return null;
   const market = marketSnapshotFromObservations(rows, basis);
   if (view === "market") return market;
