@@ -25,6 +25,7 @@ import {
   Telescope,
   CandlestickChart,
   AreaChart,
+  Clapperboard,
   type LucideIcon,
 } from "lucide-react";
 
@@ -68,6 +69,7 @@ export const NAV: NavItem[] = [
   { code: "EML", label: "ML Applications", href: "/economics/ml", icon: BrainCircuit, desc: "Recession, nowcast & rate models", group: "ECONOMICS" },
   { code: "SFE", label: "Sec-Finance Economics", href: "/economics/sec-finance", icon: Banknote, desc: "Rates → repo, funding & lending", group: "ECONOMICS" },
   { code: "MGC", label: "Macro Chart Studio", href: "/macro-chart", icon: AreaChart, desc: "Freeform economic & macro charting", group: "ECONOMICS" },
+  { code: "MOTN", label: "Macro Motion Studio", href: "/economics/motion", icon: Clapperboard, desc: "Animate economic series over time", group: "ECONOMICS" },
   { code: "AI", label: "AI Copilot", href: "/copilot", icon: Bot, desc: "Natural-language intelligence", group: "INTELLIGENCE" },
   { code: "DATAOPS", label: "Data Ops", href: "/dataops", icon: Cpu, desc: "Provider health and lineage", group: "INTELLIGENCE" },
   { code: "ALRT", label: "Alert Center", href: "/alerts", icon: BellRing, desc: "Streaming risk & ops alerts", group: "INTELLIGENCE" },
