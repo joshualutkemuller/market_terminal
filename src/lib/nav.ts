@@ -75,6 +75,7 @@ export const NAV: NavItem[] = [
   { code: "MGC", label: "Macro Chart Studio", href: "/macro-chart", icon: AreaChart, desc: "Freeform economic & macro charting", group: "ECONOMICS" },
   { code: "MOTN", label: "Macro Motion Studio", href: "/economics/motion", icon: Clapperboard, desc: "Animate economic series over time", group: "ECONOMICS" },
   { code: "NEWS", label: "News & Signal Intel", href: "/news", icon: Newspaper, desc: "Market news, social & signal engine", group: "INTELLIGENCE" },
+  { code: "SENT", label: "Investor Sentiment", href: "/sentiment", icon: Gauge, desc: "Survey + social fear/greed & positioning", group: "INTELLIGENCE" },
   { code: "AI", label: "AI Copilot", href: "/copilot", icon: Bot, desc: "Natural-language intelligence", group: "INTELLIGENCE" },
   { code: "DATAOPS", label: "Data Ops", href: "/dataops", icon: Cpu, desc: "Provider health and lineage", group: "INTELLIGENCE" },
   { code: "ALRT", label: "Alert Center", href: "/alerts", icon: BellRing, desc: "Streaming risk & ops alerts", group: "INTELLIGENCE" },
