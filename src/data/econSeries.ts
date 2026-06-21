@@ -118,6 +118,54 @@ export const FRED_CATALOG: FredSeries[] = [
   { id: "DEXUSEU", label: "USD / EUR", short: "EUR/USD", unit: "$", category: "FX", freq: "D", decimals: 4, level: 1.051, vol: 0.005, bullish: null },
   { id: "DEXJPUS", label: "JPY / USD", short: "USD/JPY", unit: "¥", category: "FX", freq: "D", decimals: 2, level: 156.3, vol: 0.5, bullish: null },
   { id: "VIXCLS", label: "CBOE VIX", short: "VIX", unit: "index", category: "MONEY", freq: "D", decimals: 1, level: 14.2, vol: 1.5, bullish: false },
+
+  // ── Funding & money markets (overnight rates, the corridor, the plumbing) ──
+  { id: "EFFR", label: "Effective Fed Funds Rate (daily)", short: "EFFR (d)", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.08, vol: 0.01, bullish: null },
+  { id: "OBFR", label: "Overnight Bank Funding Rate", short: "OBFR", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.09, vol: 0.01, bullish: null },
+  { id: "IORB", label: "Interest on Reserve Balances", short: "IORB", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.15, vol: 0.005, bullish: null },
+  { id: "BGCR", label: "Broad General Collateral Rate", short: "BGCR", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.29, vol: 0.02, bullish: null },
+  { id: "TGCR", label: "Tri-Party General Collateral Rate", short: "TGCR", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.28, vol: 0.02, bullish: null },
+  { id: "SOFR30DAYAVG", label: "30-Day Average SOFR", short: "SOFR 30d", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.31, vol: 0.01, bullish: null },
+  { id: "DFEDTARU", label: "Fed Funds Target Range — Upper", short: "Target Up", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.25, vol: 0.0, bullish: null },
+  { id: "DFEDTARL", label: "Fed Funds Target Range — Lower", short: "Target Lo", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.0, vol: 0.0, bullish: null },
+  { id: "DTB4WK", label: "4-Week T-Bill (secondary)", short: "Bill 1M", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.27, vol: 0.02, bullish: null },
+  { id: "DTB3", label: "3-Month T-Bill (secondary)", short: "Bill 3M", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.2, vol: 0.02, bullish: null },
+  { id: "DTB6", label: "6-Month T-Bill (secondary)", short: "Bill 6M", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.08, vol: 0.02, bullish: null },
+
+  // ── Liquidity balances & monetary aggregates ──
+  { id: "RRPONTSYD", label: "Overnight Reverse Repo (take-up)", short: "RRP", unit: "$B", category: "MONEY", freq: "D", decimals: 0, level: 470, vol: 12, bullish: null },
+  { id: "WRESBAL", label: "Reserve Balances at the Fed", short: "Reserves", unit: "$T", category: "MONEY", freq: "W", decimals: 2, level: 3.25, vol: 0.02, bullish: null },
+  { id: "M1SL", label: "M1 Money Supply (YoY)", short: "M1", unit: "% y/y", category: "MONEY", freq: "M", decimals: 1, level: 2.1, vol: 0.3, bullish: null },
+  { id: "BOGMBASE", label: "Monetary Base", short: "Base", unit: "$T", category: "MONEY", freq: "M", decimals: 2, level: 5.6, vol: 0.03, bullish: null },
+  { id: "STLFSI4", label: "St. Louis Fed Financial Stress", short: "STLFSI", unit: "index", category: "MONEY", freq: "W", decimals: 2, level: -0.4, vol: 0.08, bullish: false },
+  { id: "ANFCI", label: "Adjusted NFCI", short: "ANFCI", unit: "index", category: "MONEY", freq: "W", decimals: 2, level: -0.3, vol: 0.05, bullish: false },
+
+  // ── Expanded inflation ──
+  { id: "MEDCPIM159SFRB", label: "Median CPI (ann.)", short: "Median CPI", unit: "% ann.", category: "INFLATION", freq: "M", decimals: 1, level: 3.3, vol: 0.2, bullish: false },
+  { id: "PCETRIM12M159SFRB", label: "Trimmed-Mean PCE (12m)", short: "Trim PCE", unit: "% y/y", category: "INFLATION", freq: "M", decimals: 1, level: 2.7, vol: 0.12, bullish: false },
+
+  // ── Expanded labor ──
+  { id: "JTSQUR", label: "Quits Rate (JOLTS)", short: "Quits", unit: "%", category: "LABOR", freq: "M", decimals: 1, level: 2.0, vol: 0.1, bullish: true },
+  { id: "JTSHIR", label: "Hires Rate (JOLTS)", short: "Hires", unit: "%", category: "LABOR", freq: "M", decimals: 1, level: 3.4, vol: 0.1, bullish: true },
+  { id: "CCSA", label: "Continued Jobless Claims", short: "Cont. Claims", unit: "M", category: "LABOR", freq: "W", decimals: 2, level: 1.87, vol: 0.04, bullish: false },
+
+  // ── Expanded activity ──
+  { id: "CFNAI", label: "Chicago Fed Nat'l Activity", short: "CFNAI", unit: "index", category: "ACTIVITY", freq: "M", decimals: 2, level: -0.05, vol: 0.25, bullish: true },
+  { id: "NEWORDER", label: "Core Capital Goods Orders", short: "Cap Orders", unit: "% m/m", category: "ACTIVITY", freq: "M", decimals: 1, level: 0.3, vol: 0.6, bullish: true },
+
+  // ── Expanded housing & consumer credit ──
+  { id: "MSACSR", label: "Monthly Supply of New Homes", short: "Mos Supply", unit: "months", category: "HOUSING", freq: "M", decimals: 1, level: 8.9, vol: 0.3, bullish: false },
+  { id: "MORTGAGE15US", label: "15Y Mortgage Rate", short: "15Y Mtg", unit: "%", category: "HOUSING", freq: "W", decimals: 2, level: 5.78, vol: 0.07, bullish: false },
+  { id: "REVOLSL", label: "Revolving Consumer Credit (YoY)", short: "Rev Credit", unit: "% y/y", category: "CONSUMER", freq: "M", decimals: 1, level: 4.0, vol: 0.4, bullish: null },
+
+  // ── Bank lending standards ──
+  { id: "DRTSCILM", label: "Banks Tightening C&I (SLOOS)", short: "SLOOS C&I", unit: "net %", category: "CREDIT", freq: "Q", decimals: 1, level: 8.0, vol: 3, bullish: false },
+
+  // ── Expanded FX ──
+  { id: "DEXUSUK", label: "USD / GBP", short: "GBP/USD", unit: "$", category: "FX", freq: "D", decimals: 4, level: 1.27, vol: 0.006, bullish: null },
+  { id: "DEXCAUS", label: "CAD / USD", short: "USD/CAD", unit: "C$", category: "FX", freq: "D", decimals: 4, level: 1.36, vol: 0.004, bullish: null },
+  { id: "DEXCHUS", label: "CNY / USD", short: "USD/CNY", unit: "¥", category: "FX", freq: "D", decimals: 4, level: 7.18, vol: 0.01, bullish: null },
+  { id: "DEXMXUS", label: "MXN / USD", short: "USD/MXN", unit: "MX$", category: "FX", freq: "D", decimals: 3, level: 17.1, vol: 0.08, bullish: null },
 ];
 
 export function seriesById(id: string): FredSeries | undefined {
@@ -178,6 +226,19 @@ const FRED_OVERRIDE: Record<string, Partial<FredResolved>> = {
   "ISM-MFG": { simOnly: true },
   "ISM-SVC": { simOnly: true },
   SOFR: { units: "lin" },
+  // ── Funding / money-market additions ──
+  // FRED reports these as billions; the terminal displays trillions.
+  WRESBAL: { units: "lin", scale: 0.001 },
+  BOGMBASE: { units: "lin", scale: 0.001 },
+  // continued claims: persons -> millions
+  CCSA: { units: "lin", scale: 1e-6 },
+  // already-rate series — do not re-transform
+  MEDCPIM159SFRB: { units: "lin" },
+  PCETRIM12M159SFRB: { units: "lin" },
+  // percent-change transforms
+  M1SL: { units: "pc1" },
+  REVOLSL: { units: "pc1" },
+  NEWORDER: { units: "pch" },
 };
 
 export function resolveFred(id: string): FredResolved {
