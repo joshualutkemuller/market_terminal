@@ -27,6 +27,7 @@ import {
   AreaChart,
   Clapperboard,
   Newspaper,
+  Droplets,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,6 +50,7 @@ export const NAV: NavItem[] = [
   { code: "LENS", label: "Market Lens Studio", href: "/market-lens", icon: Telescope, desc: "Configurable analytics workspace", group: "MARKETS" },
   { code: "MKC", label: "Market Chart Studio", href: "/market-chart", icon: CandlestickChart, desc: "Freeform technical market charting", group: "MARKETS" },
   { code: "SLAB", label: "Securities Lending", href: "/securities-lending", icon: Landmark, desc: "Inventory, loan book & revenue", group: "FINANCE" },
+  { code: "SQZ", label: "Squeeze Radar", href: "/securities-lending/squeeze", icon: Flame, desc: "Borrow demand, heat score & squeeze risk", group: "FINANCE" },
   { code: "PB", label: "Prime Finance", href: "/prime-finance", icon: Briefcase, desc: "Hedge fund financing & risk", group: "FINANCE" },
   { code: "COLL", label: "Collateral Mgmt", href: "/collateral", icon: Layers, desc: "Margin & collateral optimization", group: "OPTIMIZATION" },
   { code: "CASH", label: "Cash Optimizer", href: "/cash-optimizer", icon: Wallet, desc: "Treasury funding optimization", group: "OPTIMIZATION" },
@@ -69,9 +71,11 @@ export const NAV: NavItem[] = [
   { code: "REGIME", label: "Macro Regime", href: "/economics/regime", icon: BrainCircuit, desc: "Macro states to desk playbooks", group: "ECONOMICS" },
   { code: "EML", label: "ML Applications", href: "/economics/ml", icon: BrainCircuit, desc: "Recession, nowcast & rate models", group: "ECONOMICS" },
   { code: "SFE", label: "Sec-Finance Economics", href: "/economics/sec-finance", icon: Banknote, desc: "Rates → repo, funding & lending", group: "ECONOMICS" },
+  { code: "FUND", label: "Funding & Liquidity", href: "/economics/funding", icon: Droplets, desc: "Repo, corridor, balances & funding stress", group: "ECONOMICS" },
   { code: "MGC", label: "Macro Chart Studio", href: "/macro-chart", icon: AreaChart, desc: "Freeform economic & macro charting", group: "ECONOMICS" },
   { code: "MOTN", label: "Macro Motion Studio", href: "/economics/motion", icon: Clapperboard, desc: "Animate economic series over time", group: "ECONOMICS" },
   { code: "NEWS", label: "News & Signal Intel", href: "/news", icon: Newspaper, desc: "Market news, social & signal engine", group: "INTELLIGENCE" },
+  { code: "SENT", label: "Investor Sentiment", href: "/sentiment", icon: Gauge, desc: "Survey + social fear/greed & positioning", group: "INTELLIGENCE" },
   { code: "AI", label: "AI Copilot", href: "/copilot", icon: Bot, desc: "Natural-language intelligence", group: "INTELLIGENCE" },
   { code: "DATAOPS", label: "Data Ops", href: "/dataops", icon: Cpu, desc: "Provider health and lineage", group: "INTELLIGENCE" },
   { code: "ALRT", label: "Alert Center", href: "/alerts", icon: BellRing, desc: "Streaming risk & ops alerts", group: "INTELLIGENCE" },
