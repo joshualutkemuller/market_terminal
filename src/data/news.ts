@@ -278,6 +278,8 @@ export interface ImpactRow {
   d1: number;
   w1: number;
   m1: number;
+  hitRate: number;
+  observations: number;
 }
 export interface EventImpact {
   event: string;
@@ -361,11 +363,17 @@ export function getMarketImpact(): EventImpact[] {
       const dir = defensive ? -bias : bias;
       const scale = asset === "VIX" ? 9 : asset === "TLT" || asset === "GLD" ? 2.2 : asset === "DXY" ? 1.1 : 2.6;
       const base = dir * scale;
+      const d1 = Number((rng.normal(base * 0.4, scale * 0.5)).toFixed(1));
+      const w1 = Number((rng.normal(base * 0.8, scale * 0.8)).toFixed(1));
+      const m1 = Number((rng.normal(base * 1.4, scale * 1.3)).toFixed(1));
+      const directionalStrength = Math.min(0.22, Math.abs((d1 + w1 + m1) / Math.max(1, scale * 18)));
       return {
         asset,
-        d1: Number((rng.normal(base * 0.4, scale * 0.5)).toFixed(1)),
-        w1: Number((rng.normal(base * 0.8, scale * 0.8)).toFixed(1)),
-        m1: Number((rng.normal(base * 1.4, scale * 1.3)).toFixed(1)),
+        d1,
+        w1,
+        m1,
+        hitRate: Math.round(Math.max(38, Math.min(82, 52 + directionalStrength * 100 + rng.float(-9, 9)))),
+        observations: Math.max(8, EVENT_STUDY_SOURCES[event].occurrences - rng.int(0, 5)),
       };
     });
     return { ...EVENT_STUDY_SOURCES[event], event, rows, model: "HISTORICAL_EVENT_STUDY" };

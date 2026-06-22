@@ -224,7 +224,7 @@ export default function NewsTerminal() {
             <table className="w-full border-collapse tnum">
               <thead className="bg-term-panel-2">
                 <tr>
-                  {["Asset", "+1D", "+1W", "+1M"].map((c, i) => (
+                  {["Asset", "+1D", "+1W", "+1M", "Hit", "N"].map((c, i) => (
                     <th key={c} className={clsx("border-b border-term-border px-3 py-1 text-3xs font-semibold uppercase tracking-wider text-term-text-mute", i === 0 ? "text-left" : "text-right")}>{c}</th>
                   ))}
                 </tr>
@@ -236,6 +236,8 @@ export default function NewsTerminal() {
                     {[r.d1, r.w1, r.m1].map((v, i) => (
                       <td key={i} className={clsx("px-3 py-1 text-right text-2xs", pnlClass(v))}>{fmtSigned(v, 1)}%</td>
                     ))}
+                    <td className="px-3 py-1 text-right text-2xs text-term-text-dim">{r.hitRate}%</td>
+                    <td className="px-3 py-1 text-right text-2xs text-term-text-dim">{r.observations}</td>
                   </tr>
                 ))}
               </tbody>
