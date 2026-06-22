@@ -1,7 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 /**
  * Optional DB-backed persistence for chart templates.
@@ -54,10 +52,10 @@ async function withClient<T>(url: string, fn: (c: any) => Promise<T>): Promise<T
   }
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   const url = dbUrl();
-  const studio = req.nextUrl.searchParams.get("studio") ?? "";
-  if (!url) return NextResponse.json({ source: "NONE", templates: [] });
+  const studio = new URL(req.url).searchParams.get("studio") ?? "";
+  if (!url) return json({ source: "NONE", templates: [] });
 
   const rows = await withClient(url, async (c) => {
     const r = studio
@@ -66,20 +64,20 @@ export async function GET(req: NextRequest) {
     return r.rows.map((row: any) => JSON.parse(row.payload_json));
   });
 
-  if (rows == null) return NextResponse.json({ source: "NONE", templates: [] });
-  return NextResponse.json({ source: "DB", templates: rows });
+  if (rows == null) return json({ source: "NONE", templates: [] });
+  return json({ source: "DB", templates: rows });
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   const url = dbUrl();
   let template: any;
   try {
     template = (await req.json())?.template;
   } catch {
-    return NextResponse.json({ ok: false, error: "invalid body" }, { status: 400 });
+    return json({ ok: false, error: "invalid body" }, { status: 400 });
   }
-  if (!template?.id || !template?.studio) return NextResponse.json({ ok: false, error: "id and studio required" }, { status: 400 });
-  if (!url) return NextResponse.json({ ok: false, source: "NONE" });
+  if (!template?.id || !template?.studio) return json({ ok: false, error: "id and studio required" }, { status: 400 });
+  if (!url) return json({ ok: false, source: "NONE" });
 
   const ok = await withClient(url, async (c) => {
     await c.query(
@@ -91,19 +89,19 @@ export async function POST(req: NextRequest) {
     return true;
   });
 
-  return NextResponse.json({ ok: ok === true, source: ok === true ? "DB" : "NONE" });
+  return json({ ok: ok === true, source: ok === true ? "DB" : "NONE" });
 }
 
-export async function DELETE(req: NextRequest) {
+export async function DELETE(req: Request) {
   const url = dbUrl();
-  const id = req.nextUrl.searchParams.get("id") ?? "";
-  if (!id) return NextResponse.json({ ok: false, error: "id required" }, { status: 400 });
-  if (!url) return NextResponse.json({ ok: false, source: "NONE" });
+  const id = new URL(req.url).searchParams.get("id") ?? "";
+  if (!id) return json({ ok: false, error: "id required" }, { status: 400 });
+  if (!url) return json({ ok: false, source: "NONE" });
 
   const ok = await withClient(url, async (c) => {
     await c.query("DELETE FROM chart_templates WHERE id = $1", [id]);
     return true;
   });
 
-  return NextResponse.json({ ok: ok === true, source: ok === true ? "DB" : "NONE" });
+  return json({ ok: ok === true, source: ok === true ? "DB" : "NONE" });
 }

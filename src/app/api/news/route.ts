@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fetchLiveNews } from "@/lib/server/newsProviders";
 import { enrichWithNlp, fetchNlpClusters } from "@/lib/server/sentimentNlp";
 import { getHeadlines } from "@/data/news";
 
-export const dynamic = "force-dynamic";
 
 /**
  * GET /api/news?n=60
@@ -13,13 +12,13 @@ export const dynamic = "force-dynamic";
  * with a `source` provenance field; FinBERT enrichment appends "+ FinBERT" and
  * supplies transformer event clusters for NEWS-6 (empty → keyword clustering).
  */
-export async function GET(req: NextRequest) {
-  const n = Math.min(120, Math.max(10, Number(req.nextUrl.searchParams.get("n") ?? 60)));
+export async function GET(req: Request) {
+  const n = Math.min(120, Math.max(10, Number(new URL(req.url).searchParams.get("n") ?? 60)));
   const live = await fetchLiveNews(n).catch(() => null);
   const base = live ?? { source: "SIM", headlines: getHeadlines(n) };
   const [{ headlines, nlp }, clusters] = await Promise.all([
     enrichWithNlp(base.headlines).catch(() => ({ headlines: base.headlines, nlp: false })),
     fetchNlpClusters(base.headlines).catch(() => null),
   ]);
-  return NextResponse.json({ source: nlp ? `${base.source} + FinBERT` : base.source, headlines, clusters: clusters ?? [] });
+  return json({ source: nlp ? `${base.source} + FinBERT` : base.source, headlines, clusters: clusters ?? [] });
 }

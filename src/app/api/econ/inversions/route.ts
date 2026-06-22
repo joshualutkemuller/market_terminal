@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import {
   computeInversionStats,
@@ -12,7 +12,6 @@ import {
   tenorToFredId,
 } from "@/data/econCurve";
 
-export const dynamic = "force-dynamic";
 
 const HISTORY_START = "1976-01-01"; // T10Y2Y begins 1976; DGS2 likewise
 const REVALIDATE = 12 * 60 * 60; // 12h — deep daily history changes only at the tail
@@ -27,8 +26,8 @@ const REVALIDATE = 12 * 60 * 60; // 12h — deep daily history changes only at t
  * dropped) with recession lead-times. Returns the inversions, aggregate stats and
  * a monthly timeline. Falls back to the curated/simulated record without a key.
  */
-export async function GET(req: NextRequest) {
-  const spreadId = req.nextUrl.searchParams.get("spread") ?? "10Y2Y";
+export async function GET(req: Request) {
+  const spreadId = new URL(req.url).searchParams.get("spread") ?? "10Y2Y";
   const def = spreadDef(spreadId);
 
   const sim = () => ({
@@ -39,7 +38,7 @@ export async function GET(req: NextRequest) {
     timeline: getSpreadSeriesFor(spreadId),
   });
 
-  if (!fredEnabled()) return NextResponse.json(sim());
+  if (!fredEnabled()) return json(sim());
 
   try {
     // 1. Build the daily spread series (bps).
@@ -54,7 +53,7 @@ export async function GET(req: NextRequest) {
       // Compute from the two constituent constant-maturity tenors.
       const longId = tenorToFredId(def.longT);
       const shortId = tenorToFredId(def.shortT);
-      if (!longId || !shortId) return NextResponse.json(sim());
+      if (!longId || !shortId) return json(sim());
       const [lo, sh] = await Promise.all([
         fredSeries(longId, { start: HISTORY_START, revalidateSec: REVALIDATE }),
         fredSeries(shortId, { start: HISTORY_START, revalidateSec: REVALIDATE }),
@@ -64,7 +63,7 @@ export async function GET(req: NextRequest) {
         .filter((o) => o.value !== null && shMap.has(o.date))
         .map((o) => ({ date: o.date, bps: ((o.value as number) - (shMap.get(o.date) as number)) * 100 }));
     }
-    if (series.length < 30) return NextResponse.json(sim());
+    if (series.length < 30) return json(sim());
 
     // 2. NBER recession ranges from USREC.
     const usrec = await fredSeries("USREC", { start: "1970-01-01", revalidateSec: REVALIDATE });
@@ -77,7 +76,7 @@ export async function GET(req: NextRequest) {
     const stats = computeInversionStats(inversions);
     const timeline = monthlySpreadTimeline(series, recessions);
 
-    return NextResponse.json({
+    return json({
       source: "FRED",
       spread: spreadId,
       asOf: series[series.length - 1].date,
@@ -86,6 +85,6 @@ export async function GET(req: NextRequest) {
       timeline,
     });
   } catch (err) {
-    return NextResponse.json({ ...sim(), note: err instanceof Error ? err.message : "FRED error" });
+    return json({ ...sim(), note: err instanceof Error ? err.message : "FRED error" });
   }
 }

@@ -1,6 +1,5 @@
-"use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { Sparkline } from "@/components/charts/Sparkline";

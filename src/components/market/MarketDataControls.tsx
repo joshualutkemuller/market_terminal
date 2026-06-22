@@ -1,4 +1,3 @@
-"use client";
 
 import clsx from "clsx";
 import type { ReturnBasis } from "@/data/marketPipeline";

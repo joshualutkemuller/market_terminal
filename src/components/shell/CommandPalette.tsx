@@ -1,7 +1,6 @@
-"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { NAV } from "@/lib/nav";
 import { UNIVERSE } from "@/data/universe";
 import { Modal } from "@/components/ui/Modal";

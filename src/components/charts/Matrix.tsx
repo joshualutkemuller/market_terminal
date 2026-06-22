@@ -1,4 +1,3 @@
-"use client";
 
 /** Correlation matrix / generic heat grid. */
 export function CorrelationMatrix({ labels, values, height = 280, className }: { labels: string[]; values: number[][]; height?: number; className?: string }) {

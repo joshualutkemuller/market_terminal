@@ -1,4 +1,3 @@
-"use client";
 
 import { Fragment, useMemo, useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";

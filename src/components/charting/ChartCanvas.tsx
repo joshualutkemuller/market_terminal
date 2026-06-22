@@ -1,4 +1,3 @@
-"use client";
 
 import { useRef, useState, useImperativeHandle, forwardRef } from "react";
 import clsx from "clsx";

@@ -1,4 +1,3 @@
-"use client";
 
 import { fmtSignedPct } from "@/lib/format";
 

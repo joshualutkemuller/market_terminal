@@ -1,4 +1,3 @@
-"use client";
 
 interface ScatterProps {
   points: { x: number; y: number }[];

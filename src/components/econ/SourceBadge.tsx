@@ -1,4 +1,3 @@
-"use client";
 
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import type { DataSource } from "@/lib/useEcon";

@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fetchPipelineManifest } from "@/lib/server/marketManifest";
 
-export const dynamic = "force-dynamic";
 
 /**
  * GET /api/dataops/runs
@@ -12,6 +11,6 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const data = await fetchPipelineManifest().catch(() => null);
-  if (!data) return NextResponse.json({ live: false, runs: [], series: [], lineage: [] });
-  return NextResponse.json({ live: true, ...data });
+  if (!data) return json({ live: false, runs: [], series: [], lineage: [] });
+  return json({ live: true, ...data });
 }

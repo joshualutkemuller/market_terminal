@@ -1,4 +1,3 @@
-"use client";
 
 interface SankeyNode {
   id: string;

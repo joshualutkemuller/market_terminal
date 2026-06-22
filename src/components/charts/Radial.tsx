@@ -1,4 +1,3 @@
-"use client";
 
 /** Donut and gauge primitives for utilization / allocation displays. */
 

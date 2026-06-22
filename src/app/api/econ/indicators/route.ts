@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { FRED_CATALOG, getSeriesHistory, resolveFred, type FredSeries } from "@/data/econSeries";
 
-export const dynamic = "force-dynamic";
 
 export interface LiveIndicator {
   id: string;
@@ -88,5 +87,5 @@ export async function GET() {
     })
   );
   const source = out.some((o) => o.source === "FRED") ? "FRED" : "SIM";
-  return NextResponse.json({ source, indicators: out });
+  return json({ source, indicators: out });
 }

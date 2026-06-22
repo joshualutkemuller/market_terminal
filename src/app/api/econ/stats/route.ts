@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { resolveFred } from "@/data/econSeries";
 import { STAT_SERIES, simStatFull, monthlyDate } from "@/data/statsConfig";
 import type { Obs } from "@/lib/stats";
 
-export const dynamic = "force-dynamic";
 
 /** Resample observations to one (last) value per month, within [start, end]. */
 function toMonthly(obs: { date: string; value: number | null }[], start: string, end: string): Obs[] {
@@ -24,9 +23,9 @@ function toMonthly(obs: { date: string; value: number | null }[], start: string,
  * not already hold — so changing the lookback never re-pulls the whole history.
  * All statistics are computed client-side from the cached series.
  */
-export async function GET(req: NextRequest) {
-  const start = req.nextUrl.searchParams.get("start") ?? monthlyDate(240); // default 20y
-  const end = req.nextUrl.searchParams.get("end") ?? monthlyDate(0);
+export async function GET(req: Request) {
+  const start = new URL(req.url).searchParams.get("start") ?? monthlyDate(240); // default 20y
+  const end = new URL(req.url).searchParams.get("end") ?? monthlyDate(0);
   const live = fredEnabled();
   const sim = simStatFull(320);
   let anyFred = false;
@@ -50,5 +49,5 @@ export async function GET(req: NextRequest) {
     })
   );
 
-  return NextResponse.json({ source: anyFred ? "FRED" : "SIM", start, end, series });
+  return json({ source: anyFred ? "FRED" : "SIM", start, end, series });
 }

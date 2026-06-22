@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { CURVE_TENORS, buildLiveSnapshots, getCurveSnapshots, type CurveHistory } from "@/data/econCurve";
 
-export const dynamic = "force-dynamic";
 
 /**
  * GET /api/econ/curve-history?years=7
@@ -17,13 +16,13 @@ export const dynamic = "force-dynamic";
  * Always 200 with a `source` field (FRED | SIM); falls back to the simulated
  * presets without a key or on error.
  */
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   const sim = getCurveSnapshots();
   if (!fredEnabled()) {
-    return NextResponse.json({ source: "SIM", snapshots: sim });
+    return json({ source: "SIM", snapshots: sim });
   }
 
-  const reqYears = Number(req.nextUrl.searchParams.get("years") ?? 7);
+  const reqYears = Number(new URL(req.url).searchParams.get("years") ?? 7);
   const years = Math.max(2, Math.min(25, Number.isFinite(reqYears) ? reqYears : 7));
   const start = `${new Date().getUTCFullYear() - years}-01-01`;
 
@@ -40,9 +39,9 @@ export async function GET(req: NextRequest) {
     );
     const snapshots = buildLiveSnapshots(history);
     const asOf = snapshots.find((s) => s.id === "now")?.date ?? null;
-    return NextResponse.json({ source: "FRED", asOf, years, snapshots });
+    return json({ source: "FRED", asOf, years, snapshots });
   } catch (err) {
-    return NextResponse.json({
+    return json({
       source: "SIM",
       note: err instanceof Error ? err.message : "FRED error",
       snapshots: sim,

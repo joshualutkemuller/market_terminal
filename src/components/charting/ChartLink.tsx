@@ -1,6 +1,5 @@
-"use client";
 
-import Link from "next/link";
+import Link from "@/components/Link";
 import { AreaChart } from "lucide-react";
 import type { SeriesRef, RangePreset, Transform, ChartType } from "@/lib/charting/spec";
 import { templateToURL } from "@/lib/charting/templates";

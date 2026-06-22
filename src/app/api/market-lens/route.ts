@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { runMarketLens } from "@/data/marketLens";
 
 const LENS_URL = process.env.MARKET_LENS_URL || "";
@@ -91,7 +91,7 @@ function isValidGetShape(action: string, id: string, data: unknown): boolean {
   return false;
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action") || "views";
   const id = searchParams.get("id") || "";
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
       if (backendRes) {
         const data = await backendRes.json();
         if (isValidGetShape(action, id, data)) {
-          return NextResponse.json({ source: "LIVE", data });
+          return json({ source: "LIVE", data });
         }
       }
     } catch {
@@ -126,26 +126,26 @@ export async function GET(req: NextRequest) {
   const fallback = Boolean(LENS_URL);
   if (action === "views" && id) {
     const view = VIEWS.find(v => v.view_id === id);
-    if (!view) return NextResponse.json({ error: "View not found" }, { status: 404 });
-    return NextResponse.json({ source: "SNAPSHOT", fallback, data: view });
+    if (!view) return json({ error: "View not found" }, { status: 404 });
+    return json({ source: "SNAPSHOT", fallback, data: view });
   }
   if (action === "views") {
-    return NextResponse.json({ source: "SNAPSHOT", fallback, data: VIEWS });
+    return json({ source: "SNAPSHOT", fallback, data: VIEWS });
   }
   if (action === "presets") {
-    return NextResponse.json({ source: "SNAPSHOT", fallback, data: PRESETS });
+    return json({ source: "SNAPSHOT", fallback, data: PRESETS });
   }
   if (action === "catalog") {
     const filtered = q
       ? CATALOG.filter(c => c.series_id.toUpperCase().includes(q.toUpperCase()) || c.display_name.toUpperCase().includes(q.toUpperCase()))
       : CATALOG;
-    return NextResponse.json({ source: "SNAPSHOT", fallback, data: { total: filtered.length, entries: filtered } });
+    return json({ source: "SNAPSHOT", fallback, data: { total: filtered.length, entries: filtered } });
   }
 
-  return NextResponse.json({ source: "SNAPSHOT", fallback, data: VIEWS });
+  return json({ source: "SNAPSHOT", fallback, data: VIEWS });
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
 
@@ -153,15 +153,15 @@ export async function POST(req: NextRequest) {
     const backendRes = await proxyToBackend("/market-lens/run", "POST", body);
     if (backendRes) {
       const data = await backendRes.json();
-      return NextResponse.json({ source: "LIVE", data });
+      return json({ source: "LIVE", data });
     }
 
     // Fallback: compute the analysis locally with the deterministic TypeScript
     // engine — same graceful-degradation pattern as /api/market/[view], so the
     // module renders real, configurable analytics with no backend configured.
     const data = await runMarketLens(body);
-    return NextResponse.json({ source: "SNAPSHOT", data });
+    return json({ source: "SNAPSHOT", data });
   } catch (e) {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return json({ error: "Invalid request body" }, { status: 400 });
   }
 }

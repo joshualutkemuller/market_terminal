@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fredEnabled } from "@/lib/server/fred";
 import { configuredNewsProviders } from "@/lib/server/newsProviders";
 import { configuredSocialProviders } from "@/lib/server/socialProviders";
 
-export const dynamic = "force-dynamic";
 
 type Status = "LIVE" | "CACHED" | "SIM" | "STALE" | "ERROR" | "FALLBACK_AVAILABLE";
 interface ProviderProbe {
@@ -82,5 +81,5 @@ export async function GET() {
   // Deterministic fallback — always available.
   providers.SYNTHETIC = { status: "FALLBACK_AVAILABLE", detail: "deterministic fallback available; not a live upstream", live: false };
 
-  return NextResponse.json({ probedAt: new Date().toISOString(), providers });
+  return json({ probedAt: new Date().toISOString(), providers });
 }

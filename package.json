@@ -2,12 +2,14 @@
   "name": "market-terminal",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Securities Finance Intelligence Platform — a Bloomberg-style operating system for Securities Lending, Prime Finance, Collateral & Cash Optimization, Sources & Uses Matching, Treasury Analytics and AI decision support.",
   "scripts": {
-    "dev": "next dev -p 3000",
-    "build": "next build",
-    "start": "next start -p 3000",
-    "lint": "next lint",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -15,9 +17,9 @@
     "@anthropic-ai/sdk": "0.69.0",
     "clsx": "2.1.1",
     "lucide-react": "0.456.0",
-    "next": "14.2.18",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "react-router-dom": "6.28.0",
     "zustand": "5.0.1"
   },
   "optionalDependencies": {
@@ -27,12 +29,12 @@
     "@types/node": "20.16.5",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
     "autoprefixer": "10.4.20",
-    "eslint": "8.57.1",
-    "eslint-config-next": "14.2.18",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.15",
     "typescript": "5.6.3",
+    "vite": "5.4.11",
     "vitest": "2.1.8"
   }
 }

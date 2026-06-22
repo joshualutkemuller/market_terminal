@@ -1,8 +1,7 @@
-"use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import Link from "@/components/Link";
+import { usePathname } from "@/lib/navigation";
 import clsx from "clsx";
 import { NAV, NAV_GROUPS } from "@/lib/nav";
 

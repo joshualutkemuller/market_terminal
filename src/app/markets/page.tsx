@@ -1,4 +1,3 @@
-"use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
@@ -27,7 +26,7 @@ import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import type { ReturnBasis, SnapshotCard } from "@/data/marketPipeline";
 import { fmtNum, fmtInt, fmtAbbr, fmtSignedPct, pnlClass } from "@/lib/format";
 import { marketChartHref } from "@/components/charting/ChartLink";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { CandlestickChart } from "lucide-react";
 
 type TabKey = "EQUITY" | "ETF" | "FI" | "FUTURE" | "FX" | "COMMODITY" | "CRYPTO";

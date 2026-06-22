@@ -1,7 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 /**
  * GET /api/cron/refresh  — daily cache warmer (Vercel Cron).
@@ -36,14 +34,14 @@ const MARKET_TARGETS = [
   "/api/market/index-returns?basis=price",
 ];
 
-function baseUrl(req: NextRequest): string {
+function baseUrl(req: Request): string {
   const host =
     process.env.CRON_TARGET_URL ||
     process.env.VERCEL_PROJECT_PRODUCTION_URL ||
     process.env.VERCEL_URL;
   if (host) return host.startsWith("http") ? host : `https://${host}`;
   // local dev: derive from the incoming request
-  return req.nextUrl.origin;
+  return new URL(req.url).origin;
 }
 
 function marketRefreshStart(): string {
@@ -72,12 +70,12 @@ async function refreshPipeline() {
   return { skipped: false, status: r.status, start, body };
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const auth = req.headers.get("authorization");
     if (auth !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      return json({ error: "unauthorized" }, { status: 401 });
     }
   }
 
@@ -109,5 +107,5 @@ export async function GET(req: NextRequest) {
       : { path: targets[i], status: 0, error: res.reason instanceof Error ? res.reason.message : String(res.reason) }
   );
 
-  return NextResponse.json({ ok: true, startedAt, finishedAt: new Date().toISOString(), pipeline, warmed });
+  return json({ ok: true, startedAt, finishedAt: new Date().toISOString(), pipeline, warmed });
 }
