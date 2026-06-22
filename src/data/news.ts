@@ -283,12 +283,77 @@ export interface EventImpact {
   event: string;
   occurrences: number;
   rows: ImpactRow[];
+  datasets: string[];
+  access: string;
+  magnitude: string;
+  model: "HISTORICAL_EVENT_STUDY";
+  status: "STARTER_STACK" | "NEEDS_CONSENSUS" | "CURATED";
 }
+
+const EVENT_STUDY_SOURCES: Record<(typeof EVENT_TYPES)[number], Omit<EventImpact, "event" | "rows" | "model">> = {
+  "Treasury Auction Tail": {
+    occurrences: 28,
+    magnitude: "Auction tail = high yield − when-issued yield; high-yield, WI, bid-to-cover",
+    datasets: ["TreasuryDirect auction results", "market warehouse forward returns"],
+    access: "Free official starter stack",
+    status: "STARTER_STACK",
+  },
+  "US Inflation Surprise": {
+    occurrences: 42,
+    magnitude: "CPI actual − consensus estimate, joined on release date",
+    datasets: ["FRED CPIAUCSL / release calendar", "Trading Economics, FMP, or Econoday consensus"],
+    access: "FRED free; consensus paid/cheap",
+    status: "NEEDS_CONSENSUS",
+  },
+  "Jobs Report Beat": {
+    occurrences: 39,
+    magnitude: "PAYEMS actual − consensus estimate, joined on release date",
+    datasets: ["FRED PAYEMS / release calendar", "Trading Economics, FMP, or Econoday consensus"],
+    access: "FRED free; consensus paid/cheap",
+    status: "NEEDS_CONSENSUS",
+  },
+  "Fed Surprise Cut": {
+    occurrences: 17,
+    magnitude: "Policy surprise from CME Fed Funds futures or academic high-frequency shocks",
+    datasets: ["FOMC dates", "CME Fed Funds futures from macro_data_etl", "Nakamura-Steinsson / Jarociński-Karadi / Bu-Rogers-Wu shocks"],
+    access: "Free",
+    status: "STARTER_STACK",
+  },
+  "Megacap Earnings Beat": {
+    occurrences: 31,
+    magnitude: "EPS actual − estimate for megacap reporters",
+    datasets: ["Financial Modeling Prep, Finnhub, or Alpha Vantage EARNINGS", "market warehouse forward returns"],
+    access: "Free/cheap tiers",
+    status: "STARTER_STACK",
+  },
+  "Oil Supply Shock": {
+    occurrences: 24,
+    magnitude: "EIA supply/inventory surprise plus WTI move",
+    datasets: ["EIA API", "FRED DCOILWTICO", "Kilian / Baumeister-Hamilton oil shocks", "OPEC dates"],
+    access: "Free",
+    status: "STARTER_STACK",
+  },
+  "Regional Bank Stress": {
+    occurrences: 22,
+    magnitude: "Stress-index jump and KRE drawdown around bank-stress windows",
+    datasets: ["FRED STLFSI4 / NFCI / ANFCI", "KRE ETF drawdowns", "FDIC failed-bank list"],
+    access: "Free",
+    status: "STARTER_STACK",
+  },
+  "China Stimulus Package": {
+    occurrences: 14,
+    magnitude: "PBOC RRR/rate-cut dates and FXI/MCHI event-window move",
+    datasets: ["PBOC RRR/rate cut dates", "FXI/MCHI market warehouse returns"],
+    access: "Free/curated",
+    status: "CURATED",
+  },
+};
 
 export function getMarketImpact(): EventImpact[] {
   return EVENT_TYPES.map((event) => {
     const rng = new Rng(`news-impact-${event}`);
-    // Direction bias per event type so the historical pattern reads coherently.
+    // Direction bias per event type so the historical pattern reads coherently while
+    // the actual event dates/magnitudes are still sourced by the external gold table.
     const riskOff = /Stress|Shock|Tail|Inflation Surprise/.test(event);
     const bias = riskOff ? -1 : 1;
     const rows: ImpactRow[] = IMPACT_ASSETS.map((asset) => {
@@ -303,7 +368,7 @@ export function getMarketImpact(): EventImpact[] {
         m1: Number((rng.normal(base * 1.4, scale * 1.3)).toFixed(1)),
       };
     });
-    return { event, occurrences: rng.int(7, 34), rows };
+    return { ...EVENT_STUDY_SOURCES[event], event, rows, model: "HISTORICAL_EVENT_STUDY" };
   });
 }
 
