@@ -27,6 +27,7 @@ import {
   type SeriesRunResult,
 } from "@/data/dataOps";
 import { useProviderHealth } from "@/lib/useProviderHealth";
+import { useLiveRuns } from "@/lib/useLiveRuns";
 import { fmtInt, fmtNum, fmtPct } from "@/lib/format";
 
 const STATUS_TONE: Record<ProviderStatus, "up" | "blue" | "amber" | "down" | "neutral"> = {
@@ -97,6 +98,12 @@ function downloadCsv(name: string, rows: ModuleDataItem[]) {
   URL.revokeObjectURL(url);
 }
 
+/** Replace fixture rows whose provider/source has live manifest data; keep the rest. */
+function mergeByProvider<T extends { provider?: ProviderName; source?: ProviderName }>(base: T[], liveRows: T[]): T[] {
+  const liveProviders = new Set(liveRows.map((r) => r.provider ?? r.source));
+  return [...liveRows, ...base.filter((r) => !liveProviders.has(r.provider ?? r.source))];
+}
+
 export default function DataOpsPage() {
   const baseProviders = getProviderHealth();
   const probe = useProviderHealth();
@@ -117,12 +124,15 @@ export default function DataOpsPage() {
     [baseProviders, probe]
   );
   const providersLive = providers.filter((p) => p.status === "LIVE").length;
-  const runs = getProviderRuns();
-  const seriesResults = getSeriesRunResults();
+
+  // Live ingestion runs/series/lineage from the market pipeline manifest (else fixtures).
+  const live = useLiveRuns();
+  const runs = useMemo(() => (live ? mergeByProvider(getProviderRuns(), live.runs) : getProviderRuns()), [live]);
+  const seriesResults = useMemo(() => (live ? [...getSeriesRunResults(), ...live.series] : getSeriesRunResults()), [live]);
+  const lineage = useMemo(() => (live ? mergeByProvider(getLineageRuns(), live.lineage) : getLineageRuns()), [live]);
   const modules = getModuleCoverage();
   const moduleItems = getModuleDataItems();
   const issues = getDataQualityIssues();
-  const lineage = getLineageRuns();
   const summary = getDataOpsSummary();
 
   const [selectedProvider, setSelectedProvider] = useState<ProviderName>(providers[0].provider);
@@ -235,7 +245,7 @@ export default function DataOpsPage() {
           }} maxHeight="245px" initialSort={{ key: "coverage", dir: "desc" }} zebra />
         </Panel>
 
-        <Panel title={`${selectedProvider} Runs`} code="RUN" className="xl:col-span-7" right={<button className="term-btn" onClick={() => downloadJson(`dataops_${selectedProvider.toLowerCase()}_runs`, selectedProviderRuns)}>Download</button>}>
+        <Panel title={`${selectedProvider} Runs`} code="RUN" className="xl:col-span-7" right={<span className="flex items-center gap-2"><Tag tone={live ? "blue" : "neutral"}>{live ? "LIVE MANIFEST" : "FIXTURES"}</Tag><button className="term-btn" onClick={() => downloadJson(`dataops_${selectedProvider.toLowerCase()}_runs`, selectedProviderRuns)}>Download</button></span>}>
           <DataGrid columns={runCols} rows={selectedProviderRuns} rowKey={(r) => r.runId} selectedKey={selectedRun.runId} onRowClick={(r) => setSelectedRunId(r.runId)} maxHeight="330px" initialSort={{ key: "started", dir: "desc" }} zebra />
         </Panel>
 
@@ -308,7 +318,7 @@ export default function DataOpsPage() {
           </div>
         </Panel>
 
-        <Panel title="All Data Lineage Runs" code="LINEAGE" className="xl:col-span-8" right={<button className="term-btn" onClick={() => downloadJson("dataops_lineage_runs", lineage)}>Download</button>}>
+        <Panel title="All Data Lineage Runs" code="LINEAGE" className="xl:col-span-8" right={<span className="flex items-center gap-2"><Tag tone={live ? "blue" : "neutral"}>{live ? "LIVE MANIFEST" : "FIXTURES"}</Tag><button className="term-btn" onClick={() => downloadJson("dataops_lineage_runs", lineage)}>Download</button></span>}>
           <DataGrid columns={lineageCols} rows={lineage} rowKey={(r) => r.runId} selectedKey={selectedLineage.runId} onRowClick={(r) => setSelectedLineageId(r.runId)} maxHeight="390px" initialSort={{ key: "started", dir: "desc" }} zebra />
         </Panel>
 
