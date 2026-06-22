@@ -114,7 +114,10 @@ export interface LiveIndicator {
   value: number;
   prior: number;
   change: number;
+  mom: number | null;
+  qoq: number | null;
   yoy: number | null;
+  monthlyPrint: number | null;
   asOf: string;
   history: number[];
   source: "FRED" | "SIM";
