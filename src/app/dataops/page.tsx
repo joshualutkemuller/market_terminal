@@ -26,6 +26,7 @@ import {
   type ProviderStatus,
   type SeriesRunResult,
 } from "@/data/dataOps";
+import { useProviderHealth } from "@/lib/useProviderHealth";
 import { fmtInt, fmtNum, fmtPct } from "@/lib/format";
 
 const STATUS_TONE: Record<ProviderStatus, "up" | "blue" | "amber" | "down" | "neutral"> = {
@@ -97,7 +98,25 @@ function downloadCsv(name: string, rows: ModuleDataItem[]) {
 }
 
 export default function DataOpsPage() {
-  const providers = getProviderHealth();
+  const baseProviders = getProviderHealth();
+  const probe = useProviderHealth();
+  // Overlay the live probe onto the fixture baseline (status, freshness, detail).
+  const providers = useMemo(
+    () =>
+      baseProviders.map((p) => {
+        const h = probe.health?.[p.provider];
+        if (!h) return p;
+        return {
+          ...p,
+          status: h.status,
+          freshnessMin: h.live ? 0 : p.freshnessMin,
+          lastRun: probe.probedAt ? `probed ${probe.probedAt.slice(11, 19)}` : p.lastRun,
+          upgradePath: h.detail || p.upgradePath,
+        };
+      }),
+    [baseProviders, probe]
+  );
+  const providersLive = providers.filter((p) => p.status === "LIVE").length;
   const runs = getProviderRuns();
   const seriesResults = getSeriesRunResults();
   const modules = getModuleCoverage();
@@ -200,7 +219,7 @@ export default function DataOpsPage() {
       <PageHeader code="DATAOPS" title="Data Health & Lineage" desc="Provider runs, series outcomes, quality exceptions and production readiness" right={<Tag tone="blue">DRILLDOWN</Tag>} />
 
       <KpiStrip>
-        <Stat label="Live Providers" value={`${summary.providersLive}/${summary.totalProviders}`} sub="active feeds" tone="up" />
+        <Stat label="Live Providers" value={`${providersLive}/${providers.length}`} sub={probe.health ? "live-probed" : "active feeds"} tone="up" />
         <Stat label="Avg Coverage" value={fmtPct(summary.averageCoverage, 0)} sub="provider coverage" tone="amber" />
         <Stat label="Failed Series" value={fmtInt(summary.staleSeries)} sub="stale or failed" tone={summary.staleSeries ? "down" : "up"} />
         <Stat label="Quality Issues" value={fmtInt(summary.qualityIssues)} sub="high or medium" tone={summary.qualityIssues ? "down" : "up"} />
@@ -209,7 +228,7 @@ export default function DataOpsPage() {
       </KpiStrip>
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-12">
-        <Panel title="Provider Health" code="PROV" className="xl:col-span-12" right={<button className="term-btn" onClick={() => downloadJson("dataops_providers", providers)}>Download</button>}>
+        <Panel title="Provider Health" code="PROV" className="xl:col-span-12" right={<span className="flex items-center gap-2"><Tag tone={probe.health ? "blue" : "neutral"}>{probe.health && probe.probedAt ? `LIVE PROBE ${probe.probedAt.slice(11, 19)}` : "FIXTURES"}</Tag><button className="term-btn" onClick={() => downloadJson("dataops_providers", providers)}>Download</button></span>}>
           <DataGrid columns={providerCols} rows={providers} rowKey={(r) => r.provider} selectedKey={selectedProvider} onRowClick={(r) => {
             setSelectedProvider(r.provider);
             setSelectedRunId(runs.find((run) => run.provider === r.provider)?.runId ?? selectedRunId);
