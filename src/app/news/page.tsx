@@ -204,14 +204,21 @@ export default function NewsTerminal() {
 
         {/* ── NEWS-4 Market Impact ─────────────────────────────────────────── */}
         {view === "IMPACT" && (
-          <Panel title="Market Impact Dashboard" code="NEWS-4" accent right={<span className="text-3xs text-term-text-mute">historical forward returns</span>}>
+          <Panel title="Market Impact Dashboard" code="NEWS-4" accent right={<span className="text-3xs text-term-text-mute">historical model · external event-study inputs</span>}>
             <div className="flex flex-wrap gap-1 border-b border-term-border px-2 py-1.5">
               {impact.map((e, i) => (
                 <button key={e.event} onClick={() => setImpactEvent(i)} className={clsx(btn, impactEvent === i ? "border-term-amber bg-term-amber text-black" : "border-term-border bg-term-panel-2 text-term-text-mute hover:text-term-text")}>{e.event}</button>
               ))}
             </div>
-            <div className="px-3 py-2 text-2xs text-term-text-dim">
-              When <span className="font-semibold text-term-amber">{impact[impactEvent].event}</span> occurred historically ({impact[impactEvent].occurrences} episodes), assets moved:
+            <div className="space-y-1 px-3 py-2 text-2xs text-term-text-dim">
+              <div>
+                When <span className="font-semibold text-term-amber">{impact[impactEvent].event}</span> occurred historically ({impact[impactEvent].occurrences} episodes), assets moved:
+              </div>
+              <div className="grid gap-1 rounded border border-term-border bg-term-panel-2 p-2 sm:grid-cols-[1.3fr_1fr_0.8fr]">
+                <div><span className="text-term-text-mute">Gold-table inputs:</span> {impact[impactEvent].datasets.join(" + ")}</div>
+                <div><span className="text-term-text-mute">Magnitude:</span> {impact[impactEvent].magnitude}</div>
+                <div><span className="text-term-text-mute">Access:</span> {impact[impactEvent].access}</div>
+              </div>
             </div>
             <table className="w-full border-collapse tnum">
               <thead className="bg-term-panel-2">
@@ -232,7 +239,9 @@ export default function NewsTerminal() {
                 ))}
               </tbody>
             </table>
-            <div className="border-t border-term-border px-3 py-1 text-3xs text-term-text-mute">Median forward returns across similar historical episodes — research-grade, deterministic backtest shape.</div>
+            <div className="border-t border-term-border px-3 py-1 text-3xs text-term-text-mute">
+              Served in the existing getMarketImpact() shape from an analytics_event_impact-style gold table: event dates + magnitude join the price warehouse to compute median +1D/+1W/+1M forward returns, hit-rate, and n per asset. Clearly labelled historical model; not a live forecast.
+            </div>
           </Panel>
         )}
 
