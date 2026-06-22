@@ -1,6 +1,6 @@
 # Live Data Readiness Assessment
 
-Audit date: 2026-06-22. Scope: Next.js terminal, market data pipeline, macro ETL, DataOps, Market Lens Studio, news NLP, and supporting static data.
+Audit date: 2026-06-22. Scope: Vite + React terminal, market data pipeline, macro ETL, DataOps, Market Lens Studio, news NLP, and supporting static data.
 
 ## Executive verdict
 
@@ -10,6 +10,7 @@ The primary risk is **false-live perception**: global chrome says `LIVE`, DataOp
 
 ## Evidence-driven architecture facts
 
+- The app is a Vite + React SPA (`react-router-dom`), not Next.js. It borrows Next-style file conventions — `src/app/**/route.ts` handlers and `[view]` dynamic segments — but these are served at dev time by a custom Vite plugin (`vite-plugins/dev-api.ts`) that mirrors file-system routing; there is no Next runtime.
 - Navigation exposes 37 terminal routes/modules across markets, financing, optimization, economics, and intelligence. The route list is driven by `NAV`, not by provider readiness. `NAV` includes live-market labels as product language rather than proof of live connectivity.
 - DataOps has two incompatible truths: fixture functions hardcode optimistic provider health and runs, while `/api/dataops/health` probes actual environment wiring.
 - Market data has a credible four-step serving chain: DB, exported files, FastAPI, committed snapshots. This is the best live-readiness pattern in the codebase.
@@ -65,7 +66,7 @@ The primary risk is **false-live perception**: global chrome says `LIVE`, DataOp
 
 | API/service | Purpose | Upstreams | Refresh/update behavior | Readiness |
 |---|---|---|---|---|
-| `/api/market/[view]` | Serves market snapshots/views | DB, exported files, FastAPI, committed JSON | Request-time lookup; no scheduler in Next route | Best pattern; production-ready shape, source-dependent |
+| `/api/market/[view]` | Serves market snapshots/views | DB, exported files, FastAPI, committed JSON | Request-time lookup; no scheduler in route handler | Best pattern; production-ready shape, source-dependent |
 | `/api/econ/*` | FRED-backed economics series, curve, indicators, stats, calendar | FRED if key, local simulated histories otherwise | Request-time fetch/cache behavior in server FRED library | Useful but fallback transparency must be stricter |
 | `/api/dataops/health` | Actual runtime provider probe | env vars, service health URLs | Request-time probes | Good operational truth source |
 | `/api/dataops/runs` | Lineage/runs | fixture data + optional manifests | mostly fixture | Not authoritative |
@@ -241,7 +242,7 @@ Critical patterns:
 
 ## Unused/wired-but-unused infrastructure
 
-- `market_data_pipeline` includes storage, scheduler, quality, and FastAPI services; the Next app only consumes it when env vars/service are configured and otherwise uses committed JSON.
+- `market_data_pipeline` includes storage, scheduler, quality, and FastAPI services; the Vite + React app only consumes it when env vars/service are configured and otherwise uses committed JSON.
 - `macro_data_etl` includes connectors and medallion directories, but repo data directories are placeholders and frontend mainly consumes committed JSON exports.
 - `market_lens_studio` includes rich analytics APIs/orchestrator; frontend falls back to embedded snapshots when `MARKET_LENS_URL` is absent.
 - `news_nlp` can run FinBERT/lexicon services; default terminal behavior is heuristic/SIM without `NEWS_NLP_URL` or feed keys.
