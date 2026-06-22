@@ -14,6 +14,7 @@
  *   STOCKTWITS_ACCESS_TOKEN  — StockTwits token (also enables it)
  */
 import { getSocialIntel, type SocialIntel, type SocialRow } from "@/data/news";
+import { scoreText } from "@/lib/server/sentimentNlp";
 
 export interface LiveSocial {
   source: string;
@@ -38,14 +39,8 @@ const NARRATIVE_KW: Record<string, RegExp> = {
   "China Stimulus": /china|stimulus/i,
 };
 
-const BULL = /\b(moon|rocket|calls?|buy|bull|long|squeeze|rip|surge|rally|gain|beat|up|green|tendies)\b/i;
-const BEAR = /\b(puts?|sell|bear|short|crash|dump|tank|drop|loss|red|fear|plunge|down)\b/i;
-function keywordScore(text: string): number {
-  let s = 0;
-  if (BULL.test(text)) s += 0.4;
-  if (BEAR.test(text)) s -= 0.4;
-  return Math.max(-1, Math.min(1, s));
-}
+// Shared in-house heuristic scorer (finance + market-social lexicon, negation-aware).
+const keywordScore = (text: string): number => scoreText(text).score;
 
 function extractTickers(text: string): string[] {
   const out = new Set<string>();
