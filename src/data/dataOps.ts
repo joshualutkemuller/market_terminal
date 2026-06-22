@@ -2,7 +2,7 @@ import { Rng } from "@/lib/rng";
 
 /** Data health, lineage and provider-readiness console. */
 
-export type ProviderStatus = "LIVE" | "CACHED" | "SIM" | "STALE" | "ERROR";
+export type ProviderStatus = "LIVE" | "CACHED" | "SIM" | "STALE" | "ERROR" | "FALLBACK_AVAILABLE";
 export type ProviderName = "FRED" | "YAHOO" | "MACRO_ETL" | "NEWS_NLP" | "SYNTHETIC" | "LOCAL_BOOK";
 
 export interface ProviderHealth {
@@ -121,7 +121,7 @@ export function getProviderHealth(): ProviderHealth[] {
     { provider: "MACRO_ETL", status: "LIVE", coveragePct: 82, freshnessMin: 180, seriesCount: 44, failedSeries: 2, lastRun: "2026-06-18 06:30", upgradePath: "Add BIS, IMF, CME browser fetch hardening" },
     { provider: "NEWS_NLP", status: "SIM", coveragePct: 35, freshnessMin: 6, seriesCount: 12, failedSeries: 0, lastRun: "heuristic fallback", upgradePath: "Run the news_nlp FinBERT service and set NEWS_NLP_URL (else news/social providers + in-house lexicon)" },
     { provider: "LOCAL_BOOK", status: "SIM", coveragePct: 61, freshnessMin: 5, seriesCount: 38, failedSeries: 0, lastRun: "2026-06-18 09:17", upgradePath: "Connect custody, loan, margin and treasury books" },
-    { provider: "SYNTHETIC", status: "LIVE", coveragePct: 100, freshnessMin: 0, seriesCount: 220, failedSeries: 0, lastRun: "deterministic", upgradePath: "Retain as explicit fallback provider" },
+    { provider: "SYNTHETIC", status: "FALLBACK_AVAILABLE", coveragePct: 100, freshnessMin: 0, seriesCount: 220, failedSeries: 0, lastRun: "deterministic", upgradePath: "Retain as explicit fallback provider; never count as live" },
   ];
 }
 
