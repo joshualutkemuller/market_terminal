@@ -3,8 +3,9 @@
 A **Bloomberg-style operating system** for the securities finance business — unifying
 **Securities Lending, Prime Finance, Collateral Optimization, Cash Optimization,
 Cash Collateral Reinvestment, Liquidity & Funding Stress, Sources & Uses Matching,
-Treasury Analytics, Macro Regime Playbooks, DataOps/Lineage, and AI-driven decision
-support** into a single dense, keyboard-driven, multi-monitor terminal.
+Treasury & Funding Analytics, Borrow-Demand / Squeeze Radar, Macro Regime Playbooks,
+Market News, Investor Sentiment, DataOps/Lineage, and AI-driven decision support**
+into a single dense, keyboard-driven, multi-monitor terminal — **37 modules** in all.
 
 Built to look and feel like the software that runs a multi-trillion-dollar book at
 State Street, Goldman Sachs, Morgan Stanley, J.P. Morgan, BNY Mellon, Citi, UBS, or
@@ -24,7 +25,10 @@ BlackRock.
 | `SNAP` | **Market Snapshot** | Cross-asset "state of the market" served by the **`market_data_pipeline`** (FRED · Yahoo · pluggable vendors): returns/drawdown table (1D…5Y CAGR, 52w distance), Treasury curve + 2s10s/3m10y, regime scores (risk-on/off · growth · inflation · liquidity), cross-asset dashboard, best/worst YTD |
 | `QUILT` | **Asset Quilt** | Annual cross-asset return "quilt" — every asset class ranked by yearly total return, Bilello-style, with leaders/laggards and dispersion |
 | `IRET` | **Index Return Analytics** | Monthly index return matrix, calendar-year totals, and intra-year drawdowns (Yahoo-ready via the `market_data_pipeline`) |
+| `LENS` | **Market Lens Studio** | Build/compare market & cross-asset series from the lens engine (committed snapshots + FRED) |
+| `MKC`  | **Market Chart Studio** | Charting studio over market series (`/api/chart/series?source=market`) |
 | `SLAB` | **Securities Lending** | Inventory (internal / beneficial owner / prime), loan book, borrow demand, HTB & specials, revenue analytics (waterfall, Sankey, by borrower/security/asset class) |
+| `SQZ`  | **Squeeze Radar** | Borrow-demand / squeeze radar on the lending spine — composite heat score, fee×utilization quadrant (re-rate vs special), squeeze candidates, specials watch, sector heat, ALRT-ready heat-up alerts |
 | `PB`   | **Prime Finance** | Gross/net/long/short exposure, top hedge-fund clients, financing revenue & RoA, VaR / stress testing, financing optimization opportunities |
 | `COLL` | **Collateral Management** | IM/VM, excess/deficits, current vs optimized allocation, shadow prices, eligibility/concentration/haircut constraints, interactive what-if |
 | `CASH` | **Cash Optimizer** | Treasury funding sources & uses, cheapest funding path, Sankey flow, LCR/NSFR, intraday liquidity stress |
@@ -34,6 +38,9 @@ BlackRock.
 | `OPT`  | **Optimization Center** | Flagship — solver runs (Gurobi / OR-Tools / Pyomo), objective/runtime/status/duals, before-after comparison, recommended trades |
 | `DESK` | **Trading Desk** | Trader scorecards, execution analytics (slippage / VWAP / TWAP / fill rates), risk analytics, position concentration |
 | `ECON` | **Macro Dashboard** | FRED-connected economic indicators grouped by category, surprise index, breadth, live series explorer |
+| `MGC`  | **Macro Chart Studio** | Charting studio over the **104-series FRED catalog** — build/compare/transform any series (`/api/chart/series`) |
+| `MOTN` | **Macro Motion Studio** | Animated macro-series motion / racing-series visualizations over the FRED catalog |
+| `FUND` | **Funding & Liquidity** | The funding tape — overnight corridor (IORB/EFFR/OBFR/SOFR/BGCR/TGCR), liquidity balances (RRP/reserves/Fed B-S), T-bills, FX-basis, funding spreads (SOFR−EFFR, SOFR−IORB, GC−OIS, bill−OIS, FRA−OIS), and a 0–100 quarter-end **funding-stress gauge** |
 | `CURV` | **Treasury Curve Lab** | Multi-snapshot curve overlay (today vs 1M/3M/6M/1Y/2Y/pre-hiking/GFC), level/slope/curvature, point-in-time scrubber, **user-selectable spread** (10Y-2Y default + 10Y-3M, 30Y-5Y, 10Y-1Y, 5Y-2Y, 2Y-3M, 30Y-10Y), inversion → recession lead-time analysis, and term funding carry |
 | `INFL` | **Inflation Explorer** | CPI / Core CPI / PCE / Core PCE to item level — index reading, MoM %, YoY %, and ΔMoM/ΔYoY acceleration; contribution waterfall; CPI/PCE basket toggle; every item drills to 24m |
 | `GCPI` | **Global Inflation** | CPI YoY/MoM by country with trend-vs-prior, consecutive-print streaks, vs-target, heat map |
@@ -45,8 +52,10 @@ BlackRock.
 | `REGIME` | **Macro Regime Playbook** | Macro regime scoring across growth, inflation, liquidity, credit, and policy factors; playbook actions for collateral, reinvestment, lending, optimization, and funding desks |
 | `EML`  | **ML Applications** | Recession probit (AUC 0.89), inflation nowcast, rate-path BVAR+LSTM, regime HMM, feature importances, model registry |
 | `SFE`  | **Sec-Finance Economics** | Differentiator — repo complex, rate sensitivities ("greeks for the book") with a Fed-cut scenario stepper, cash-collateral reinvestment ladder, macro factor links, P&L bridge, shared scenario library, and macro→business linkage |
+| `NEWS` | **News & Signal Intel** | Market news + social + signal engine — headline tape, narrative monitor, social intelligence, market-impact, attention heatmap, event clusters, and a signal engine. Live via a provider chain (Alpha Vantage → Marketaux → Finnhub → NewsAPI) + Reddit/StockTwits social, with optional FinBERT NLP |
+| `SENT` | **Investor Sentiment** | Survey + social fear/greed & positioning — AAII bull/bear, NAAIM exposure, an explainable 0–100 Sentiment Index, contrarian signals + historical analogs, survey-vs-social divergence, and a per-ticker drill cross-linked to `SQZ`. VIX component live via FRED |
 | `AI`   | **AI Copilot** | Built-in "Bloomberg GPT" — natural-language Q&A over every dataset, with narratives, tables, charts, and recommended actions |
-| `DATAOPS` | **Data Ops** | Provider health, data lineage, SLA/quality scores, freshness monitoring, fallback status, and scaling hooks for Yahoo Finance, FRED, and future licensed feeds |
+| `DATAOPS` | **Data Ops** | Provider health, data lineage, SLA/quality scores, freshness monitoring, fallback status, and scaling hooks for FRED, Yahoo, `macro_data_etl`, `news_nlp`, and future licensed feeds |
 | `ALRT` | **Alert Center** | Streaming risk & ops alerts with severity/category filters and a rules engine |
 
 ---
@@ -57,10 +66,11 @@ The **Economics & Macro** modules are wired to **FRED** (Federal Reserve Economi
 The connection is real but **optional and resilient**:
 
 - **With a key** — set `FRED_API_KEY` in the environment. Server-side route handlers
-  (`/api/econ/series`, `/api/econ/indicators`, `/api/econ/curve`, `/api/econ/calendar`) fetch
-  live observations, all dashboard indicators (units-corrected), yield-curve tenors
-  (`DGS1MO…DGS30`), and release dates from `api.stlouisfed.org` (cached 10 min). Panels show a
-  green **LIVE · FRED** badge.
+  (`/api/econ/series`, `/api/econ/batch`, `/api/econ/indicators`, `/api/econ/curve`,
+  `/api/econ/calendar`) fetch live observations from a **104-series FRED catalog** — all
+  dashboard indicators (units-corrected), yield-curve tenors (`DGS1MO…DGS30`), the **funding
+  complex** (`IORB/EFFR/OBFR/SOFR/BGCR/TGCR/RRPONTSYD/WRESBAL/WALCL/DTB3…`), and release dates
+  from `api.stlouisfed.org` (cached 10 min). Panels show a green **LIVE · FRED** badge.
 - **Without a key** — every module renders a **deterministic, seeded simulation** anchored
   to a plausible mid-2026 macro regime. Panels show an amber **SIM** badge. No setup, no
   hydration drift, fully functional offline.
@@ -134,6 +144,10 @@ analytics/model modules are computed layers. Honest per-module status:
 | Statistical Analysis | 🟢 Live | — | up to 20y FRED history; customizable, incrementally cached, and packaged into desk studies |
 | Macro Regime Playbook | 🟡 Partial live/sim | — | FRED/Yahoo/local factor playbook; deterministic factors until pipeline-backed |
 | Sec-Finance Economics | 🟡 Partial live | 🟢 Live | SOFR/EFFR/IORB/RRP + Fed-funds backdrop live; GC/specials/sensitivities, P&L bridge, and scenario library curated |
+| Funding & Liquidity | 🟢 Live (12/16 FRED) | 🟢 Live | corridor/balances/bills live via `/api/econ/batch` (incl. WRESBAL $B→$T scaling); FX-basis & FRA-OIS are SIM pending a BIS feed; stress gauge derived |
+| Squeeze Radar | 🔴 Sim (lending spine) | — | utilization/fee from the lending book + synthesized SI/DTC/fee-momentum/skew; needs a securities-finance / short-interest vendor feed |
+| News & Signal Intel | 🟡 Provider chain | — | tape/narratives/attention recompute from live headlines (Alpha Vantage→Marketaux→Finnhub→NewsAPI); optional FinBERT via `news_nlp` |
+| Investor Sentiment | 🟡 Partial live | — | VIX live (FRED `VIXCLS`); social chain wired; AAII/NAAIM survey ingest needed |
 | Cash Collateral Reinvestment | 🟡 Partial live/sim | — | FRED/Yahoo-ready local model for SOFR/EFFR/Fed-path-driven reinvestment scenarios |
 | Liquidity & Funding Stress | 🔴 Sim / local model | — | stress ladder and signal console designed for FRED/Yahoo/local-book inputs |
 | Global Policy Rates | 🟡 Partial live | 🟡 Live (most) | FRED OECD/ECB central-bank-rate series where available |
@@ -173,6 +187,14 @@ These additions are intentionally adapter-ready: they run locally with determini
 fixtures today, can use free **FRED** and **Yahoo Finance/yfinance** style inputs, and
 can later scale to licensed feeds, internal books, optimizer outputs, and the
 `market_data_pipeline` quality/lineage tables without changing the terminal UX.
+
+**Since then** the terminal has grown to **37 modules**, adding the charting studios
+(`MGC`/`MOTN`/`LENS`/`MKC`), **Funding & Liquidity (`FUND`)** and **Squeeze Radar
+(`SQZ`)**, and the **News (`NEWS`)** + **Investor Sentiment (`SENT`)** intelligence
+layer — backed by an expanded **104-series FRED catalog**, a news provider chain
+(Alpha Vantage / Marketaux / Finnhub / NewsAPI), Reddit/StockTwits social, and the
+**`news_nlp`** FinBERT NLP stage. See `docs/PLATFORM_DATA_CONNECTIVITY.md` for the
+full live-vs-simulated map.
 
 ---
 
@@ -305,6 +327,52 @@ schema (incl. the `analytics_api_views` serving table), the endpoint list, and
 
 ---
 
+## News, social & NLP (`NEWS` · `SENT`)
+
+The **News & Signal Intelligence** and **Investor Sentiment** modules render from a
+deterministic engine and upgrade to live feeds — same provenance-first contract as
+the rest of the terminal.
+
+**Headlines** — `/api/news` tries a **provider chain** and returns the first that
+yields data, else SIM. Set any one key:
+
+```bash
+ALPHAVANTAGE_API_KEY=…   # Alpha Vantage NEWS_SENTIMENT (sentiment + tickers) — primary
+MARKETAUX_API_KEY=…      # Marketaux /news/all (entity sentiment)
+FINNHUB_API_KEY=…        # Finnhub /news
+NEWSAPI_API_KEY=…        # NewsAPI.org /top-headlines
+```
+
+With a key the **headline tape, narrative monitor, attention heatmap, and header
+KPIs recompute from the live tape**; the badge shows the provider name.
+
+**Social** — `/api/social` aggregates Reddit + StockTwits into the social view
+(NEWS-3) and feeds SENT:
+
+```bash
+REDDIT_USER_AGENT="your-app/1.0"   # enables Reddit (Reddit mandates a UA)
+STOCKTWITS_ENABLED=1               # or STOCKTWITS_ACCESS_TOKEN=…
+```
+
+**NLP layering (sentiment).** Resolved best → fallback, each flipping the badge:
+**provider-native** (Alpha Vantage / Marketaux) → **FinBERT** (the `news_nlp`
+service via `NEWS_NLP_URL`) → **in-house heuristic** (a negation-aware finance
+lexicon, `src/lib/server/sentimentNlp.ts`) → **SIM**.
+
+```bash
+# scaffolded Python stage — FinBERT sentiment + spaCy NER + event clustering
+cd news_nlp && pip install -e ".[nlp]" && python -m spacy download en_core_web_sm
+news-nlp serve --port 8088          # POST /score · GET /headlines · /health
+NEWS_NLP_URL=http://localhost:8088 npm run dev   # → /api/news re-scores with FinBERT
+```
+
+The `news_nlp` package installs/imports on a lexicon fallback without the model
+stack and surfaces in **DATAOPS** under the `NEWS_NLP` provider. See
+`news_nlp/README.md` and `docs/PLATFORM_DATA_CONNECTIVITY.md` for the full
+data-connectivity map across all 37 modules.
+
+---
+
 ## Keyboard workflow
 
 | Shortcut | Action |
@@ -319,11 +387,13 @@ schema (incl. the `analytics_api_views` serving table), the endpoint list, and
 ## Tech stack
 
 **This build** is fully client-rendered Next.js over **deterministic, seeded data
-generators**, so all 29 modules run with **zero configuration** — no database, no required
+generators**, so all 37 modules run with **zero configuration** — no database, no required
 keys — and stay reproducible across server/client renders. Optional live integrations include
-FRED for economics, the committed/exported `macro_data_etl` FedWatch snapshot, and the
-pluggable FRED/Yahoo-backed `market_data_pipeline`, each degrading gracefully to local
-snapshots or simulation when no key/service is present.
+FRED for economics (104-series catalog), the committed/exported `macro_data_etl` FedWatch
+snapshot, the pluggable FRED/Yahoo-backed `market_data_pipeline`, a news provider chain
+(Alpha Vantage / Marketaux / Finnhub / NewsAPI) + Reddit/StockTwits social, and the `news_nlp`
+FinBERT stage — each degrading gracefully to local snapshots or simulation when no
+key/service is present.
 
 - **Next.js 14 (App Router) · React 18 · TypeScript (strict) · Tailwind CSS**
 - **Zero-dependency SVG chart library** (sparklines, line/area, bars, candlesticks + VWAP,
@@ -344,9 +414,9 @@ snapshots or simulation when no key/service is present.
 ## Run locally
 
 The terminal is a standard Next.js app — **zero config, no database, no keys**.
-All 29 modules (including Rate Probabilities, which renders the committed ETL
-FedWatch snapshot, and the roadmap modules backed by deterministic local fixtures)
-work fully offline.
+All 37 modules (including Rate Probabilities, which renders the committed ETL
+FedWatch snapshot, and the news/sentiment modules backed by deterministic local
+fixtures) work fully offline.
 
 ```bash
 npm install                 # first time only
@@ -408,26 +478,35 @@ env var is optional — without it the econ modules use simulation):
 ```
 src/
 ├── app/                     # one route per module
-│   ├── (HOME, markets, securities-lending, prime-finance, collateral, cash-optimizer,
-│   │    reinvestment, liquidity, sources-uses, optimization, trading-desk,
-│   │    market-snapshot, dataops, copilot, alerts)
+│   ├── (HOME, markets, securities-lending [+ /squeeze], prime-finance, collateral,
+│   │    cash-optimizer, reinvestment, liquidity, sources-uses, optimization, trading-desk,
+│   │    market-snapshot, market-lens, market-chart, macro-chart, news, sentiment,
+│   │    dataops, copilot, alerts)
 │   ├── economics/           # ECON + curve, inflation, global-cpi, policy-rates, credit,
-│   │                         #   rates, calendar, stats, regime, ml, sec-finance (+ shared drill layout)
-│   └── api/                 # FRED econ handlers + market pipeline proxy routes
-│       ├── econ/            # series, indicators, curve, calendar, batch
-│       └── market/[view]/   # committed snapshot or live FastAPI market-data view
+│   │                         #   rates, calendar, stats, regime, ml, sec-finance, funding, motion
+│   └── api/                 # FRED econ handlers, market pipeline proxy, news + social feeds
+│       ├── econ/            # series, batch, indicators, curve, calendar, stats, inversions
+│       ├── market/[view]/   # committed snapshot or live FastAPI market-data view
+│       ├── chart/series/    # unified econ/market chart resolver
+│       ├── news/            # provider-chain headlines (+ optional FinBERT enrichment)
+│       └── social/          # Reddit + StockTwits aggregate
 ├── components/
 │   ├── shell/               # command bar, sidebar, status bar, ticker, command palette
-│   ├── ui/                  # Panel, Stat, Tag, DataGrid, PageHeader, KpiStrip
+│   ├── ui/                  # Panel, Stat, Tag, DataGrid, PageHeader, KpiStrip, ProvenanceBadge
 │   ├── econ/               # SourceBadge (LIVE/SIM provenance)
 │   └── charts/              # SVG chart library (Sparkline, LineChart, CandleChart, Treemap,
 │                            #   Sankey, NetworkGraph, Waterfall, Matrix, Radial, YieldCurve, ScatterPlot)
 ├── data/                    # deterministic domain generators (universe, markets, securitiesLending,
-│                            #   primeFinance, collateral, cash, sourcesUses, optimization, trading,
-│                            #   alerts, econSeries, econCurve, econRates, econModels, inflation,
-│                            #   globalMacro, creditSpreads, reinvestment, liquidity, macroRegime,
+│                            #   squeeze, primeFinance, collateral, cash, sourcesUses, optimization,
+│                            #   trading, alerts, econSeries [104-series FRED catalog], econCurve,
+│                            #   econRates, econModels, inflation, globalMacro, creditSpreads,
+│                            #   reinvestment, liquidity, macroRegime, funding, news, sentiment,
 │                            #   dataOps, econEnhancements)
-└── lib/                     # rng (seeded), format, hooks, nav, useEcon, server/fred.ts
+└── lib/                     # rng (seeded), format, hooks, nav, useEcon, useNews, useSocial,
+                             #   server/fred.ts, server/newsProviders.ts, server/socialProviders.ts,
+                             #   server/sentimentNlp.ts (heuristic + FinBERT enrichment)
+
+news_nlp/                    # Python FinBERT NLP stage (sentiment · NER · event clustering)
 ```
 
 ---
