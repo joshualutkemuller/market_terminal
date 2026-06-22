@@ -1,0 +1,46 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { fetchJson, peekFresh } from "@/lib/fetchCache";
+import { getHeadlines, type Headline } from "@/data/news";
+
+interface NewsResponse {
+  source: string;
+  headlines: Headline[];
+}
+
+/**
+ * Live news headlines with provenance, mirroring useEcon's pattern: render the
+ * deterministic SIM set instantly, seed from cache on re-navigation, then
+ * upgrade to the provider-chain response from /api/news. `source` is the live
+ * provider name (e.g. "Alpha Vantage") or "SIM".
+ */
+export function useNews(n = 60): { headlines: Headline[]; source: string } {
+  const url = `/api/news?n=${n}`;
+  const cached = peekFresh<NewsResponse>(url);
+  const [headlines, setHeadlines] = useState<Headline[]>(cached?.headlines ?? getHeadlines(n));
+  const [source, setSource] = useState<string>(cached?.source ?? "SIM");
+
+  useEffect(() => {
+    let alive = true;
+    const seed = peekFresh<NewsResponse>(url);
+    if (seed?.headlines?.length) {
+      setHeadlines(seed.headlines);
+      setSource(seed.source);
+    }
+    fetchJson<NewsResponse>(url)
+      .then((j) => {
+        if (!alive || !j?.headlines?.length) return;
+        setHeadlines(j.headlines);
+        setSource(j.source ?? "SIM");
+      })
+      .catch(() => {
+        /* keep SIM fallback */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+
+  return { headlines, source };
+}

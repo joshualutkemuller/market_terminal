@@ -6,15 +6,15 @@ import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { fmtAbbr, fmtSigned, pnlClass } from "@/lib/format";
+import { useNews } from "@/lib/useNews";
+import { useSocial } from "@/lib/useSocial";
 import {
-  getHeadlines,
-  getNarratives,
-  getSocialIntel,
   getMarketImpact,
-  getAttentionHeatmap,
   getEventClusters,
   getSignals,
-  getNewsSummary,
+  narrativesFromHeadlines,
+  attentionFromHeadlines,
+  summarizeHeadlines,
   ASSET_CLASSES,
   type AssetClass,
 } from "@/data/news";
@@ -56,12 +56,12 @@ export default function NewsTerminal() {
   const [acFilter, setAcFilter] = useState<AssetClass | "ALL">("ALL");
   const [impactEvent, setImpactEvent] = useState(0);
 
-  const summary = useMemo(() => getNewsSummary(), []);
-  const headlines = useMemo(() => getHeadlines(60), []);
-  const narratives = useMemo(() => getNarratives(), []);
-  const social = useMemo(() => getSocialIntel(), []);
+  const { headlines, source: newsSource } = useNews(60);
+  const { intel: social, source: socialSource } = useSocial();
+  const narratives = useMemo(() => narrativesFromHeadlines(headlines), [headlines]);
+  const attention = useMemo(() => attentionFromHeadlines(headlines), [headlines]);
+  const summary = useMemo(() => summarizeHeadlines(headlines, narratives, attention), [headlines, narratives, attention]);
   const impact = useMemo(() => getMarketImpact(), []);
-  const attention = useMemo(() => getAttentionHeatmap(), []);
   const events = useMemo(() => getEventClusters(), []);
   const signals = useMemo(() => getSignals(), []);
 
@@ -75,7 +75,7 @@ export default function NewsTerminal() {
         code="NEWS"
         title="Market News & Signal Intelligence"
         desc="Signal extraction · narratives · social · impact"
-        right={<ProvenanceBadge source="SIM" />}
+        right={<ProvenanceBadge source={newsSource} />}
       />
 
       <KpiStrip>
@@ -165,6 +165,11 @@ export default function NewsTerminal() {
         {/* ── NEWS-3 Social Intelligence ───────────────────────────────────── */}
         {view === "SOCIAL" && (
           <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-3xs text-term-text-mute">
+              <span>Source</span>
+              <ProvenanceBadge source={socialSource} />
+              <span>· Reddit + StockTwits when configured, else simulated.</span>
+            </div>
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
               {([["Trending Tickers", social.tickers], ["Sectors", social.sectors], ["Themes", social.themes]] as const).map(([title, rows]) => (
                 <Panel key={title} title={title} code="SOCIAL">

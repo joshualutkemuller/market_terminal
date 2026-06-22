@@ -190,6 +190,44 @@ export function getNarratives(): NarrativeRow[] {
   }).sort((a, b) => b.velocity - a.velocity);
 }
 
+// Keyword matchers so narratives can be tallied from real headline text.
+const NARRATIVE_KW: Record<string, RegExp> = {
+  "AI Capex Boom": /\bAI\b|capex|megacap|chip|semi|data ?cent/i,
+  "Soft Landing": /soft.?landing|payrolls beat|retail sales cool|easing|resilien/i,
+  "Inflation Reacceleration": /inflation|reaccelerat|overheat|\bCPI\b|prices?/i,
+  "Fed Cuts": /\bfed\b|rate cut|cuts|dovish|patience|fomc/i,
+  "Regional Bank Stress": /regional.?bank|bank jitters|deposit|\bbank\b/i,
+  "Treasury Supply Glut": /auction tail|term premium|supply concern|treasury yields|issuance/i,
+  "Energy Shock": /crude|\boil\b|opec|nat gas|energy|supply.?disruption/i,
+  "China Stimulus": /china|stimulus|copper/i,
+  "Recession Risk": /recession|contracts?|jobless claims|slowdown|cooling/i,
+  "Credit Stress": /credit|spreads? widen|default|high.?yield|stress|jitters/i,
+  "Dollar Strength": /dollar|\bdxy\b|\byen\b|euro|sterling|currenc/i,
+  "Earnings Resilience": /earnings|guidance|margin|record high|target|beat/i,
+};
+
+/** Recompute the narrative monitor from a (possibly live) headline set. */
+export function narrativesFromHeadlines(heads: Headline[]): NarrativeRow[] {
+  const base = new Map(getNarratives().map((r) => [r.name, r]));
+  const total = Math.max(1, heads.length);
+  return NARRATIVES.map((name) => {
+    const kw = NARRATIVE_KW[name];
+    const matched = kw ? heads.filter((h) => kw.test(h.headline)) : [];
+    const b = base.get(name)!;
+    if (!matched.length) return b;
+    const sent = matched.reduce((a, h) => a + h.sentimentScore, 0) / matched.length;
+    return {
+      name,
+      mentions: matched.length,
+      chg7d: b.chg7d, // momentum needs history → engine estimate
+      chg30d: b.chg30d,
+      sentiment: Number(sent.toFixed(2)),
+      velocity: Math.round(Math.min(99, (matched.length / total) * 300)),
+      breadth: new Set(matched.map((h) => h.assetClass)).size,
+    };
+  }).sort((a, b) => b.mentions - a.mentions || b.velocity - a.velocity);
+}
+
 // ── NEWS-3 · Social Intelligence ────────────────────────────────────────────
 
 export interface SocialRow {
@@ -305,6 +343,31 @@ export function getAttentionHeatmap(): AttentionHeatmap {
   };
 }
 
+/** Recompute the attention heatmap's ticker dimension from live headline mentions. */
+export function attentionFromHeadlines(heads: Headline[]): AttentionHeatmap {
+  const counts = new Map<string, { n: number; s: number }>();
+  for (const h of heads) {
+    for (const t of h.tickers) {
+      const e = counts.get(t) ?? { n: 0, s: 0 };
+      e.n += 1;
+      e.s += h.sentimentScore;
+      counts.set(t, e);
+    }
+  }
+  const maxN = Math.max(1, ...[...counts.values()].map((e) => e.n));
+  const liveTickers: AttentionRow[] = [...counts.entries()]
+    .map(([label, e]) => ({ label, score: Math.round(Math.min(100, (e.n / maxN) * 100)), chg: 0, sentiment: Number((e.s / e.n).toFixed(2)) }))
+    .sort((a, b) => b.score - a.score);
+  const seeded = getAttentionHeatmap();
+  // Headlines reliably carry tickers; other dimensions stay on the engine.
+  return {
+    tickers: liveTickers.length >= 3 ? liveTickers : seeded.tickers,
+    sectors: seeded.sectors,
+    countries: seeded.countries,
+    commodities: seeded.commodities,
+  };
+}
+
 // ── NEWS-6 · Event Intelligence (clusters) ──────────────────────────────────
 
 export interface EventCluster {
@@ -413,6 +476,24 @@ export interface NewsSummary {
   activeSignals: number;
   riskTone: Direction;
   attentionLeader: string;
+}
+
+/** Recompute the header summary from a (possibly live) headline set. */
+export function summarizeHeadlines(heads: Headline[], narrOverride?: NarrativeRow[], attnOverride?: AttentionHeatmap): NewsSummary {
+  const narr = narrOverride ?? getNarratives();
+  const sigs = getSignals();
+  const attn = attnOverride ?? getAttentionHeatmap();
+  const avg = heads.length ? heads.reduce((a, h) => a + h.sentimentScore, 0) / heads.length : 0;
+  const riskOff = sigs.filter((s) => s.direction === "RISK-OFF").length;
+  const riskOn = sigs.filter((s) => s.direction === "RISK-ON").length;
+  return {
+    headlines24h: heads.length,
+    avgSentiment: Number(avg.toFixed(2)),
+    topNarrative: narr[0]?.name ?? "—",
+    activeSignals: sigs.length,
+    riskTone: riskOff > riskOn ? "RISK-OFF" : riskOn > riskOff ? "RISK-ON" : "NEUTRAL",
+    attentionLeader: attn.tickers[0]?.label ?? "—",
+  };
 }
 
 export function getNewsSummary(): NewsSummary {
