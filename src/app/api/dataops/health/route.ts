@@ -5,7 +5,7 @@ import { configuredSocialProviders } from "@/lib/server/socialProviders";
 
 export const dynamic = "force-dynamic";
 
-type Status = "LIVE" | "CACHED" | "SIM" | "STALE" | "ERROR";
+type Status = "LIVE" | "CACHED" | "SIM" | "STALE" | "ERROR" | "FALLBACK_AVAILABLE";
 interface ProviderProbe {
   status: Status;
   detail: string;
@@ -80,7 +80,7 @@ export async function GET() {
   providers.LOCAL_BOOK = { status: "SIM", detail: "internal books not connected", live: false };
 
   // Deterministic fallback — always available.
-  providers.SYNTHETIC = { status: "LIVE", detail: "deterministic fallback (always available)", live: true };
+  providers.SYNTHETIC = { status: "FALLBACK_AVAILABLE", detail: "deterministic fallback available; not a live upstream", live: false };
 
   return NextResponse.json({ probedAt: new Date().toISOString(), providers });
 }

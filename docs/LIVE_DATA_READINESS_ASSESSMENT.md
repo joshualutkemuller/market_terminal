@@ -284,8 +284,10 @@ MKT, SNAP, QUILT, IRET, ECON, CURV, STAT, and chart studios are ready for limite
 
 ### Phase 1: Governance truth and visible provenance (Days 1-30)
 
+Phase 1 execution has started in this branch. The operational flow and setup checklist now live in [Data Pipeline Overview](./DATA_PIPELINE_OVERVIEW.md).
+
 - Replace DataOps fixture health/runs/lineage with real manifests from market pipeline, macro ETL, FRED API cache, news NLP, and provider probes.
-- Change synthetic provider status from `LIVE` to `FALLBACK_AVAILABLE` everywhere.
+- Change synthetic provider status from `LIVE` to `FALLBACK_AVAILABLE` everywhere. **Started:** the DataOps fixture provider and runtime health probe now report deterministic synthetic data as fallback-available, not live.
 - Add module-level and row-level provenance contract: source, provider, observation date, processing timestamp, cache timestamp, fallback reason, and simulation flag.
 - Add UI watermarks for simulated internal-book modules.
 - Add tests that fail when a page renders operational terms without a provenance badge.

@@ -36,6 +36,7 @@ const STATUS_TONE: Record<ProviderStatus, "up" | "blue" | "amber" | "down" | "ne
   SIM: "amber",
   STALE: "neutral",
   ERROR: "down",
+  FALLBACK_AVAILABLE: "neutral",
 };
 
 const ISSUE_TONE: Record<DataQualityIssue["severity"], "down" | "amber" | "neutral"> = {
