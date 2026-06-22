@@ -7,6 +7,7 @@ import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { LineChart } from "@/components/charts/LineChart";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import { fmtSigned, pnlClass } from "@/lib/format";
 import {
   getSentimentIndex,
@@ -19,11 +20,14 @@ import {
   getContrarianSignals,
   getAnalogStudy,
   getSurveySocialDivergence,
+  getTickerSentiment,
   type SentRegime,
   type SentSource,
+  type SentLiveInputs,
+  type Crowding,
 } from "@/data/sentiment";
 
-type View = "DASH" | "AAII" | "SOCIAL" | "POSITION" | "SIGNALS" | "DIVERGE";
+type View = "DASH" | "AAII" | "SOCIAL" | "POSITION" | "SIGNALS" | "DIVERGE" | "TICKER";
 const VIEWS: { key: View; label: string }[] = [
   { key: "DASH", label: "Fear / Greed" },
   { key: "AAII", label: "AAII Survey" },
@@ -31,9 +35,13 @@ const VIEWS: { key: View; label: string }[] = [
   { key: "POSITION", label: "Positioning" },
   { key: "SIGNALS", label: "Contrarian" },
   { key: "DIVERGE", label: "Divergence" },
+  { key: "TICKER", label: "By Ticker" },
 ];
 
 const DIR_TONE = { BULLISH: "up", BEARISH: "down", NEUTRAL: "neutral" } as const;
+const CROWD_TONE: Record<Crowding, "up" | "down" | "amber" | "neutral" | "blue" | "violet"> = {
+  "Squeeze Risk": "down", "Crowded Long": "amber", "Crowded Short": "blue", Balanced: "neutral",
+};
 
 function regimeColor(score: number): string {
   return score < 20 ? "#FF3B3B" : score < 40 ? "#FF6B3B" : score < 60 ? "#FF8C00" : score < 80 ? "#7FCA5B" : "#2ECC71";
@@ -84,22 +92,41 @@ const padTextR = (cx: number, r: number) => cx + r;
 
 export default function SentimentModule() {
   const [view, setView] = useState<View>("DASH");
-  const idx = useMemo(() => getSentimentIndex(), []);
-  const summary = useMemo(() => getSentimentSummary(), []);
+
+  // VIX (the index's volatility component) is live-capable via FRED VIXCLS —
+  // fetched through the existing /api/econ/batch path and turned into a
+  // greed score (low vol percentile = complacency = greed).
+  const { data: vixData } = useLiveSeriesSet(["VIXCLS"], "lin", 252);
+  const live = useMemo<SentLiveInputs | undefined>(() => {
+    const v = vixData["VIXCLS"];
+    if (v && v.source === "FRED" && v.observations.length > 20) {
+      const vals = v.observations.map((o) => o.value);
+      const latest = vals[vals.length - 1];
+      const pctile = vals.filter((x) => x <= latest).length / vals.length; // 0..1
+      const score = Math.round(Math.max(0, Math.min(100, (1 - pctile) * 100)));
+      return { vix: { score, detail: `VIX ${latest.toFixed(1)} · ${Math.round(pctile * 100)}th pctile` } };
+    }
+    return undefined;
+  }, [vixData]);
+  const vixLive = !!live;
+
+  const idx = useMemo(() => getSentimentIndex(live), [live]);
+  const summary = useMemo(() => getSentimentSummary(live), [live]);
+  const signals = useMemo(() => getContrarianSignals(live), [live]);
   const aaii = useMemo(() => getAaiiHistory(), []);
   const aaiiSnap = useMemo(() => getAaiiSnapshot(), []);
   const naaim = useMemo(() => getNaaimHistory(), []);
   const social = useMemo(() => getSocialIntel(), []);
   const behav = useMemo(() => getBehavior(), []);
-  const signals = useMemo(() => getContrarianSignals(), []);
   const analog = useMemo(() => getAnalogStudy(), []);
   const diverge = useMemo(() => getSurveySocialDivergence(), []);
+  const tickers = useMemo(() => getTickerSentiment(), []);
   const btn = "rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide transition-colors";
   const recent = aaii.slice(-10).reverse();
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="SENT" title="Investor Sentiment & Behavior" desc="Survey + social fear/greed & positioning" right={<ProvenanceBadge source="SIM" />} />
+      <PageHeader code="SENT" title="Investor Sentiment & Behavior" desc="Survey + social fear/greed & positioning" right={<ProvenanceBadge source={vixLive ? "FRED" : "SIM"} />} />
 
       <KpiStrip>
         <Stat label="Sentiment Index" value={`${summary.index}`} sub={summary.regime} tone={regimeTone(summary.regime)} />
@@ -383,10 +410,47 @@ export default function SentimentModule() {
             <div className="border-t border-term-border px-3 py-1 text-3xs text-term-text-mute">When real-time social mood decouples from the weekly survey, one cohort typically converges to the other — an early-warning of a chase or a capitulation.</div>
           </Panel>
         )}
+        {/* ── SENT-7 Ticker Sentiment Drill (× SQZ) ── */}
+        {view === "TICKER" && (
+          <Panel title="Ticker Sentiment × Borrow (SQZ cross-link)" code="SENT-7" accent right={<span className="text-3xs text-term-text-mute">crowding = social mood × short interest</span>}>
+            <div className="max-h-[68vh] overflow-auto">
+              <table className="w-full border-collapse tnum">
+                <thead className="sticky top-0 bg-term-panel-2">
+                  <tr>
+                    {["Ticker", "Sector", "Social", "Mentions", "Vel", "SI %", "Util", "Fee", "P/C", "Heat", "Crowding"].map((c, i) => (
+                      <th key={c} className={clsx("border-b border-term-border px-2 py-1 text-3xs font-semibold uppercase tracking-wider text-term-text-mute", i === 0 || i === 1 || i === 10 ? "text-left" : "text-right")}>{c}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tickers.map((t) => (
+                    <tr key={t.ticker} className="border-b border-term-border-soft hover:bg-term-panel-2" title={t.note}>
+                      <td className="px-2 py-1 text-left text-2xs font-semibold text-term-amber">{t.ticker}</td>
+                      <td className="px-2 py-1 text-left text-3xs text-term-text-mute">{t.sector}</td>
+                      <td className={clsx("px-2 py-1 text-right text-2xs font-semibold", pnlClass(t.socialSentiment))}>{fmtSigned(t.socialSentiment, 2)}</td>
+                      <td className="px-2 py-1 text-right text-2xs text-term-text-dim">{t.mentions.toLocaleString()}</td>
+                      <td className={clsx("px-2 py-1 text-right text-3xs", pnlClass(t.velocity))}>{fmtSigned(t.velocity, 0)}%</td>
+                      <td className="px-2 py-1 text-right text-2xs text-term-text">{t.shortInterestPct}</td>
+                      <td className="px-2 py-1 text-right text-2xs text-term-text-dim">{t.utilization}%</td>
+                      <td className="px-2 py-1 text-right text-2xs text-term-text-dim">{t.feeBps}</td>
+                      <td className="px-2 py-1 text-right text-3xs text-term-text-mute">{t.putCall}</td>
+                      <td className="px-2 py-1 text-right text-2xs text-term-text">{t.heat}</td>
+                      <td className="px-2 py-1 text-left"><Tag tone={CROWD_TONE[t.crowding]}>{t.crowding}</Tag></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t border-term-border px-3 py-1.5 text-3xs text-term-text-mute">
+              Combines SENT social mood with SQZ borrow microstructure — a crowded long that is also heavily shorted (<span className="text-term-down">Squeeze Risk</span>) is loaded on both sides.
+            </div>
+          </Panel>
+        )}
       </div>
 
       <div className="border-t border-term-border bg-term-panel px-3 py-1.5 text-3xs text-term-text-mute">
         <span className="text-term-amber">SENT</span> — investor sentiment & behavior: AAII survey + NAAIM positioning + X/Reddit/StockTwits mood, distilled into an explainable fear/greed index.
+        {vixLive ? " VIX component live via FRED." : ""}
         {" "}Phase 1 is deterministic (SIM); survey/social components upgrade to live feeds (AAII/NAAIM CSV, the NEWS social layer) without UI change.
       </div>
     </div>

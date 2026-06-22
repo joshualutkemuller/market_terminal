@@ -11,6 +11,7 @@
  */
 import { Rng } from "@/lib/rng";
 import { getSocialIntel } from "./news";
+import { getSqueezeBoard } from "./squeeze";
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
 
@@ -127,6 +128,11 @@ export interface SentimentIndex {
   readThrough: string;
 }
 
+/** Live overrides supplied by the page (e.g. VIX from the FRED econ layer). */
+export interface SentLiveInputs {
+  vix?: { score: number; detail: string };
+}
+
 function regimeOf(score: number): SentRegime {
   return score < 20 ? "Extreme Fear" : score < 40 ? "Fear" : score < 60 ? "Neutral" : score < 80 ? "Greed" : "Extreme Greed";
 }
@@ -136,7 +142,7 @@ const spreadToScore = (s: number) => clamp(((s + 25) / 50) * 100);
 /** Net social sentiment (-1..1) to 0-100. */
 const netToScore = (s: number) => clamp(((s + 0.6) / 1.2) * 100);
 
-function buildIndex(forWeeksAgo = 0): { score: number; components: SentComponent[] } {
+function buildIndex(forWeeksAgo = 0, live?: SentLiveInputs): { score: number; components: SentComponent[] } {
   const aaii = getAaiiHistory();
   const naaim = getNaaimHistory();
   const a = aaii[aaii.length - 1 - forWeeksAgo];
@@ -148,7 +154,9 @@ function buildIndex(forWeeksAgo = 0): { score: number; components: SentComponent
   // market-based inputs (seeded; upgrade to live market/FRED layer later)
   const rng = new Rng(`sent-mkt-${forWeeksAgo}`);
   const putCallScore = clamp(rng.normal(58, 12)); // inverted p/c → greed
-  const vixScore = clamp(rng.normal(62, 12)); // low vol percentile → greed
+  // VIX is live-capable via FRED (VIXCLS); use the live percentile when supplied.
+  const vix = forWeeksAgo === 0 ? live?.vix : undefined;
+  const vixScore = vix ? vix.score : clamp(rng.normal(62, 12));
   const breadthScore = clamp(rng.normal(60, 14));
   const havenScore = clamp(rng.normal(55, 12));
 
@@ -158,7 +166,7 @@ function buildIndex(forWeeksAgo = 0): { score: number; components: SentComponent
     { label: "Social net sentiment", score: Math.round(netToScore(netSocial)), weight: 0.2, detail: `${netSocial >= 0 ? "+" : ""}${netSocial.toFixed(2)}`, source: "SOCIAL", live: true },
     { label: "Social velocity", score: Math.round(clamp(50 + avgVel * 0.4)), weight: 0.1, detail: `${avgVel >= 0 ? "+" : ""}${avgVel.toFixed(0)}% mentions`, source: "SOCIAL", live: true },
     { label: "Put/Call (inv)", score: Math.round(putCallScore), weight: 0.1, detail: "options demand", source: "MARKET", live: false },
-    { label: "Volatility (inv)", score: Math.round(vixScore), weight: 0.1, detail: "VIX percentile", source: "FRED", live: true },
+    { label: "Volatility (inv)", score: Math.round(vixScore), weight: 0.1, detail: vix ? vix.detail : "VIX percentile", source: "FRED", live: !!vix },
     { label: "Breadth / momentum", score: Math.round(breadthScore), weight: 0.1, detail: "advancers", source: "MARKET", live: false },
     { label: "Safe-haven demand", score: Math.round(havenScore), weight: 0.05, detail: "risk appetite", source: "MARKET", live: false },
   ];
@@ -166,8 +174,8 @@ function buildIndex(forWeeksAgo = 0): { score: number; components: SentComponent
   return { score, components };
 }
 
-export function getSentimentIndex(): SentimentIndex {
-  const now = buildIndex(0);
+export function getSentimentIndex(live?: SentLiveInputs): SentimentIndex {
+  const now = buildIndex(0, live);
   const wk = buildIndex(1);
   const regime = regimeOf(now.score);
   const readThrough =
@@ -195,8 +203,8 @@ export interface SentimentSummary {
   socialNet: number;
   topTicker: string;
 }
-export function getSentimentSummary(): SentimentSummary {
-  const idx = getSentimentIndex();
+export function getSentimentSummary(live?: SentLiveInputs): SentimentSummary {
+  const idx = getSentimentIndex(live);
   const aaii = getAaiiSnapshot();
   const naaim = getNaaimHistory();
   const social = getSocialIntel();
@@ -282,8 +290,8 @@ export interface ContrarianSignal {
   source: SentSource;
 }
 
-export function getContrarianSignals(): ContrarianSignal[] {
-  const idx = getSentimentIndex();
+export function getContrarianSignals(live?: SentLiveInputs): ContrarianSignal[] {
+  const idx = getSentimentIndex(live);
   const aaii = getAaiiSnapshot();
   const behav = getBehavior();
   const social = getSocialIntel();
@@ -404,6 +412,79 @@ export function getSurveySocialDivergence(): DivergenceState {
       : "Social and survey sentiment are aligned — consistent read across cohorts.";
   const tone = status === "DIVERGENT" ? "down" : status === "ALIGNED" ? "up" : "amber";
   return { series, gapNow: last.gap, status, note, tone };
+}
+
+// ── SENT-7 · Ticker Sentiment Drill (cross-linked to SQZ) ────────────────────
+
+export type Crowding = "Squeeze Risk" | "Crowded Long" | "Crowded Short" | "Balanced";
+
+export interface TickerSentiment {
+  ticker: string;
+  sector: string;
+  classification: string;
+  socialSentiment: number; // -1..1
+  mentions: number;
+  velocity: number; // %
+  shortInterestPct: number;
+  utilization: number;
+  feeBps: number;
+  putCall: number;
+  skew: number;
+  heat: number;
+  crowding: Crowding;
+  note: string;
+}
+
+/**
+ * Joins the SQZ borrow board (short interest, utilization, fee, options) with
+ * social mood per name to flag crowding — crowded longs that are also heavily
+ * shorted are squeeze/unwind risk. Anchored on the squeeze board so the SQZ
+ * cross-link data is always present; social is matched in or synthesized.
+ */
+export function getTickerSentiment(limit = 16): TickerSentiment[] {
+  const board = getSqueezeBoard();
+  const social = getSocialIntel();
+  const socialByTicker = new Map(social.tickers.map((t) => [t.label, t]));
+
+  return board.slice(0, limit).map((r) => {
+    const s = socialByTicker.get(r.ticker);
+    const rng = new Rng(`sent-tk-${r.ticker}`);
+    const socialSentiment = s ? s.sentiment : Number(rng.normal(0.05, 0.4).toFixed(2));
+    const mentions = s ? s.mentions : rng.int(120, 4200);
+    const velocity = s ? s.velocity : Number(rng.normal(15, 45).toFixed(0));
+
+    let crowding: Crowding;
+    if (r.shortInterestPct >= 15 && socialSentiment > 0.12) crowding = "Squeeze Risk";
+    else if (socialSentiment > 0.2 && velocity > 30) crowding = "Crowded Long";
+    else if (r.shortInterestPct >= 18 || (r.utilization >= 88 && socialSentiment < 0)) crowding = "Crowded Short";
+    else crowding = "Balanced";
+
+    const note =
+      crowding === "Squeeze Risk"
+        ? "Bulls piling in while heavily shorted — both sides loaded; squeeze/unwind risk."
+        : crowding === "Crowded Long"
+        ? "Strong positive social mood with rising attention — crowded long, chase risk."
+        : crowding === "Crowded Short"
+        ? "Heavy short interest / utilization with weak mood — crowded short."
+        : "No strong crowding signal.";
+
+    return {
+      ticker: r.ticker,
+      sector: r.sector,
+      classification: r.classification,
+      socialSentiment,
+      mentions,
+      velocity,
+      shortInterestPct: r.shortInterestPct,
+      utilization: r.utilization,
+      feeBps: r.feeBps,
+      putCall: r.putCall,
+      skew: r.skew,
+      heat: r.heat,
+      crowding,
+      note,
+    };
+  });
 }
 
 export { getSocialIntel };

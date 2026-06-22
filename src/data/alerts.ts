@@ -1,7 +1,8 @@
 import { Rng } from "@/lib/rng";
+import { getSentimentIndex, getSurveySocialDivergence, getBehavior } from "./sentiment";
 
 export type AlertSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
-export type AlertCategory = "SEC_LENDING" | "PRIME" | "OPTIMIZATION" | "COLLATERAL" | "TREASURY" | "MARKET";
+export type AlertCategory = "SEC_LENDING" | "PRIME" | "OPTIMIZATION" | "COLLATERAL" | "TREASURY" | "MARKET" | "SENTIMENT";
 
 export interface Alert {
   id: string;
@@ -36,9 +37,28 @@ const TEMPLATES: { category: AlertCategory; severity: AlertSeverity; title: stri
   { category: "MARKET", severity: "LOW", title: "Liquidity thinning — small caps", detail: "Russell 2000 names showing widening bid/ask spreads", metric: "—" },
 ];
 
+/** Sentiment-driven alerts derived live from the SENT engine (extremes + divergence). */
+function sentimentTemplates(): { category: AlertCategory; severity: AlertSeverity; title: string; detail: string; metric?: string }[] {
+  const idx = getSentimentIndex();
+  const dv = getSurveySocialDivergence();
+  const bh = getBehavior();
+  const out: { category: AlertCategory; severity: AlertSeverity; title: string; detail: string; metric?: string }[] = [];
+  if (idx.regime === "Extreme Greed")
+    out.push({ category: "SENTIMENT", severity: "HIGH", title: "Extreme Greed — contrarian caution", detail: "Crowd euphoria historically precedes below-average forward returns; tighten risk, fade chasing", metric: `${idx.score}` });
+  else if (idx.regime === "Extreme Fear")
+    out.push({ category: "SENTIMENT", severity: "HIGH", title: "Extreme Fear — contrarian support", detail: "Capitulation has historically marked contrarian support; selective accumulation rewarded", metric: `${idx.score}` });
+  else if (idx.regime === "Greed" || idx.regime === "Fear")
+    out.push({ category: "SENTIMENT", severity: "MEDIUM", title: `Sentiment regime — ${idx.regime}`, detail: `Sentiment Index at ${idx.score} (${idx.regime}); behavioral edge building`, metric: `${idx.score}` });
+  if (dv.status === "DIVERGENT")
+    out.push({ category: "SENTIMENT", severity: "MEDIUM", title: "Survey–social divergence", detail: dv.note, metric: `gap ${dv.gapNow >= 0 ? "+" : ""}${dv.gapNow}` });
+  if (Math.abs(bh.gapNow) >= 14)
+    out.push({ category: "SENTIMENT", severity: "LOW", title: "Retail–manager positioning gap", detail: bh.signal, metric: `${bh.gapNow >= 0 ? "+" : ""}${bh.gapNow}` });
+  return out;
+}
+
 export function getAlerts(): Alert[] {
   const rng = new Rng("alerts-1");
-  return TEMPLATES.map((t, i) => {
+  return [...TEMPLATES, ...sentimentTemplates()].map((t, i) => {
     const minsAgo = rng.int(0, 220);
     const d = new Date(Date.UTC(2026, 5, 17, 13, 30, 0) - minsAgo * 60000);
     return {
@@ -73,4 +93,5 @@ export const CATEGORY_LABEL: Record<AlertCategory, string> = {
   COLLATERAL: "Collateral",
   TREASURY: "Treasury",
   MARKET: "Market",
+  SENTIMENT: "Sentiment",
 };

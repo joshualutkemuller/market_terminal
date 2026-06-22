@@ -32,6 +32,7 @@ const CAT_COLOR: Record<AlertCategory, string> = {
   COLLATERAL: "#2ECC71",
   TREASURY: "#E6B800",
   MARKET: "#9A9AA3",
+  SENTIMENT: "#A78BFA",
 };
 
 // Canonical configured rules per the spec (rules-engine surface).
