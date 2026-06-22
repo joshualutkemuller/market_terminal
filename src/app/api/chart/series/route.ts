@@ -1,10 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { getSeriesHistory, seriesById, resolveFred } from "@/data/econSeries";
 import { getMarketLensSeries } from "@/data/marketLens";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 /**
  * GET /api/chart/series?source=econ&id=DGS10
@@ -15,12 +13,12 @@ export const runtime = "nodejs";
  *   • market/lens -> the Market Lens series engine (committed snapshots + FRED)
  * Always 200 with a `source` provenance field so the UI renders uniformly.
  */
-export async function GET(req: NextRequest) {
-  const sp = req.nextUrl.searchParams;
+export async function GET(req: Request) {
+  const sp = new URL(req.url).searchParams;
   const source = (sp.get("source") ?? "econ").toLowerCase();
   const id = sp.get("id") ?? "";
   const assetClass = sp.get("assetClass") ?? undefined;
-  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  if (!id) return json({ error: "id required" }, { status: 400 });
 
   // Market / lens / book — daily price or macro level series from the engine.
   if (source === "market" || source === "lens" || source === "book") {
@@ -31,14 +29,14 @@ export async function GET(req: NextRequest) {
         : s.source === "econ-sim" ? "ECON"
         : s.source === "synthetic" ? "SIM"
         : "SNAPSHOT"; // index-monthly | bilello-yearly
-      return NextResponse.json({
+      return json({
         source: badge,
         id,
         label: id,
         observations: s.dates.map((d, i) => ({ date: d, value: s.values[i] })),
       });
     } catch {
-      return NextResponse.json({ source: "ERR", id, label: id, observations: [] });
+      return json({ source: "ERR", id, label: id, observations: [] });
     }
   }
 
@@ -52,12 +50,12 @@ export async function GET(req: NextRequest) {
     try {
       const obs = await fredSeries(id, { limit: n, units: resolved.units, scale: resolved.scale });
       if (obs.length) {
-        return NextResponse.json({ source: "FRED", id, label: meta?.label ?? id, observations: obs });
+        return json({ source: "FRED", id, label: meta?.label ?? id, observations: obs });
       }
     } catch {
       // fall through to the deterministic econ model
     }
   }
 
-  return NextResponse.json({ source: "SIM", id, label: meta?.label ?? id, observations: getSeriesHistory(id, n) });
+  return json({ source: "SIM", id, label: meta?.label ?? id, observations: getSeriesHistory(id, n) });
 }

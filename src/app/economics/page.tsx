@@ -1,4 +1,3 @@
-"use client";
 
 import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
@@ -20,7 +19,7 @@ import {
 } from "@/data/econSeries";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
 import { econChartHref } from "@/components/charting/ChartLink";
-import Link from "next/link";
+import Link from "@/components/Link";
 import { AreaChart } from "lucide-react";
 
 type Tone = "up" | "down" | "amber" | "neutral";

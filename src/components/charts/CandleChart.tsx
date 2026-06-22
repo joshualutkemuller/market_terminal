@@ -1,4 +1,3 @@
-"use client";
 
 import type { Candle } from "@/data/markets";
 

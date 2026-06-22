@@ -1,7 +1,6 @@
-"use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/lib/navigation";
 import { CommandBar } from "./CommandBar";
 import { Sidebar } from "./Sidebar";
 import { StatusBar } from "./StatusBar";

@@ -1,4 +1,3 @@
-"use client";
 
 import { getIndices } from "@/data/markets";
 import { fmtNum, fmtSignedPct } from "@/lib/format";

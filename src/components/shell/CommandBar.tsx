@@ -1,6 +1,5 @@
-"use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname } from "@/lib/navigation";
 import { NAV } from "@/lib/nav";
 import { Search, PanelLeft, Command } from "lucide-react";
 

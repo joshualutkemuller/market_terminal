@@ -1,9 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildCopilotContext } from "@/lib/server/copilotContext";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 /**
  * POST /api/copilot  { question: string }
@@ -39,18 +37,18 @@ function extractJson(raw: string): { text?: string; bullets?: string[] } | null 
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   let question = "";
   try {
     const body = await req.json();
     question = typeof body?.question === "string" ? body.question.trim() : "";
   } catch {
-    return NextResponse.json({ error: "invalid body" }, { status: 400 });
+    return json({ error: "invalid body" }, { status: 400 });
   }
-  if (!question) return NextResponse.json({ error: "question required" }, { status: 400 });
+  if (!question) return json({ error: "question required" }, { status: 400 });
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ source: "LOCAL" });
+    return json({ source: "LOCAL" });
   }
 
   try {
@@ -69,18 +67,18 @@ export async function POST(req: NextRequest) {
     });
 
     const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === "text");
-    if (!textBlock) return NextResponse.json({ source: "LOCAL" });
+    if (!textBlock) return json({ source: "LOCAL" });
 
     const parsed = extractJson(textBlock.text);
-    if (!parsed?.text) return NextResponse.json({ source: "LOCAL" });
+    if (!parsed?.text) return json({ source: "LOCAL" });
 
-    return NextResponse.json({
+    return json({
       source: "AI",
       text: parsed.text,
       bullets: Array.isArray(parsed.bullets) ? parsed.bullets.slice(0, 8) : [],
     });
   } catch {
     // Any failure (auth, rate limit, parse) → deterministic fallback.
-    return NextResponse.json({ source: "LOCAL" });
+    return json({ source: "LOCAL" });
   }
 }

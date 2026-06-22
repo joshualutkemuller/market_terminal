@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/Link";
 import { Compass } from "lucide-react";
 
 /** Terminal-styled 404 for unknown module routes. */

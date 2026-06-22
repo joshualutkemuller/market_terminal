@@ -1,4 +1,3 @@
-"use client";
 
 interface Bar {
   label: string;

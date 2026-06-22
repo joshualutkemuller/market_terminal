@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fredEnabled, fredLatest } from "@/lib/server/fred";
 import { getCurrentCurve } from "@/data/econCurve";
 
-export const dynamic = "force-dynamic";
 
 /**
  * GET /api/econ/curve
@@ -13,7 +12,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const sim = getCurrentCurve();
   if (!fredEnabled()) {
-    return NextResponse.json({ source: "SIM", curve: sim });
+    return json({ source: "SIM", curve: sim });
   }
   try {
     const resolved = await Promise.all(
@@ -27,12 +26,12 @@ export async function GET() {
     // (Treasury yields publish on the same business day, so they align).
     const dates = resolved.map((r) => r.date).filter((d): d is string => !!d).sort();
     const asOf = dates.length ? dates[dates.length - 1] : sim.date;
-    return NextResponse.json({
+    return json({
       source: "FRED",
       asOf,
       curve: { ...sim, label: `Live · ${asOf}`, date: asOf, points },
     });
   } catch (err) {
-    return NextResponse.json({ source: "SIM", note: err instanceof Error ? err.message : "FRED error", curve: sim });
+    return json({ source: "SIM", note: err instanceof Error ? err.message : "FRED error", curve: sim });
   }
 }

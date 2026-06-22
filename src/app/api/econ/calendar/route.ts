@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fredEnabled, fredReleaseDates } from "@/lib/server/fred";
 import { getEconEvents } from "@/data/econRates";
 
-export const dynamic = "force-dynamic";
 
 /**
  * GET /api/econ/calendar
@@ -12,7 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const sim = getEconEvents();
   if (!fredEnabled()) {
-    return NextResponse.json({ source: "SIM", events: sim });
+    return json({ source: "SIM", events: sim });
   }
   try {
     const releases = await fredReleaseDates(60);
@@ -33,8 +32,8 @@ export async function GET() {
         actual: daysOut < 0 ? "released" : null,
       };
     });
-    return NextResponse.json({ source: "FRED", events });
+    return json({ source: "FRED", events });
   } catch (err) {
-    return NextResponse.json({ source: "SIM", note: err instanceof Error ? err.message : "FRED error", events: sim });
+    return json({ source: "SIM", note: err instanceof Error ? err.message : "FRED error", events: sim });
   }
 }

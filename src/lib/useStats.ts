@@ -1,4 +1,3 @@
-"use client";
 
 import { useEffect, useState } from "react";
 import type { DataSource } from "@/lib/useEcon";

@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { getSeriesHistory, resolveFred } from "@/data/econSeries";
 
-export const dynamic = "force-dynamic";
 
 export interface BatchSeries {
   id: string;
@@ -17,10 +16,10 @@ export interface BatchSeries {
  * pass `lin` to get raw index levels so the client can derive MoM/YoY itself).
  * Per-series `source` is returned so the client only swaps in genuine FRED data.
  */
-export async function GET(req: NextRequest) {
-  const ids = (req.nextUrl.searchParams.get("ids") ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 60);
-  const n = Number(req.nextUrl.searchParams.get("n") ?? 15);
-  const unitsOverride = req.nextUrl.searchParams.get("units") ?? undefined;
+export async function GET(req: Request) {
+  const ids = (new URL(req.url).searchParams.get("ids") ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 60);
+  const n = Number(new URL(req.url).searchParams.get("n") ?? 15);
+  const unitsOverride = new URL(req.url).searchParams.get("units") ?? undefined;
   const live = fredEnabled();
 
   const series = await Promise.all(
@@ -39,5 +38,5 @@ export async function GET(req: NextRequest) {
     })
   );
 
-  return NextResponse.json({ source: series.some((s) => s.source === "FRED") ? "FRED" : "SIM", series });
+  return json({ source: series.some((s) => s.source === "FRED") ? "FRED" : "SIM", series });
 }

@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fetchLiveSocial } from "@/lib/server/socialProviders";
 import { getSocialIntel } from "@/data/news";
 
-export const dynamic = "force-dynamic";
 
 /**
  * GET /api/social
@@ -11,6 +10,6 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const live = await fetchLiveSocial().catch(() => null);
-  if (live) return NextResponse.json({ source: live.source, ...live.intel });
-  return NextResponse.json({ source: "SIM", ...getSocialIntel() });
+  if (live) return json({ source: live.source, ...live.intel });
+  return json({ source: "SIM", ...getSocialIntel() });
 }

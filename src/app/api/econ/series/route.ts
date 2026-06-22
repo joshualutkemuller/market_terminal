@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { getSeriesHistory, seriesById, resolveFred } from "@/data/econSeries";
 
-export const dynamic = "force-dynamic";
 
 /**
  * GET /api/econ/series?id=CPIAUCSL&n=24&units=pc1
@@ -10,10 +9,10 @@ export const dynamic = "force-dynamic";
  * omitted the series' resolved display transform is used (e.g. CPI -> % YoY).
  * Always 200 with a `source` field (FRED | SIM) so clients render uniformly.
  */
-export async function GET(req: NextRequest) {
-  const id = req.nextUrl.searchParams.get("id") ?? "DGS10";
-  const n = Number(req.nextUrl.searchParams.get("n") ?? 24);
-  const reqUnits = req.nextUrl.searchParams.get("units") ?? undefined;
+export async function GET(req: Request) {
+  const id = new URL(req.url).searchParams.get("id") ?? "DGS10";
+  const n = Number(new URL(req.url).searchParams.get("n") ?? 24);
+  const reqUnits = new URL(req.url).searchParams.get("units") ?? undefined;
   const meta = seriesById(id);
   const resolved = resolveFred(id);
   const units = reqUnits ?? resolved.units;
@@ -22,12 +21,12 @@ export async function GET(req: NextRequest) {
     try {
       const obs = await fredSeries(id, { limit: n, units, scale: resolved.scale });
       if (obs.length) {
-        return NextResponse.json({ source: "FRED", id, label: meta?.label ?? id, units, observations: obs });
+        return json({ source: "FRED", id, label: meta?.label ?? id, units, observations: obs });
       }
     } catch {
       // fall through to simulation
     }
   }
 
-  return NextResponse.json({ source: "SIM", id, label: meta?.label ?? id, units, observations: getSeriesHistory(id, n) });
+  return json({ source: "SIM", id, label: meta?.label ?? id, units, observations: getSeriesHistory(id, n) });
 }

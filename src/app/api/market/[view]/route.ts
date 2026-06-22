@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { json } from "@/lib/server/http";
 import { readFile } from "fs/promises";
 import path from "path";
 import {
@@ -21,7 +21,6 @@ interface MarketSnapshotView {
 
 type ComputedView = MarketSnapshotView | CrossAsset | BilelloView | IndexReturnsView;
 
-export const dynamic = "force-dynamic";
 export const runtime = "nodejs"; // needs fs + optional native DB drivers
 
 /** FastAPI path for each terminal view (market_data_pipeline endpoints). */
@@ -54,12 +53,12 @@ const PRICE_FILE_NAME: Partial<Record<MarketView, string>> = {
   "index-returns": "index_returns_price.json",
 };
 
-function returnBasis(req: NextRequest): ReturnBasis {
-  return req.nextUrl.searchParams.get("basis") === "price" ? "price" : "total";
+function returnBasis(req: Request): ReturnBasis {
+  return new URL(req.url).searchParams.get("basis") === "price" ? "price" : "total";
 }
 
-function asOfDate(req: NextRequest): string | null {
-  const raw = req.nextUrl.searchParams.get("asof");
+function asOfDate(req: Request): string | null {
+  const raw = new URL(req.url).searchParams.get("asof");
   return raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
 }
 
@@ -522,10 +521,10 @@ function filterSnapshotByAsOf(data: unknown, view: MarketView, asof: string): un
  *
  * Always 200 with a `source` field so the UI renders uniformly and never blocks.
  */
-export async function GET(req: NextRequest, { params }: { params: { view: string } }) {
+export async function GET(req: Request, { params }: { params: { view: string } }) {
   const view = params.view as MarketView;
   if (!(view in SNAPSHOTS)) {
-    return NextResponse.json({ error: `unknown view '${view}'` }, { status: 404 });
+    return json({ error: `unknown view '${view}'` }, { status: 404 });
   }
   const basis = returnBasis(req);
   const asof = asOfDate(req);
@@ -540,13 +539,13 @@ export async function GET(req: NextRequest, { params }: { params: { view: string
         const data = computedView(view, rows, basis);
         if (data) {
           const earliestAsOf = extractEarliestAsOf(data, view);
-          return NextResponse.json({ source: "DB", view, basis, asof, earliestAsOf, data });
+          return json({ source: "DB", view, basis, asof, earliestAsOf, data });
         }
       }
       const data = await readFromDb(dbUrl, viewKey);
       if (data) {
         const earliestAsOf = extractEarliestAsOf(data, view);
-        return NextResponse.json({ source: "DB", view, basis, earliestAsOf, data });
+        return json({ source: "DB", view, basis, earliestAsOf, data });
       }
     } catch {
       // fall through
@@ -560,7 +559,7 @@ export async function GET(req: NextRequest, { params }: { params: { view: string
     if (data) {
       const earliestAsOf = extractEarliestAsOf(data, view);
       const filtered = asof ? filterSnapshotByAsOf(data, view, asof) : data;
-      return NextResponse.json({ source: "FILE", view, basis, ...(asof ? { asof } : {}), earliestAsOf, data: filtered });
+      return json({ source: "FILE", view, basis, ...(asof ? { asof } : {}), earliestAsOf, data: filtered });
     }
   }
 
@@ -576,7 +575,7 @@ export async function GET(req: NextRequest, { params }: { params: { view: string
         const livePayload = await r.json();
         const earliestAsOf = extractEarliestAsOf(livePayload, view);
         const filtered = asof ? filterSnapshotByAsOf(livePayload, view, asof) : livePayload;
-        return NextResponse.json({ source: "LIVE", view, basis, ...(asof ? { asof } : {}), earliestAsOf, data: filtered });
+        return json({ source: "LIVE", view, basis, ...(asof ? { asof } : {}), earliestAsOf, data: filtered });
       }
     } catch {
       // fall through
@@ -587,5 +586,5 @@ export async function GET(req: NextRequest, { params }: { params: { view: string
   const snapData = snapshotFor(view, basis);
   const earliestAsOf = extractEarliestAsOf(snapData, view);
   const filtered = asof ? filterSnapshotByAsOf(snapData, view, asof) : snapData;
-  return NextResponse.json({ source: "SNAPSHOT", view, basis, ...(asof ? { asof } : {}), earliestAsOf, data: filtered });
+  return json({ source: "SNAPSHOT", view, basis, ...(asof ? { asof } : {}), earliestAsOf, data: filtered });
 }
