@@ -135,7 +135,7 @@ Each external source, what it powers, and where it stands.
 |---|---|---|
 | AI · Copilot | Anthropic API | ✅ (set `ANTHROPIC_API_KEY`) |
 | SENT · Investor Sentiment | AAII + NAAIM + social + VIX (FRED) | 🟡 — VIX live; social chain wired; surveys needed |
-| NEWS · News & Signal Intel | headline chain + social chain + `news_nlp` FinBERT | 🟡 — chains wired (need keys); FinBERT scaffolded; tape/narratives/attention recompute live |
+| NEWS · News & Signal Intel | headline chain + social chain + `news_nlp` FinBERT | 🟡 — chains wired (need keys); FinBERT scaffolded; tape, narratives, attention (4 dims), event clusters & signals all recompute from the live tape; only Market Impact stays a curated historical model |
 | ALRT · Alert Center | derived from all modules | live as sources connect |
 | DATAOPS · Data Ops | provider health (meta) | reflects the above |
 
