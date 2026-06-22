@@ -6,15 +6,15 @@ import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { fmtAbbr, fmtSigned, pnlClass } from "@/lib/format";
+import { useNews } from "@/lib/useNews";
 import {
-  getHeadlines,
   getNarratives,
   getSocialIntel,
   getMarketImpact,
   getAttentionHeatmap,
   getEventClusters,
   getSignals,
-  getNewsSummary,
+  summarizeHeadlines,
   ASSET_CLASSES,
   type AssetClass,
 } from "@/data/news";
@@ -56,8 +56,8 @@ export default function NewsTerminal() {
   const [acFilter, setAcFilter] = useState<AssetClass | "ALL">("ALL");
   const [impactEvent, setImpactEvent] = useState(0);
 
-  const summary = useMemo(() => getNewsSummary(), []);
-  const headlines = useMemo(() => getHeadlines(60), []);
+  const { headlines, source: newsSource } = useNews(60);
+  const summary = useMemo(() => summarizeHeadlines(headlines), [headlines]);
   const narratives = useMemo(() => getNarratives(), []);
   const social = useMemo(() => getSocialIntel(), []);
   const impact = useMemo(() => getMarketImpact(), []);
@@ -75,7 +75,7 @@ export default function NewsTerminal() {
         code="NEWS"
         title="Market News & Signal Intelligence"
         desc="Signal extraction · narratives · social · impact"
-        right={<ProvenanceBadge source="SIM" />}
+        right={<ProvenanceBadge source={newsSource} />}
       />
 
       <KpiStrip>

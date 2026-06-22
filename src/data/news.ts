@@ -415,6 +415,24 @@ export interface NewsSummary {
   attentionLeader: string;
 }
 
+/** Recompute the header summary from a (possibly live) headline set. */
+export function summarizeHeadlines(heads: Headline[]): NewsSummary {
+  const narr = getNarratives();
+  const sigs = getSignals();
+  const attn = getAttentionHeatmap();
+  const avg = heads.length ? heads.reduce((a, h) => a + h.sentimentScore, 0) / heads.length : 0;
+  const riskOff = sigs.filter((s) => s.direction === "RISK-OFF").length;
+  const riskOn = sigs.filter((s) => s.direction === "RISK-ON").length;
+  return {
+    headlines24h: heads.length,
+    avgSentiment: Number(avg.toFixed(2)),
+    topNarrative: narr[0]?.name ?? "—",
+    activeSignals: sigs.length,
+    riskTone: riskOff > riskOn ? "RISK-OFF" : riskOn > riskOff ? "RISK-ON" : "NEUTRAL",
+    attentionLeader: attn.tickers[0]?.label ?? "—",
+  };
+}
+
 export function getNewsSummary(): NewsSummary {
   const heads = getHeadlines(120);
   const narr = getNarratives();
