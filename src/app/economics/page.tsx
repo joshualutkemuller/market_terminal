@@ -78,6 +78,10 @@ function effective(r: IndicatorRow, L: LiveIndicator | undefined) {
   return {
     value: L ? L.value : r.value,
     change: L ? L.change : r.change,
+    mom: L ? L.mom : r.change,
+    qoq: L ? L.qoq : null,
+    yoy: L ? L.yoy : r.yoy,
+    monthlyPrint: L ? L.monthlyPrint : r.category === "INFLATION" ? r.change : null,
     spark: L && L.history.length ? L.history : r.spark,
     asOf: L ? L.asOf : r.asOf,
   };
@@ -127,6 +131,8 @@ export default function MacroDashboard() {
     "ISM-SVC",
     "RSAFS",
   ]);
+  const displayRows = indicators.map((r) => ({ ...r, live: effective(r, liveInd[r.id]) }));
+
   const surpriseBars = indicators
     .filter((i) => HIGH_SIGNAL.has(i.id))
     .map((i) => ({
@@ -190,11 +196,11 @@ export default function MacroDashboard() {
             title="Key Indicators by Category"
             code="ECDB"
             accent
-            right={<span className="tnum text-3xs text-term-text-mute">{indicators.length} series · click → drill 24m</span>}
+            right={<span className="tnum text-3xs text-term-text-mute">{indicators.length} series · value, as-of date, MoM/QoQ/YoY and inflation print</span>}
           >
             <div className="grid grid-cols-1 gap-px bg-term-border md:grid-cols-2">
               {CATEGORY_ORDER.map((cat) => {
-                const rows = indicators.filter((i) => i.category === cat);
+                const rows = displayRows.filter((i) => i.category === cat);
                 if (rows.length === 0) return null;
                 return (
                   <div key={cat} className="bg-term-panel">
@@ -205,30 +211,52 @@ export default function MacroDashboard() {
                       <span className="text-3xs text-term-text-mute">{rows.length}</span>
                     </div>
                     <div className="divide-y divide-term-border-soft">
-                      {rows.map((r) => (
-                        <div
-                          key={r.id}
-                          onClick={() => drill(r)}
-                          className="flex cursor-pointer items-center gap-2 px-2 py-1 text-2xs transition-colors hover:bg-term-panel-2"
-                          title={`${r.label} — click to drill 24m`}
-                        >
-                          <span className="w-16 shrink-0 truncate font-semibold text-term-text" title={r.label}>
-                            {r.short}
-                          </span>
-                          <span className="tnum w-16 shrink-0 text-right text-term-text">
-                            {fmtVal(r.value, r.decimals, r.unit)}
-                          </span>
-                          <span className={`tnum w-12 shrink-0 text-right ${pnlClass(r.change)}`}>
-                            {fmtSigned(r.change, r.decimals)}
-                          </span>
-                          <span className="tnum w-12 shrink-0 text-right text-term-text-mute">
-                            {fmtSigned(r.yoy, 1)}%
-                          </span>
-                          <span className="ml-auto inline-flex justify-end">
-                            <Sparkline data={r.spark} width={56} height={18} />
-                          </span>
-                        </div>
-                      ))}
+                      <div className="grid grid-cols-[minmax(4.5rem,1fr)_4.75rem_4.75rem_3.25rem_3.25rem_3.25rem_3.75rem_3.75rem] items-center gap-1 px-2 py-1 text-3xs uppercase tracking-wide text-term-text-mute">
+                        <span>Series</span>
+                        <span className="text-right">Value</span>
+                        <span className="text-right">As of</span>
+                        <span className="text-right">MoM</span>
+                        <span className="text-right">QoQ</span>
+                        <span className="text-right">YoY</span>
+                        <span className="text-right">Print</span>
+                        <span />
+                      </div>
+                      {rows.map((r) => {
+                        const e = r.live;
+                        return (
+                          <div
+                            key={r.id}
+                            onClick={() => drill(r)}
+                            className="grid cursor-pointer grid-cols-[minmax(4.5rem,1fr)_4.75rem_4.75rem_3.25rem_3.25rem_3.25rem_3.75rem_3.75rem] items-center gap-1 px-2 py-1 text-2xs transition-colors hover:bg-term-panel-2"
+                            title={`${r.label} — click to drill 24m`}
+                          >
+                            <span className="truncate font-semibold text-term-text" title={r.label}>
+                              {r.short}
+                            </span>
+                            <span className="tnum text-right text-term-text">
+                              {fmtVal(e.value, r.decimals, r.unit)}
+                            </span>
+                            <span className="tnum truncate text-right text-term-text-mute" title={e.asOf}>
+                              {e.asOf.slice(5)}
+                            </span>
+                            <span className={`tnum text-right ${e.mom == null ? "text-term-text-dim" : pnlClass(e.mom)}`}>
+                              {e.mom == null ? "—" : `${fmtSigned(e.mom, 2)}%`}
+                            </span>
+                            <span className={`tnum text-right ${e.qoq == null ? "text-term-text-dim" : pnlClass(e.qoq)}`}>
+                              {e.qoq == null ? "—" : `${fmtSigned(e.qoq, 2)}%`}
+                            </span>
+                            <span className={`tnum text-right ${e.yoy == null ? "text-term-text-dim" : pnlClass(e.yoy)}`}>
+                              {e.yoy == null ? "—" : `${fmtSigned(e.yoy, 1)}%`}
+                            </span>
+                            <span className={`tnum text-right ${e.monthlyPrint == null ? "text-term-text-dim" : pnlClass(e.monthlyPrint)}`} title="Inflation monthly/period print">
+                              {e.monthlyPrint == null ? "—" : `${fmtSigned(e.monthlyPrint, 2)}%`}
+                            </span>
+                            <span className="inline-flex justify-end">
+                              <Sparkline data={e.spark} width={56} height={18} />
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );

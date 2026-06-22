@@ -9,28 +9,51 @@ export interface LiveIndicator {
   value: number;
   prior: number;
   change: number;
+  mom: number | null;
+  qoq: number | null;
   yoy: number | null;
+  monthlyPrint: number | null;
   asOf: string;
   history: number[];
   source: "FRED" | "SIM";
 }
 
-function buildPoint(s: FredSeries, hist: { date: string; value: number }[], source: "FRED" | "SIM"): LiveIndicator {
+const pct = (now: number | undefined, then: number | undefined, decimals = 1): number | null => {
+  if (now == null || then == null || then === 0) return null;
+  return Number((((now - then) / Math.abs(then)) * 100).toFixed(decimals));
+};
+
+function buildPoint(
+  s: FredSeries,
+  hist: { date: string; value: number }[],
+  source: "FRED" | "SIM",
+  rawHist?: { date: string; value: number }[]
+): LiveIndicator {
   const values = hist.map((h) => h.value);
+  const rawValues = rawHist?.map((h) => h.value) ?? values;
   const value = values[values.length - 1] ?? s.level;
   const prior = values[values.length - 2] ?? value;
-  // monthly series with >=13 points -> derive YoY from the level history
-  const yoy = s.freq === "M" && values.length >= 13 && !s.unit.includes("y/y")
-    ? Number((((value - values[values.length - 13]) / (Math.abs(values[values.length - 13]) || 1)) * 100).toFixed(1))
-    : s.unit.includes("y/y")
-    ? value
+  const rawValue = rawValues[rawValues.length - 1];
+  const mom = s.freq === "M" || s.freq === "Q" ? pct(rawValue, rawValues[rawValues.length - 2], 2) : null;
+  const qoq = s.freq === "M" ? pct(rawValue, rawValues[rawValues.length - 4], 2) : s.freq === "Q" ? pct(rawValue, rawValues[rawValues.length - 2], 2) : null;
+  // For YoY-transformed indicators the displayed value is the YoY reading; for
+  // level indicators we derive YoY from raw levels when enough history exists.
+  const yoy = s.unit.includes("y/y")
+    ? Number(value.toFixed(s.decimals))
+    : s.freq === "M" && rawValues.length >= 13
+    ? pct(rawValue, rawValues[rawValues.length - 13], 1)
+    : s.freq === "Q" && rawValues.length >= 5
+    ? pct(rawValue, rawValues[rawValues.length - 5], 1)
     : null;
   return {
     id: s.id,
     value: Number(value.toFixed(s.decimals)),
     prior: Number(prior.toFixed(s.decimals)),
     change: Number((value - prior).toFixed(s.decimals)),
+    mom,
+    qoq,
     yoy,
+    monthlyPrint: s.category === "INFLATION" && (s.freq === "M" || s.freq === "Q") ? mom : null,
     asOf: hist[hist.length - 1]?.date ?? "",
     history: values.map((v) => Number(v.toFixed(s.decimals))),
     source,
@@ -50,7 +73,13 @@ export async function GET() {
       if (live && !r.simOnly) {
         try {
           const hist = await fredSeries(s.id, { limit: 24, units: r.units, scale: r.scale });
-          if (hist.length) return buildPoint(s, hist as { date: string; value: number }[], "FRED");
+          if (hist.length) {
+            const needsRaw = s.freq === "M" || s.freq === "Q";
+            const rawHist = needsRaw && r.units !== "lin"
+              ? await fredSeries(s.id, { limit: 24, units: "lin", scale: r.scale })
+              : hist;
+            return buildPoint(s, hist as { date: string; value: number }[], "FRED", rawHist as { date: string; value: number }[]);
+          }
         } catch {
           /* fall back */
         }
