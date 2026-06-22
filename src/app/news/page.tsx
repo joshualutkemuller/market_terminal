@@ -56,13 +56,14 @@ export default function NewsTerminal() {
   const [acFilter, setAcFilter] = useState<AssetClass | "ALL">("ALL");
   const [impactEvent, setImpactEvent] = useState(0);
 
-  const { headlines, source: newsSource } = useNews(60);
+  const { headlines, source: newsSource, clusters } = useNews(60);
   const { intel: social, source: socialSource } = useSocial();
   const narratives = useMemo(() => narrativesFromHeadlines(headlines), [headlines]);
   const attention = useMemo(() => attentionFromHeadlines(headlines), [headlines]);
   const summary = useMemo(() => summarizeHeadlines(headlines, narratives, attention), [headlines, narratives, attention]);
   const impact = useMemo(() => getMarketImpact(), []);
-  const events = useMemo(() => eventsFromHeadlines(headlines), [headlines]);
+  // Prefer transformer clusters from the FinBERT stage; else keyword clustering.
+  const events = useMemo(() => (clusters.length ? clusters : eventsFromHeadlines(headlines)), [clusters, headlines]);
   const signals = useMemo(() => signalsFromHeadlines(narratives, attention, social, headlines), [narratives, attention, social, headlines]);
 
   const tape = acFilter === "ALL" ? headlines : headlines.filter((h) => h.assetClass === acFilter);
