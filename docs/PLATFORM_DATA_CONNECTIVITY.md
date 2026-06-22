@@ -44,6 +44,22 @@ Sentiment resolves best → fallback, each flipping the provenance badge:
 
 **Key takeaway:** the macro/funding surface (FRED) and the market surface (pipeline) are *already wired* — they need credentials/env, not new code. The gaps are the **behavioral, securities-finance, and internal-book** feeds.
 
+### Live health probes & provenance surface
+
+Provenance is observable at runtime — the platform probes its own backends rather than only rendering fixtures:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/dataops/health` | Per-provider live status — FRED key presence, market-pipeline resolver (DB/FILE/PIPELINE reachability), news/social provider config, and a live `/health` ping to the `news_nlp` FinBERT service (with model name). |
+| `GET /api/dataops/runs` | Live ingestion **runs / series outcomes / lineage** aggregated from the `market_data_pipeline` ingestion manifest, resolved **`MARKET_DB_URL` (Postgres/DuckDB) → `MARKET_PIPELINE_URL`** (mirrors the market-views resolver). Includes real per-series **latency** (the pipeline now records `latency_ms`). Empty → the page keeps fixtures. |
+
+Where it surfaces:
+
+- **DATAOPS** overlays both probes onto the Provider Health, Runs, Series Outcomes and Lineage panels, badging each **`LIVE PROBE` / `LIVE MANIFEST`** vs **`FIXTURES`** and recomputing the "Live Providers" KPI from real status.
+- **Status bar (every module)** shows a global **`DATA n/m LIVE`** chip (green/amber/red dot) via the same `/api/dataops/health` probe, with a tooltip listing each provider's status + detail. So live-vs-sim is visible terminal-wide, not just on DATAOPS.
+
+Both probes are config + reachability based (paid/keyed feeds report *configured*, not a billed test call; the two URL services — `news_nlp`, market pipeline — get a real `/health` ping), and degrade to the fixture/SIM baseline when nothing is wired.
+
 ---
 
 ## 2. Connection status at a glance
