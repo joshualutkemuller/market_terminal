@@ -343,29 +343,160 @@ export function getAttentionHeatmap(): AttentionHeatmap {
   };
 }
 
-/** Recompute the attention heatmap's ticker dimension from live headline mentions. */
-export function attentionFromHeadlines(heads: Headline[]): AttentionHeatmap {
-  const counts = new Map<string, { n: number; s: number }>();
-  for (const h of heads) {
-    for (const t of h.tickers) {
-      const e = counts.get(t) ?? { n: 0, s: 0 };
-      e.n += 1;
-      e.s += h.sentimentScore;
-      counts.set(t, e);
-    }
-  }
+// Ticker → equity sector for the tracked universe (index/rates/credit/fx/crypto omitted).
+const SECTOR_BY_TICKER: Record<string, string> = {
+  NVDA: "Technology", AAPL: "Technology", MSFT: "Technology", SMCI: "Technology",
+  META: "Communications", AMC: "Communications", TSLA: "Consumer Disc.", GME: "Consumer Disc.",
+  JPM: "Financials", BAC: "Financials", XLF: "Financials", GLD: "Materials", USO: "Energy",
+};
+// Keyword matchers for the country & commodity dimensions.
+const COUNTRY_KW: Record<string, RegExp> = {
+  "United States": /\b(u\.?s\.?|united states|fed|fomc)\b/i,
+  China: /china|pboc|yuan|renminbi/i,
+  Eurozone: /euro\b|eurozone|\becb\b/i,
+  Japan: /japan|\bboj\b|yen/i,
+  "United Kingdom": /\buk\b|britain|sterling|\bboe\b|gilt/i,
+  Germany: /german|bund/i,
+  India: /india|\brbi\b/i,
+  Brazil: /brazil|real\b/i,
+};
+const COMMODITY_KW: Record<string, RegExp> = {
+  "Crude Oil": /crude|\boil\b|opec|wti/i,
+  Gold: /gold|bullion/i,
+  "Nat Gas": /nat gas|natural gas/i,
+  Copper: /copper/i,
+  Silver: /silver/i,
+  Wheat: /wheat/i,
+  Corn: /corn/i,
+  Uranium: /uranium/i,
+};
+
+function rowsFromCounts(counts: Map<string, { n: number; s: number }>): AttentionRow[] {
   const maxN = Math.max(1, ...[...counts.values()].map((e) => e.n));
-  const liveTickers: AttentionRow[] = [...counts.entries()]
+  return [...counts.entries()]
     .map(([label, e]) => ({ label, score: Math.round(Math.min(100, (e.n / maxN) * 100)), chg: 0, sentiment: Number((e.s / e.n).toFixed(2)) }))
     .sort((a, b) => b.score - a.score);
-  const seeded = getAttentionHeatmap();
-  // Headlines reliably carry tickers; other dimensions stay on the engine.
-  return {
-    tickers: liveTickers.length >= 3 ? liveTickers : seeded.tickers,
-    sectors: seeded.sectors,
-    countries: seeded.countries,
-    commodities: seeded.commodities,
+}
+
+/** Recompute the full attention heatmap (tickers, sectors, countries, commodities) from the live tape. */
+export function attentionFromHeadlines(heads: Headline[]): AttentionHeatmap {
+  const tickers = new Map<string, { n: number; s: number }>();
+  const sectors = new Map<string, { n: number; s: number }>();
+  const countries = new Map<string, { n: number; s: number }>();
+  const commodities = new Map<string, { n: number; s: number }>();
+  const bump = (m: Map<string, { n: number; s: number }>, k: string, s: number) => {
+    const e = m.get(k) ?? { n: 0, s: 0 };
+    e.n += 1;
+    e.s += s;
+    m.set(k, e);
   };
+  for (const h of heads) {
+    for (const t of h.tickers) {
+      bump(tickers, t, h.sentimentScore);
+      const sec = SECTOR_BY_TICKER[t];
+      if (sec) bump(sectors, sec, h.sentimentScore);
+    }
+    for (const [c, kw] of Object.entries(COUNTRY_KW)) if (kw.test(h.headline)) bump(countries, c, h.sentimentScore);
+    for (const [c, kw] of Object.entries(COMMODITY_KW)) if (kw.test(h.headline)) bump(commodities, c, h.sentimentScore);
+  }
+  const seeded = getAttentionHeatmap();
+  const pick = (live: AttentionRow[], fallback: AttentionRow[]) => (live.length >= 3 ? live : fallback);
+  return {
+    tickers: pick(rowsFromCounts(tickers), seeded.tickers),
+    sectors: pick(rowsFromCounts(sectors), seeded.sectors),
+    countries: pick(rowsFromCounts(countries), seeded.countries),
+    commodities: pick(rowsFromCounts(commodities), seeded.commodities),
+  };
+}
+
+/** Cluster the live tape into events by narrative keyword match (NEWS-6). */
+export function eventsFromHeadlines(heads: Headline[]): EventCluster[] {
+  const clusters: EventCluster[] = [];
+  let id = 0;
+  for (const name of NARRATIVES) {
+    const kw = NARRATIVE_KW[name];
+    if (!kw) continue;
+    const matched = heads.filter((h) => kw.test(h.headline));
+    if (matched.length < 2) continue;
+    // modal asset class
+    const acCount = new Map<AssetClass, number>();
+    for (const h of matched) acCount.set(h.assetClass, (acCount.get(h.assetClass) ?? 0) + 1);
+    const assetClass = [...acCount.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    const sentiment = Number((matched.reduce((a, h) => a + h.sentimentScore, 0) / matched.length).toFixed(2));
+    const sources = [...new Set(matched.map((h) => h.source))].slice(0, 4);
+    const firstSeen = matched.reduce((min, h) => (h.time < min ? h.time : min), matched[0].time);
+    const importance = Math.round(Math.min(99, 40 + matched.length * 6 + Math.abs(sentiment) * 20));
+    clusters.push({
+      id: `evt-live-${id++}`,
+      title: name,
+      assetClass,
+      relatedCount: matched.length,
+      importance,
+      sentiment,
+      firstSeen,
+      summary: `${matched.length} related headlines across ${acCount.size} asset class${acCount.size > 1 ? "es" : ""}; net sentiment ${sentiment >= 0 ? "+" : ""}${sentiment}. Lead: “${matched[0].headline}”.`,
+      sources,
+    });
+  }
+  return clusters.length ? clusters.sort((a, b) => b.importance - a.importance) : getEventClusters();
+}
+
+/** Derive market signals from the live narratives, attention and social (NEWS-7). */
+export function signalsFromHeadlines(narratives: NarrativeRow[], attention: AttentionHeatmap, social: SocialIntel, heads: Headline[]): NewsSignal[] {
+  const out: NewsSignal[] = [];
+  const recencyMin = (kw: RegExp) => heads.filter((h) => kw.test(h.headline)).reduce((min, h) => Math.min(min, h.minutesAgo), 600);
+  const episodeFor = (seed: number) => Array.from({ length: 2 }, (_, k) => EPISODES[(seed + k * 3) % EPISODES.length]);
+  let id = 0;
+
+  for (const n of narratives.slice(0, 5)) {
+    if (n.velocity < 45 && n.mentions < 3) continue;
+    const dir: Direction = n.sentiment > 0.1 ? "RISK-ON" : n.sentiment < -0.1 ? "RISK-OFF" : "NEUTRAL";
+    const confidence = Math.round(Math.min(96, 45 + n.velocity * 0.4 + Math.min(n.mentions, 20)));
+    out.push({
+      id: `sig-live-${id++}`,
+      text: `${n.name} narrative ${n.velocity >= 60 ? "accelerating" : "building"} across the tape`,
+      direction: dir,
+      confidence,
+      trigger: "Narrative acceleration",
+      evidence: [
+        `${n.mentions} headlines · velocity ${n.velocity}`,
+        `${n.breadth} asset class${n.breadth > 1 ? "es" : ""} touched`,
+        `sentiment ${n.sentiment >= 0 ? "+" : ""}${n.sentiment.toFixed(2)} and ${dir === "RISK-OFF" ? "falling" : "rising"}`,
+      ],
+      similarEpisodes: episodeFor(id).map((label) => ({ label, spyFwd: Number((dir === "RISK-OFF" ? -2.4 : 2.6).toFixed(1)) })),
+      firedAgo: recencyMin(NARRATIVE_KW[n.name] ?? /$^/),
+    });
+  }
+
+  const topSocial = social.tickers[0];
+  if (topSocial && topSocial.velocity > 40) {
+    out.push({
+      id: `sig-live-${id++}`,
+      text: `Unusual social activity in ${topSocial.label}`,
+      direction: topSocial.sentiment >= 0 ? "RISK-ON" : "RISK-OFF",
+      confidence: Math.round(Math.min(90, 50 + topSocial.velocity * 0.35)),
+      trigger: "Unusual social activity",
+      evidence: [`${topSocial.mentions.toLocaleString()} mentions · velocity +${topSocial.velocity}%`, `net social sentiment ${topSocial.sentiment >= 0 ? "+" : ""}${topSocial.sentiment}`, `across ${social.platforms.length} platforms`],
+      similarEpisodes: episodeFor(id).map((label) => ({ label, spyFwd: Number((topSocial.sentiment >= 0 ? 1.8 : -1.9).toFixed(1)) })),
+      firedAgo: 8,
+    });
+  }
+
+  const topAttn = attention.tickers[0];
+  if (topAttn && topAttn.score >= 70) {
+    out.push({
+      id: `sig-live-${id++}`,
+      text: `Abnormal attention concentrating in ${topAttn.label}`,
+      direction: topAttn.sentiment >= 0 ? "RISK-ON" : "RISK-OFF",
+      confidence: Math.round(Math.min(88, 45 + topAttn.score * 0.4)),
+      trigger: "Abnormal attention score",
+      evidence: [`attention score ${topAttn.score}/100`, `sentiment ${topAttn.sentiment >= 0 ? "+" : ""}${topAttn.sentiment}`, "headline-flow concentration"],
+      similarEpisodes: episodeFor(id).map((label) => ({ label, spyFwd: Number((topAttn.sentiment >= 0 ? 2.1 : -2.0).toFixed(1)) })),
+      firedAgo: 15,
+    });
+  }
+
+  return out.length ? out.sort((a, b) => b.confidence - a.confidence) : getSignals();
 }
 
 // ── NEWS-6 · Event Intelligence (clusters) ──────────────────────────────────

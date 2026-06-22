@@ -10,8 +10,8 @@ import { useNews } from "@/lib/useNews";
 import { useSocial } from "@/lib/useSocial";
 import {
   getMarketImpact,
-  getEventClusters,
-  getSignals,
+  eventsFromHeadlines,
+  signalsFromHeadlines,
   narrativesFromHeadlines,
   attentionFromHeadlines,
   summarizeHeadlines,
@@ -62,8 +62,8 @@ export default function NewsTerminal() {
   const attention = useMemo(() => attentionFromHeadlines(headlines), [headlines]);
   const summary = useMemo(() => summarizeHeadlines(headlines, narratives, attention), [headlines, narratives, attention]);
   const impact = useMemo(() => getMarketImpact(), []);
-  const events = useMemo(() => getEventClusters(), []);
-  const signals = useMemo(() => getSignals(), []);
+  const events = useMemo(() => eventsFromHeadlines(headlines), [headlines]);
+  const signals = useMemo(() => signalsFromHeadlines(narratives, attention, social, headlines), [narratives, attention, social, headlines]);
 
   const tape = acFilter === "ALL" ? headlines : headlines.filter((h) => h.assetClass === acFilter);
   const maxNarr = Math.max(...narratives.map((n) => n.mentions));
