@@ -15,6 +15,7 @@
  *   NEWSAPI_API_KEY        — NewsAPI.org /top-headlines (business)
  */
 import { getHeadlines, type Headline, type AssetClass, type Sentiment } from "@/data/news";
+import { scoreText } from "@/lib/server/sentimentNlp";
 
 export interface LiveNews {
   source: string;
@@ -38,15 +39,8 @@ function inferAssetClass(tickers: string[], title = ""): AssetClass {
   return "EQUITY";
 }
 
-/** Lightweight keyword sentiment for providers that don't supply a score. */
-const BULL = /\b(surge|surges|jump|jumps|beat|beats|rally|rallies|rise|rises|gain|gains|tops|record|upgrade|soar|soars|climb|climbs|boost|optimis)\b/i;
-const BEAR = /\b(slump|slumps|slide|slides|miss|misses|plunge|plunges|fall|falls|cut|cuts|drop|drops|warn|warns|downgrade|tumble|tumbles|sink|sinks|stress|fear|fears|jitters)\b/i;
-function keywordScore(text: string): number {
-  let s = 0;
-  if (BULL.test(text)) s += 0.4;
-  if (BEAR.test(text)) s -= 0.4;
-  return s;
-}
+/** In-house heuristic sentiment (shared, negation-aware) for providers that don't supply a score. */
+const keywordScore = (text: string): number => scoreText(text).score;
 
 function minsAgoFromISO(iso?: string): number {
   if (!iso) return 0;

@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchLiveNews } from "@/lib/server/newsProviders";
+import { enrichWithNlp } from "@/lib/server/sentimentNlp";
 import { getHeadlines } from "@/data/news";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/news?n=60
- * Returns live headlines from the first configured provider in the chain
- * (Alpha Vantage → Marketaux → Finnhub → NewsAPI), falling back to the
- * deterministic SIM engine. Always 200 with a `source` provenance field.
+ * Layered: headlines from the first configured provider (Alpha Vantage →
+ * Marketaux → Finnhub → NewsAPI) else the SIM engine, then optionally
+ * re-scored by the Python FinBERT stage (NEWS_NLP_URL). Always 200 with a
+ * `source` provenance field; FinBERT enrichment appends "+ FinBERT".
  */
 export async function GET(req: NextRequest) {
   const n = Math.min(120, Math.max(10, Number(req.nextUrl.searchParams.get("n") ?? 60)));
   const live = await fetchLiveNews(n).catch(() => null);
-  if (live) return NextResponse.json(live);
-  return NextResponse.json({ source: "SIM", headlines: getHeadlines(n) });
+  const base = live ?? { source: "SIM", headlines: getHeadlines(n) };
+  const { headlines, nlp } = await enrichWithNlp(base.headlines).catch(() => ({ headlines: base.headlines, nlp: false }));
+  return NextResponse.json({ source: nlp ? `${base.source} + FinBERT` : base.source, headlines });
 }
