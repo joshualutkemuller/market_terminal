@@ -180,6 +180,7 @@ class AdapterResult:
     min_date: Optional[date] = None
     max_date: Optional[date] = None
     checksum: str = ""
+    latency_ms: int = 0
 
     def __post_init__(self) -> None:
         # Auto-derive frame-dependent fields when not explicitly provided.
@@ -227,6 +228,7 @@ class AdapterResult:
             "min_date": self.min_date.isoformat() if self.min_date else None,
             "max_date": self.max_date.isoformat() if self.max_date else None,
             "checksum": self.checksum,
+            "latency_ms": self.latency_ms,
         }
 
 

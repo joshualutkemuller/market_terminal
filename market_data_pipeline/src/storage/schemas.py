@@ -230,7 +230,8 @@ DDL: dict[str, str] = {
             checksum             VARCHAR,
             version              INTEGER,
             data_quality_status  VARCHAR,
-            error_message        VARCHAR
+            error_message        VARCHAR,
+            latency_ms           BIGINT
         )
     """,
     "data_quality_results": """

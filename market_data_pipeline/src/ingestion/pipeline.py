@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 import uuid
 from datetime import date, datetime, timezone
 
@@ -126,10 +127,12 @@ class Pipeline:
         synth = SyntheticConnector()
         frames = []
         for m in self.catalog.macro:
+            _t0 = time.perf_counter()
             res = conn.fetch_series(m.fred_id, start)
             if res.rows.is_empty() and not isinstance(conn, SyntheticConnector):
                 # graceful per-series fallback to synthetic
                 res = synth.fetch_series(m.fred_id, start)
+            res.latency_ms = int((time.perf_counter() - _t0) * 1000)
             self.manifest.record_result(run_id, res)
             if not res.rows.is_empty():
                 frames.append(res.rows)
@@ -143,9 +146,11 @@ class Pipeline:
     def ingest_market(self, run_id: str, start: date | None = None) -> pl.DataFrame:
         conn = self._market_connector()
         symbols = self.catalog.asset_symbols
+        _t0 = time.perf_counter()
         res = conn.fetch_history(symbols, start)
         if res.rows.is_empty() and not isinstance(conn, SyntheticConnector):
             res = SyntheticConnector().fetch_history(symbols, start)
+        res.latency_ms = int((time.perf_counter() - _t0) * 1000)
         self.manifest.record_result(run_id, res)
         raw = res.rows
         if raw.is_empty():

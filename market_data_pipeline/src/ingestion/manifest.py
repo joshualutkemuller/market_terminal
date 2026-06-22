@@ -46,6 +46,7 @@ class ManifestWriter:
         checksum: str,
         data_quality_status: str = "pending",
         error_message: str = "",
+        latency_ms: int = 0,
     ) -> str:
         manifest_id = uuid.uuid4().hex[:16]
         version = self._next_version(source, symbol_or_series_id)
@@ -86,6 +87,7 @@ class ManifestWriter:
                     "version": version,
                     "data_quality_status": data_quality_status,
                     "error_message": error_message,
+                    "latency_ms": int(latency_ms),
                 }
             ],
             schema_overrides={"min_date": pl.Date, "max_date": pl.Date},
@@ -109,6 +111,7 @@ class ManifestWriter:
             min_date=m.get("min_date", getattr(result, "min_date", None)),
             max_date=m.get("max_date", getattr(result, "max_date", None)),
             checksum=m.get("checksum", getattr(result, "checksum", "")),
+            latency_ms=m.get("latency_ms", getattr(result, "latency_ms", 0)),
         )
 
     def latest(self, limit: int = 50) -> pl.DataFrame:

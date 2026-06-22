@@ -15,11 +15,12 @@ interface ManifestRow {
   dataset?: string;
   symbol_or_series_id?: string;
   request_url_or_endpoint?: string;
-  requested_at?: string;
+  requested_at?: string | Date | number;
   response_status?: string;
-  row_count?: number;
+  row_count?: number | string;
   data_quality_status?: string;
   error_message?: string;
+  latency_ms?: number | string;
 }
 
 export interface LiveRuns {
@@ -45,14 +46,10 @@ function mapProvider(source?: string): ProviderName {
 const rowFailed = (r: ManifestRow) => !!r.error_message || /fail|error/i.test(r.response_status ?? "") || /fail/i.test(r.data_quality_status ?? "");
 const rowStale = (r: ManifestRow) => /stale|warn|partial/i.test(r.data_quality_status ?? "") || /synthetic|fallback/i.test(r.response_status ?? "");
 
-const fmtTs = (iso?: string): string => {
-  const t = iso ? Date.parse(iso) : NaN;
-  return Number.isFinite(t) ? new Date(t).toISOString().slice(0, 16).replace("T", " ") : "—";
-};
-const minsAgo = (iso?: string): number => {
-  const t = iso ? Date.parse(iso) : NaN;
-  return Number.isFinite(t) ? Math.max(0, Math.round((Date.now() - t) / 60000)) : 0;
-};
+// Accepts ISO strings, JS Dates (pg), or epoch ms (DuckDB) uniformly.
+const toMs = (v: unknown): number => (typeof v === "number" ? v : Date.parse(String(v ?? "")));
+const fmtTs = (ms: number): string => (Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 16).replace("T", " ") : "—");
+const minsAgo = (ms: number): number => (Number.isFinite(ms) ? Math.max(0, Math.round((Date.now() - ms) / 60000)) : 0);
 
 function aggregate(rows: ManifestRow[]): LiveRuns {
   const byRun = new Map<string, ManifestRow[]>();
@@ -69,18 +66,18 @@ function aggregate(rows: ManifestRow[]): LiveRuns {
     const provider = mapProvider(members[0]?.source);
     const failed = members.filter(rowFailed).length;
     const status: ProviderRun["status"] = failed === 0 ? "OK" : failed >= members.length ? "FAILED" : "PARTIAL";
-    const times = members.map((m) => Date.parse(m.requested_at ?? "")).filter(Number.isFinite) as number[];
+    const times = members.map((m) => toMs(m.requested_at)).filter(Number.isFinite);
     const start = times.length ? Math.min(...times) : Date.now();
     const end = times.length ? Math.max(...times) : start;
-    const rowsIngested = members.reduce((a, m) => a + (m.row_count ?? 0), 0);
+    const rowsIngested = members.reduce((a, m) => a + Number(m.row_count ?? 0), 0);
     const dataset = members[0]?.dataset ?? "market_data";
 
     runs.push({
       runId,
       provider,
       pipeline: "market_data_pipeline",
-      started: fmtTs(new Date(start).toISOString()),
-      completed: fmtTs(new Date(end).toISOString()),
+      started: fmtTs(start),
+      completed: fmtTs(end),
       durationMs: Math.max(0, end - start),
       status,
       requestedSeries: members.length,
@@ -88,7 +85,7 @@ function aggregate(rows: ManifestRow[]): LiveRuns {
       failedSeries: failed,
       rowsIngested,
       rowsRejected: members.filter((m) => rowStale(m) && !rowFailed(m)).length,
-      freshnessMin: minsAgo(new Date(end).toISOString()),
+      freshnessMin: minsAgo(end),
       artifact: members[0]?.request_url_or_endpoint ?? `manifest:${runId}`,
     });
 
@@ -100,9 +97,9 @@ function aggregate(rows: ManifestRow[]): LiveRuns {
         dataset: m.dataset ?? dataset,
         displayName: m.symbol_or_series_id ?? "—",
         status: rowFailed(m) ? "FAILED" : rowStale(m) ? "STALE" : "SUCCESS",
-        rows: m.row_count ?? 0,
-        asOf: (m.requested_at ?? "").slice(0, 10),
-        latencyMs: 0, // manifest does not record per-series latency
+        rows: Number(m.row_count ?? 0),
+        asOf: String(m.requested_at ?? "").slice(0, 10),
+        latencyMs: Number(m.latency_ms ?? 0), // real per-series latency from the manifest
         message: m.error_message || m.response_status || m.data_quality_status || "ok",
       });
     }
@@ -112,8 +109,8 @@ function aggregate(rows: ManifestRow[]): LiveRuns {
       source: provider,
       dataset,
       rows: rowsIngested,
-      started: fmtTs(new Date(start).toISOString()),
-      completed: fmtTs(new Date(end).toISOString()),
+      started: fmtTs(start),
+      completed: fmtTs(end),
       durationMs: Math.max(0, end - start),
       status,
       upstreamRunId: runId,
@@ -129,22 +126,82 @@ function aggregate(rows: ManifestRow[]): LiveRuns {
   return { runs, series, lineage };
 }
 
-/** Fetch + aggregate the pipeline manifest, or null if no pipeline is configured/reachable. */
-export async function fetchPipelineManifest(limit = 200): Promise<LiveRuns | null> {
-  const base = process.env.MARKET_PIPELINE_URL;
-  if (!base) return null;
+function optionalRequire(name: string): any {
+  try {
+    // eslint-disable-next-line no-eval
+    return (eval("require") as NodeRequire)(name);
+  } catch {
+    return null;
+  }
+}
+
+const MANIFEST_SQL = (limit: number) => `SELECT * FROM ingestion_manifest ORDER BY requested_at DESC LIMIT ${limit}`;
+
+/** Read the manifest directly from MARKET_DB_URL (Postgres or DuckDB), mirroring the market views path. */
+async function readManifestFromDb(dbUrl: string, limit: number): Promise<ManifestRow[] | null> {
+  const isPg = /^postgres(ql)?:\/\//.test(dbUrl);
+  if (isPg) {
+    const pg = optionalRequire("pg");
+    if (!pg) return null;
+    const client = new pg.Client({ connectionString: dbUrl });
+    try {
+      await client.connect();
+      const r = await client.query(MANIFEST_SQL(limit));
+      return (r.rows ?? []) as ManifestRow[];
+    } finally {
+      await client.end().catch(() => {});
+    }
+  }
+  // DuckDB file
+  const duckdb = optionalRequire("duckdb");
+  if (!duckdb) return null;
+  const file = dbUrl.replace(/^duckdb:/, "");
+  const db = new duckdb.Database(file, duckdb.OPEN_READONLY ?? 1);
+  const con = db.connect();
+  try {
+    return await new Promise<ManifestRow[]>((resolve, reject) =>
+      con.all(MANIFEST_SQL(limit), (err: Error | null, res: ManifestRow[]) => (err ? reject(err) : resolve(res ?? [])))
+    );
+  } finally {
+    db.close();
+  }
+}
+
+/** Fetch the FastAPI manifest endpoint. */
+async function readManifestFromPipeline(base: string, limit: number): Promise<ManifestRow[] | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 5000);
   try {
     const r = await fetch(`${base.replace(/\/$/, "")}/manifest/latest?limit=${limit}`, { cache: "no-store", signal: ctrl.signal });
     if (!r.ok) return null;
     const j = await r.json();
-    const rows: ManifestRow[] = Array.isArray(j?.manifest) ? j.manifest : [];
-    if (!rows.length) return null;
-    return aggregate(rows);
+    return Array.isArray(j?.manifest) ? (j.manifest as ManifestRow[]) : null;
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Resolve + aggregate the ingestion manifest from the first configured source —
+ * MARKET_DB_URL (DuckDB/Postgres) → MARKET_PIPELINE_URL (FastAPI) — mirroring the
+ * market-views resolver. Returns null when nothing is wired/reachable.
+ */
+export async function fetchPipelineManifest(limit = 200): Promise<LiveRuns | null> {
+  const dbUrl = process.env.MARKET_DB_URL;
+  if (dbUrl) {
+    try {
+      const rows = await readManifestFromDb(dbUrl, limit);
+      if (rows && rows.length) return aggregate(rows);
+    } catch {
+      // fall through to the service
+    }
+  }
+  const base = process.env.MARKET_PIPELINE_URL;
+  if (base) {
+    const rows = await readManifestFromPipeline(base, limit);
+    if (rows && rows.length) return aggregate(rows);
+  }
+  return null;
 }
