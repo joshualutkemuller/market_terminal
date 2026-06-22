@@ -213,4 +213,197 @@ export function getSentimentSummary(): SentimentSummary {
   };
 }
 
+// ── SENT-4 · Behavior & Positioning ──────────────────────────────────────────
+
+export interface BehaviorPoint {
+  date: string;
+  retail: number; // AAII-derived retail mood, 0-100
+  inst: number; // NAAIM manager exposure, 0-100
+  putCall: number;
+  gap: number; // retail - inst
+}
+export interface FundFlow {
+  label: string;
+  value: number; // weekly net flow, $B
+}
+export interface BehaviorState {
+  series: BehaviorPoint[];
+  retailNow: number;
+  instNow: number;
+  gapNow: number;
+  gapZ: number; // z-score of current gap vs history
+  putCallNow: number;
+  signal: string;
+  tone: "up" | "down" | "amber";
+  flows: FundFlow[];
+}
+
+export function getBehavior(): BehaviorState {
+  const aaii = getAaiiHistory();
+  const naaim = getNaaimHistory();
+  const rng = new Rng("sent-behav-v1");
+  let pc = 0.92;
+  const series: BehaviorPoint[] = aaii.map((w, i) => {
+    pc = clamp(pc + (0.9 - pc) * 0.12 + rng.normal(0, 0.05), 0.55, 1.5);
+    const retail = Math.round(spreadToScore(w.spread));
+    const inst = Math.round(clamp(naaim[i].exposure));
+    return { date: w.date, retail, inst, putCall: Number(pc.toFixed(2)), gap: retail - inst };
+  });
+  const gaps = series.map((p) => p.gap);
+  const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  const sd = Math.sqrt(gaps.reduce((a, b) => a + (b - mean) ** 2, 0) / gaps.length) || 1;
+  const last = series[series.length - 1];
+  const gapZ = Number(((last.gap - mean) / sd).toFixed(1));
+  const signal =
+    last.gap > 14
+      ? "Retail mood is running well ahead of manager positioning — classic distribution-risk setup (dumb money leading)."
+      : last.gap < -14
+      ? "Managers are positioned ahead of a cautious retail crowd — accumulation setup (smart money leading)."
+      : "Retail and institutional positioning are broadly aligned — no strong divergence edge.";
+  const tone = last.gap > 14 ? "down" : last.gap < -14 ? "up" : "amber";
+  const fr = new Rng("sent-flows-v1");
+  const flows: FundFlow[] = [
+    { label: "US Equity", value: Number(fr.normal(4, 9).toFixed(1)) },
+    { label: "Bonds", value: Number(fr.normal(3, 5).toFixed(1)) },
+    { label: "Money Market", value: Number(fr.normal(12, 14).toFixed(1)) },
+    { label: "Intl Equity", value: Number(fr.normal(1.5, 4).toFixed(1)) },
+    { label: "Crypto", value: Number(fr.normal(0.4, 2).toFixed(1)) },
+  ];
+  return { series, retailNow: last.retail, instNow: last.inst, gapNow: last.gap, gapZ, putCallNow: last.putCall, signal, tone, flows };
+}
+
+// ── SENT-5 · Contrarian Signals & Historical Analogs ─────────────────────────
+
+export interface ContrarianSignal {
+  trigger: string;
+  direction: "BULLISH" | "BEARISH" | "NEUTRAL";
+  confidence: number; // 0-100
+  rationale: string;
+  source: SentSource;
+}
+
+export function getContrarianSignals(): ContrarianSignal[] {
+  const idx = getSentimentIndex();
+  const aaii = getAaiiSnapshot();
+  const behav = getBehavior();
+  const social = getSocialIntel();
+  const avgVel = social.tickers.reduce((s, t) => s + t.velocity, 0) / Math.max(1, social.tickers.length);
+  const out: ContrarianSignal[] = [];
+
+  if (idx.regime === "Extreme Greed" || idx.regime === "Greed")
+    out.push({ trigger: `Sentiment Index ${idx.score} — ${idx.regime}`, direction: "BEARISH", confidence: idx.regime === "Extreme Greed" ? 78 : 60, rationale: "Crowd greed has historically preceded below-average forward returns. Fade chasing, tighten risk.", source: "MARKET" });
+  else if (idx.regime === "Extreme Fear" || idx.regime === "Fear")
+    out.push({ trigger: `Sentiment Index ${idx.score} — ${idx.regime}`, direction: "BULLISH", confidence: idx.regime === "Extreme Fear" ? 76 : 58, rationale: "Extreme fear has historically marked contrarian support. Selective accumulation rewarded.", source: "MARKET" });
+
+  if (aaii.spreadPctile >= 85) out.push({ trigger: `AAII bull-bear in ${aaii.spreadPctile}th pctile`, direction: "BEARISH", confidence: 70, rationale: "Retail bullishness near historical extreme — contrarian caution flag.", source: "SURVEY" });
+  else if (aaii.spreadPctile <= 15) out.push({ trigger: `AAII bull-bear in ${aaii.spreadPctile}th pctile`, direction: "BULLISH", confidence: 68, rationale: "Retail capitulation near historical extreme — contrarian support.", source: "SURVEY" });
+
+  if (behav.gapNow > 14) out.push({ trigger: `Retail−manager gap +${behav.gapNow} (${behav.gapZ}σ)`, direction: "BEARISH", confidence: 64, rationale: "Retail euphoria outrunning manager positioning — distribution risk.", source: "SURVEY" });
+  else if (behav.gapNow < -14) out.push({ trigger: `Retail−manager gap ${behav.gapNow} (${behav.gapZ}σ)`, direction: "BULLISH", confidence: 62, rationale: "Managers leading a cautious retail crowd — accumulation signal.", source: "SURVEY" });
+
+  if (avgVel > 45) out.push({ trigger: `Social mention velocity +${avgVel.toFixed(0)}%`, direction: "BEARISH", confidence: 52, rationale: "Surging social attention can mark crowded, late-stage moves.", source: "SOCIAL" });
+
+  if (out.length === 0) out.push({ trigger: "No sentiment extreme", direction: "NEUTRAL", confidence: 40, rationale: "Sentiment is balanced — no strong contrarian edge currently.", source: "MARKET" });
+  return out.sort((a, b) => b.confidence - a.confidence);
+}
+
+export interface ForwardStat {
+  horizon: string;
+  avgReturn: number; // %
+  hitRate: number; // % positive
+  n: number;
+}
+export interface AnalogStudy {
+  condition: string;
+  forward: ForwardStat[];
+  note: string;
+}
+
+/** Deterministic weekly SPY-proxy returns (%) with a mild contrarian tilt to prior sentiment. */
+function weeklyProxyReturns(): number[] {
+  const aaii = getAaiiHistory();
+  const rng = new Rng("sent-proxy-v1");
+  return aaii.map((w) => {
+    const tilt = -(spreadToScore(w.spread) - 50) * 0.012; // greedier week → slightly lower fwd
+    return Number((rng.normal(0.18, 1.9) + tilt).toFixed(2));
+  });
+}
+
+/** Conditional forward returns for weeks whose AAII zone matches today's. */
+export function getAnalogStudy(): AnalogStudy {
+  const aaii = getAaiiHistory();
+  const snap = getAaiiSnapshot();
+  const rets = weeklyProxyReturns();
+  const spreads = aaii.map((w) => w.spread);
+  const zoneOf = (i: number): AaiiZone => {
+    const p = pctile(spreads, aaii[i].spread);
+    return p >= 85 ? "Euphoria" : p >= 60 ? "Optimism" : p >= 40 ? "Neutral" : p >= 15 ? "Pessimism" : "Capitulation";
+  };
+  const fwd = (i: number, h: number): number | null => {
+    if (i + h >= rets.length) return null;
+    let c = 0;
+    for (let k = 1; k <= h; k++) c += rets[i + k];
+    return c;
+  };
+  const horizons: { label: string; h: number }[] = [
+    { label: "1 week", h: 1 },
+    { label: "4 weeks", h: 4 },
+    { label: "12 weeks", h: 12 },
+  ];
+  const matches: number[] = [];
+  for (let i = 0; i < aaii.length; i++) if (zoneOf(i) === snap.zone) matches.push(i);
+  const forward: ForwardStat[] = horizons.map(({ label, h }) => {
+    const vals = matches.map((i) => fwd(i, h)).filter((v): v is number => v != null);
+    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    const hit = vals.length ? (vals.filter((v) => v > 0).length / vals.length) * 100 : 0;
+    return { horizon: label, avgReturn: Number(avg.toFixed(1)), hitRate: Math.round(hit), n: vals.length };
+  });
+  return {
+    condition: `AAII zone = ${snap.zone} (spread ${snap.spreadPctile}th pctile)`,
+    forward,
+    note: "Forward returns of a broad-equity proxy on weeks that shared today's AAII sentiment zone. Illustrative analog over a 2-yr deterministic sample — directional, not predictive.",
+  };
+}
+
+// ── SENT-6 · Survey vs Social Divergence ─────────────────────────────────────
+
+export interface DivergencePoint {
+  date: string;
+  survey: number; // 0-100 (AAII-derived)
+  social: number; // 0-100 (social mood)
+  gap: number; // social - survey
+}
+export interface DivergenceState {
+  series: DivergencePoint[];
+  gapNow: number;
+  status: "ALIGNED" | "SOCIAL HOT" | "SURVEY HOT" | "DIVERGENT";
+  note: string;
+  tone: "up" | "down" | "amber" | "neutral";
+}
+
+export function getSurveySocialDivergence(): DivergenceState {
+  const aaii = getAaiiHistory();
+  const rng = new Rng("sent-diverge-v1");
+  let social = 55;
+  const series: DivergencePoint[] = aaii.map((w) => {
+    const survey = Math.round(spreadToScore(w.spread));
+    // social mostly tracks survey but is noisier and occasionally decouples
+    social = clamp(social * 0.55 + survey * 0.35 + rng.normal(0, 12) + 0.1 * (rng.bool(0.12) ? rng.normal(0, 30) : 0));
+    return { date: w.date, survey, social: Math.round(social), gap: Math.round(social - survey) };
+  });
+  const last = series[series.length - 1];
+  const status: DivergenceState["status"] =
+    Math.abs(last.gap) >= 22 ? "DIVERGENT" : last.gap >= 12 ? "SOCIAL HOT" : last.gap <= -12 ? "SURVEY HOT" : "ALIGNED";
+  const note =
+    status === "DIVERGENT"
+      ? "Social mood and the weekly survey have decoupled sharply — one cohort is likely about to chase or capitulate."
+      : status === "SOCIAL HOT"
+      ? "Real-time social mood is running hotter than the survey — early retail enthusiasm not yet in the weekly print."
+      : status === "SURVEY HOT"
+      ? "Survey optimism exceeds live social mood — the crowd may be cooling faster than the weekly data shows."
+      : "Social and survey sentiment are aligned — consistent read across cohorts.";
+  const tone = status === "DIVERGENT" ? "down" : status === "ALIGNED" ? "up" : "amber";
+  return { series, gapNow: last.gap, status, note, tone };
+}
+
 export { getSocialIntel };
