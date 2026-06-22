@@ -54,3 +54,12 @@ class ScoreItem(BaseModel):
 class ScoreResponse(BaseModel):
     model: str
     scores: list[ScoreItem]
+
+
+class ClusterRequest(BaseModel):
+    headlines: list[RawHeadline]
+
+
+class ClusterResponse(BaseModel):
+    model: str
+    clusters: list[NewsCluster]

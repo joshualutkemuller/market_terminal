@@ -146,7 +146,7 @@ analytics/model modules are computed layers. Honest per-module status:
 | Sec-Finance Economics | 🟡 Partial live | 🟢 Live | SOFR/EFFR/IORB/RRP + Fed-funds backdrop live; GC/specials/sensitivities, P&L bridge, and scenario library curated |
 | Funding & Liquidity | 🟢 Live (12/16 FRED) | 🟢 Live | corridor/balances/bills live via `/api/econ/batch` (incl. WRESBAL $B→$T scaling); FX-basis & FRA-OIS are SIM pending a BIS feed; stress gauge derived |
 | Squeeze Radar | 🔴 Sim (lending spine) | — | utilization/fee from the lending book + synthesized SI/DTC/fee-momentum/skew; needs a securities-finance / short-interest vendor feed |
-| News & Signal Intel | 🟡 Provider chain | — | tape, narratives, attention (4 dims), **event clusters** and **signals** all recompute from the live headlines (Alpha Vantage→Marketaux→Finnhub→NewsAPI); optional FinBERT via `news_nlp`. Market Impact stays a labelled historical model |
+| News & Signal Intel | 🟡 Provider chain | — | tape, narratives, attention (4 dims) and signals recompute from the live headlines (Alpha Vantage→Marketaux→Finnhub→NewsAPI); **event clusters use FinBERT transformer clusters** via `news_nlp` when wired (keyword clustering otherwise). Market Impact stays a labelled historical model |
 | Investor Sentiment | 🟡 Partial live | — | VIX live (FRED `VIXCLS`); social chain wired; AAII/NAAIM survey ingest needed |
 | Cash Collateral Reinvestment | 🟡 Partial live/sim | — | FRED/Yahoo-ready local model for SOFR/EFFR/Fed-path-driven reinvestment scenarios |
 | Liquidity & Funding Stress | 🔴 Sim / local model | — | stress ladder and signal console designed for FRED/Yahoo/local-book inputs |

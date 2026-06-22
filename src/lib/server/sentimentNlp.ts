@@ -11,7 +11,7 @@
  *   2. Python FinBERT stage via NEWS_NLP_URL (enrichWithNlp below)        → "NLP"
  *   3. This heuristic scorer (scoreText)                                  → "heuristic"/SIM
  */
-import type { Headline, Sentiment } from "@/data/news";
+import type { Headline, Sentiment, EventCluster, AssetClass } from "@/data/news";
 
 const clamp = (s: number) => Math.max(-1, Math.min(1, s));
 
@@ -115,6 +115,66 @@ export async function enrichWithNlp(headlines: Headline[]): Promise<{ headlines:
     return { headlines: enriched, nlp: true };
   } catch {
     return { headlines, nlp: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+interface NlpCluster {
+  cluster_id: number;
+  title: string;
+  size: number;
+  avg_sentiment: number;
+  assetClass: AssetClass;
+  members: string[];
+}
+
+/**
+ * Tier 2 (NEWS-6) — transformer event clusters from the FinBERT stage when
+ * NEWS_NLP_URL is set (POST {headlines} → {clusters}). Display fields
+ * (first-seen, sources) are enriched from the local headlines by member id.
+ * Returns null when the service is absent/errors → caller uses keyword clustering.
+ */
+export async function fetchNlpClusters(headlines: Headline[]): Promise<EventCluster[] | null> {
+  const url = process.env.NEWS_NLP_URL;
+  if (!url || !headlines.length) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(`${url.replace(/\/$/, "")}/cluster`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ headlines: headlines.map((h) => ({ id: h.id, headline: h.headline, source: h.source, tickers: h.tickers })) }),
+      cache: "no-store",
+      signal: ctrl.signal,
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    const clusters: NlpCluster[] = Array.isArray(j?.clusters) ? j.clusters : [];
+    const byId = new Map(headlines.map((h) => [h.id, h]));
+    const mapped = clusters
+      .filter((c) => c.size >= 2)
+      .map((c): EventCluster => {
+        const mem = c.members.map((id) => byId.get(id)).filter((h): h is Headline => !!h);
+        const firstSeen = mem.length ? mem.reduce((min, h) => (h.time < min ? h.time : min), mem[0].time) : "";
+        const sources = [...new Set(mem.map((h) => h.source))].slice(0, 4);
+        const sentiment = Number(c.avg_sentiment.toFixed(2));
+        return {
+          id: `evt-nlp-${c.cluster_id}`,
+          title: c.title,
+          assetClass: c.assetClass,
+          relatedCount: c.size,
+          importance: Math.round(Math.min(99, 40 + c.size * 6 + Math.abs(sentiment) * 20)),
+          sentiment,
+          firstSeen,
+          summary: `${c.size} related headlines (FinBERT cluster); net sentiment ${sentiment >= 0 ? "+" : ""}${sentiment}. Lead: “${mem[0]?.headline ?? c.title}”.`,
+          sources,
+        };
+      })
+      .sort((a, b) => b.importance - a.importance);
+    return mapped.length ? mapped : null;
+  } catch {
+    return null;
   } finally {
     clearTimeout(timer);
   }
