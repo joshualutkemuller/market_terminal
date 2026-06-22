@@ -3,7 +3,7 @@ import { Rng } from "@/lib/rng";
 /** Data health, lineage and provider-readiness console. */
 
 export type ProviderStatus = "LIVE" | "CACHED" | "SIM" | "STALE" | "ERROR";
-export type ProviderName = "FRED" | "YAHOO" | "MACRO_ETL" | "SYNTHETIC" | "LOCAL_BOOK";
+export type ProviderName = "FRED" | "YAHOO" | "MACRO_ETL" | "NEWS_NLP" | "SYNTHETIC" | "LOCAL_BOOK";
 
 export interface ProviderHealth {
   provider: ProviderName;
@@ -19,7 +19,7 @@ export interface ProviderHealth {
 export interface ProviderRun {
   runId: string;
   provider: ProviderName;
-  pipeline: "econ_api" | "market_data_pipeline" | "macro_data_etl" | "terminal_fixture";
+  pipeline: "econ_api" | "market_data_pipeline" | "macro_data_etl" | "news_nlp" | "terminal_fixture";
   started: string;
   completed: string;
   durationMs: number;
@@ -119,6 +119,7 @@ export function getProviderHealth(): ProviderHealth[] {
     { provider: "FRED", status: "LIVE", coveragePct: 88, freshnessMin: 12, seriesCount: 142, failedSeries: 3, lastRun: "2026-06-18 09:10", upgradePath: "Keep as official macro source" },
     { provider: "YAHOO", status: "CACHED", coveragePct: 74, freshnessMin: 64, seriesCount: 96, failedSeries: 8, lastRun: "2026-06-18 08:18", upgradePath: "Replace with Polygon, Tiingo, FactSet or Bloomberg" },
     { provider: "MACRO_ETL", status: "LIVE", coveragePct: 82, freshnessMin: 180, seriesCount: 44, failedSeries: 2, lastRun: "2026-06-18 06:30", upgradePath: "Add BIS, IMF, CME browser fetch hardening" },
+    { provider: "NEWS_NLP", status: "SIM", coveragePct: 35, freshnessMin: 6, seriesCount: 12, failedSeries: 0, lastRun: "heuristic fallback", upgradePath: "Run the news_nlp FinBERT service and set NEWS_NLP_URL (else news/social providers + in-house lexicon)" },
     { provider: "LOCAL_BOOK", status: "SIM", coveragePct: 61, freshnessMin: 5, seriesCount: 38, failedSeries: 0, lastRun: "2026-06-18 09:17", upgradePath: "Connect custody, loan, margin and treasury books" },
     { provider: "SYNTHETIC", status: "LIVE", coveragePct: 100, freshnessMin: 0, seriesCount: 220, failedSeries: 0, lastRun: "deterministic", upgradePath: "Retain as explicit fallback provider" },
   ];
@@ -165,6 +166,12 @@ const PROVIDER_SERIES: Record<ProviderName, { id: string; dataset: string; name:
     { id: "loan_book", dataset: "desk_books", name: "Securities Lending Loan Book" },
     { id: "reinvestment_positions", dataset: "desk_books", name: "Cash Reinvestment Positions" },
   ],
+  NEWS_NLP: [
+    { id: "news_scored", dataset: "silver_nlp", name: "Headline Sentiment (FinBERT)" },
+    { id: "news_entities", dataset: "silver_nlp", name: "Entity / Ticker Extraction" },
+    { id: "news_clusters", dataset: "gold_nlp", name: "Event Clusters" },
+    { id: "social_sentiment", dataset: "silver_nlp", name: "Reddit / StockTwits Sentiment" },
+  ],
   SYNTHETIC: [
     { id: "demo_universe", dataset: "fallback_generators", name: "Demo Security Universe" },
     { id: "demo_books", dataset: "fallback_generators", name: "Demo Desk Books" },
@@ -180,6 +187,7 @@ export function getProviderRuns(): ProviderRun[] {
     { provider: "FRED", pipeline: "econ_api", runs: 5, base: 9100, partialEvery: 4 },
     { provider: "YAHOO", pipeline: "market_data_pipeline", runs: 6, base: 9050, partialEvery: 2 },
     { provider: "MACRO_ETL", pipeline: "macro_data_etl", runs: 5, base: 9000, partialEvery: 3 },
+    { provider: "NEWS_NLP", pipeline: "news_nlp", runs: 4, base: 8975 },
     { provider: "LOCAL_BOOK", pipeline: "terminal_fixture", runs: 4, base: 8950 },
     { provider: "SYNTHETIC", pipeline: "terminal_fixture", runs: 4, base: 8900 },
   ];

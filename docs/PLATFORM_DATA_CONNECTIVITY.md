@@ -32,7 +32,15 @@ Every module follows the same **provenance-first** contract:
 | `MARKET_DB_URL` / `MARKET_DATA_DIR` / `MARKET_PIPELINE_URL` | market-data pipeline resolver (DuckDB/Postgres, exported JSON, or the FastAPI service) |
 | `MARKET_LENS_URL` / `CHART_DB_URL` | Market Lens engine + chart series store |
 | `ANTHROPIC_API_KEY` | AI Copilot LLM |
+| `ALPHAVANTAGE_API_KEY` / `MARKETAUX_API_KEY` / `FINNHUB_API_KEY` / `NEWSAPI_API_KEY` | NEWS headline provider chain (first configured wins) |
+| `REDDIT_USER_AGENT` / `STOCKTWITS_ENABLED` / `STOCKTWITS_ACCESS_TOKEN` | NEWS-3 + SENT social feeds (Reddit / StockTwits) |
+| `NEWS_NLP_URL` | `news_nlp` FinBERT service — re-scores headlines (sentiment becomes `… + FinBERT`) |
 | `MARKET_CRON_*`, `CRON_SECRET`, `CRON_TARGET_URL` | scheduled market ingestion |
+
+### NLP layering (NEWS / SENT sentiment)
+
+Sentiment resolves best → fallback, each flipping the provenance badge:
+**provider-native** (Alpha Vantage / Marketaux) → **FinBERT** (`news_nlp` via `NEWS_NLP_URL`) → **in-house heuristic** (negation-aware finance lexicon, `src/lib/server/sentimentNlp.ts`) → **SIM**. The `news_nlp/` package (FinBERT + spaCy NER + event clustering) is scaffolded and runs on a lexicon fallback without the model stack.
 
 **Key takeaway:** the macro/funding surface (FRED) and the market surface (pipeline) are *already wired* — they need credentials/env, not new code. The gaps are the **behavioral, securities-finance, and internal-book** feeds.
 
@@ -59,8 +67,9 @@ Each external source, what it powers, and where it stands.
 | 3 | **Anthropic API** | AI Copilot | Paid | ✅ wired — set `ANTHROPIC_API_KEY` |
 | 4 | **AAII Investor Sentiment Survey** | SENT (index, survey, positioning, contrarian, divergence) | Free weekly CSV (`aaii.com`) | 🔴 ingest needed |
 | 5 | **NAAIM Exposure Index** | SENT (positioning, index) | Free weekly (`naaim.org`) | 🔴 ingest needed |
-| 6 | **Social APIs** — X (paid), Reddit (free, rate-limited), StockTwits | NEWS, SENT (social mood, divergence, ticker drill) | X $$, Reddit free, StockTwits free-ish + NLP (VADER/FinBERT) | 🔴 |
-| 7 | **News API** (headlines) | NEWS | Free/paid tiers | 🔴 |
+| 6 | **Social APIs** — Reddit (free, UA-gated), StockTwits (free-ish), X (paid) | NEWS-3, SENT (social mood, divergence, ticker drill) | Reddit/StockTwits adapters built (`socialProviders.ts`); set `REDDIT_USER_AGENT` / `STOCKTWITS_ENABLED` | 🟡 adapters wired |
+| 7 | **News headlines** — Alpha Vantage / Marketaux / Finnhub / NewsAPI | NEWS-1/2/5, header KPIs | Free/paid tiers; chain falls through | 🟡 chain wired — set a key |
+| 7b | **`news_nlp` FinBERT stage** — sentiment, NER, event clustering | NEWS sentiment + NEWS-6 clusters, SENT | Scaffolded (`news_nlp/`); run service + set `NEWS_NLP_URL` | 🟡 scaffolded |
 | 8 | **Options data** (CBOE put/call + skew) | SENT (put/call comp), SQZ | Free/paid | 🔴 |
 | 9 | **Securities-finance / short-interest vendor** (S&P Global, FIS Astec, exchange SI) | SQZ, SLAB | Paid | 🔴 |
 | 10 | **Fund flows** (ICI free; EPFR/Lipper paid) | SENT (positioning) | Mixed | 🔴 |
@@ -109,8 +118,8 @@ Each external source, what it powers, and where it stands.
 | Module | Data dependency | Status |
 |---|---|---|
 | AI · Copilot | Anthropic API | ✅ (set `ANTHROPIC_API_KEY`) |
-| SENT · Investor Sentiment | AAII + NAAIM + social + VIX (FRED) | 🟡 — VIX live; surveys & social needed |
-| NEWS · News & Signal Intel | news API + social APIs + NLP | 🔴 |
+| SENT · Investor Sentiment | AAII + NAAIM + social + VIX (FRED) | 🟡 — VIX live; social chain wired; surveys needed |
+| NEWS · News & Signal Intel | headline chain + social chain + `news_nlp` FinBERT | 🟡 — chains wired (need keys); FinBERT scaffolded; tape/narratives/attention recompute live |
 | ALRT · Alert Center | derived from all modules | live as sources connect |
 | DATAOPS · Data Ops | provider health (meta) | reflects the above |
 
@@ -146,7 +155,11 @@ Ordered by **coverage per unit of effort**:
 2. **Market pipeline** *(`MARKET_DB_URL` / `MARKET_PIPELINE_URL` + provider keys)* → all 7 MARKETS modules + LENS + MKC + the market side of HOME/DESK go from SNAPSHOT to live.
 3. **`ANTHROPIC_API_KEY`** *(minutes)* → AI Copilot.
 4. **AAII + NAAIM weekly CSV ingest** *(low effort, free)* → SENT survey/positioning fully live; most of the SENT index.
-5. **Social layer** — X / Reddit / StockTwits + NLP *(medium; X is paid)* → NEWS **and** SENT social (one integration, two modules). Start *persisting* it for SENT-6 divergence history.
+5. **News + social + NLP** — the chains are already built; finish them:
+   - set a **headline** key (`ALPHAVANTAGE_API_KEY` → Marketaux/Finnhub/NewsAPI) → NEWS tape/narratives/attention go live;
+   - set **social** env (`REDDIT_USER_AGENT`, `STOCKTWITS_ENABLED`) → NEWS-3 **and** SENT social (one integration, two modules);
+   - run the **`news_nlp` FinBERT** service and set `NEWS_NLP_URL` → upgrades heuristic sentiment to FinBERT and unlocks NEWS-6 clusters. Start *persisting* social for SENT-6 divergence history.
+   - All of the above surface in **DATAOPS** under the `NEWS_NLP` provider.
 6. **Options (CBOE)** → SENT put/call component + SQZ options fields.
 7. **Securities-finance / short-interest vendor** *(paid)* → SQZ and the live SLAB book.
 8. **Internal firm books + Gurobi** *(largest integration)* → FINANCE + OPTIMIZATION + DESK on real positions.
