@@ -23,6 +23,7 @@ import {
 } from "@/data/markets";
 import { bySymbol, type AssetClass } from "@/data/universe";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import type { ReturnBasis, SnapshotCard } from "@/data/marketPipeline";
 import { fmtNum, fmtInt, fmtAbbr, fmtSignedPct, pnlClass } from "@/lib/format";
 import { marketChartHref } from "@/components/charting/ChartLink";
@@ -218,7 +219,7 @@ export default function LiveMarkets() {
         title="Live Markets"
         desc="Real-time multi-asset monitor"
         asOf={asof || dataAsOf}
-        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} earliestAsOf={earliestAsOf} /><PipelineTag source={source} /></span>}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} earliestAsOf={earliestAsOf} /><PipelineTag source={source} asOf={dataAsOf} /></span>}
       />
 
       <KpiStrip>
@@ -466,6 +467,6 @@ function mergeIndexQuotes(base: IndexQuote[], cards: SnapshotCard[]): IndexQuote
   });
 }
 
-function PipelineTag({ source }: { source: MarketSource }) {
-  return <Tag tone={source === "DB" || source === "LIVE" || source === "FILE" ? "up" : "blue"}>{source === "LOADING" ? "SYNC" : source}</Tag>;
+function PipelineTag({ source, asOf }: { source: MarketSource; asOf?: string | null }) {
+  return <ProvenanceBadge source={source} asOf={asOf} />;
 }

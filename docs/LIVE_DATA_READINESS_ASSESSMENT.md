@@ -129,7 +129,7 @@ DataOps fixtures -> src/data/dataOps.ts -> /api/dataops/runs/page -> apparent li
 
 ## Freshness audit
 
-- Market JSON snapshots expose `asof` and currently indicate `2026-06-17` or `2026-06-18`. This is acceptable as a cache label, but not proof that a scheduler is running today.
+- Market JSON snapshots expose `asof` and currently indicate `2026-06-17` or `2026-06-18`. This is acceptable as a cache label, but not proof that a scheduler is running today. **Now surfaced:** the market modules (MKT, SNAP, QUILT, IRET) pass `asof` to the provenance badge, which classifies it via `classifyFreshness` (`src/lib/provenance.ts`) and shows an amber `Nd` once data is aging and a red `STALE · Nd` once it is stale — independent of the source tier, so a live-but-unrefreshed pipeline or an old committed snapshot no longer reads as current.
 - FRED economics pages can expose `DATA AS OF` from actual observations, but the fallback histories also produce dates and can be mistaken for real observations.
 - Macro ETL pages expose `as_of` for Fed probabilities, but global time-series JSON does not carry a top-level processing timestamp.
 - Seeded internal-book modules generally do not expose a real data observation date. Alerts use fixed generated timestamps around 2026-06-17 and should not be treated as live ops.

@@ -30,8 +30,8 @@ function Pct({ v, dp = 2 }: { v: number | null; dp?: number }) {
   return <span className={pnlClass(v)}>{fmtSignedPct(v * 100, dp)}</span>;
 }
 
-function PipeBadge({ source }: { source: MarketSource }) {
-  return <ProvenanceBadge source={source} />;
+function PipeBadge({ source, asOf }: { source: MarketSource; asOf?: string | null }) {
+  return <ProvenanceBadge source={source} asOf={asOf} />;
 }
 
 const TENOR_MONTHS: Record<string, number> = { "3M": 3, "2Y": 24, "5Y": 60, "10Y": 120, "30Y": 360 };
@@ -105,7 +105,7 @@ export default function MarketSnapshotPage() {
         title="Market Snapshot"
         desc="Cross-asset state of the market — market_data_pipeline"
         asOf={asof || dataAsOf || rv.asof || cross.asof || null}
-        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} earliestAsOf={earliestAsOf} /><PipeBadge source={source} /></span>}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} earliestAsOf={earliestAsOf} /><PipeBadge source={source} asOf={dataAsOf} /></span>}
       />
 
       <KpiStrip>

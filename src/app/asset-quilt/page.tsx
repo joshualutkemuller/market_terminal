@@ -40,7 +40,7 @@ export default function AssetQuiltPage() {
         title="Asset Quilt"
         desc="Annual ETF/index proxy return rank quilt"
         asOf={asof || bilello?.asof || null}
-        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={bilello?.asof} earliestAsOf={earliestAsOf} /><PipelineTag source={source} /></span>}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={bilello?.asof} earliestAsOf={earliestAsOf} /><PipelineTag source={source} asOf={bilello?.asof} /></span>}
       />
 
       <KpiStrip>
@@ -151,6 +151,6 @@ function prettyAssetClass(assetClass: string): string {
   return map[assetClass] ?? assetClass;
 }
 
-function PipelineTag({ source }: { source: MarketSource }) {
-  return <ProvenanceBadge source={source} />;
+function PipelineTag({ source, asOf }: { source: MarketSource; asOf?: string | null }) {
+  return <ProvenanceBadge source={source} asOf={asOf} />;
 }

@@ -61,6 +61,51 @@ export function provenanceMeta(source: string): ProvenanceMeta {
   return PROVENANCE_META[source as ProvenanceSource] ?? PROVENANCE_META.SIM;
 }
 
+/**
+ * Freshness of a dated observation, independent of its source tier. A live
+ * pipeline can still serve stale data (no recent ingestion), and a committed
+ * snapshot is fresh on the day it was cut — so freshness is classified from the
+ * `asOf` date, not the source. This is what stops an old snapshot from looking
+ * current (the "snapshot fallback can look current" risk in the readiness doc).
+ */
+export type Freshness = "FRESH" | "AGING" | "STALE" | "UNKNOWN";
+
+export interface FreshnessInfo {
+  status: Freshness;
+  /** Whole calendar days between `asOf` and now, or `null` if unparseable. */
+  ageDays: number | null;
+  /** Compact marker, e.g. "6d" or "STALE · 21d" (empty when fresh/unknown). */
+  label: string;
+  title: string;
+}
+
+/**
+ * Classify an `asOf` (YYYY-MM-DD or ISO) by age. Daily market closes tolerate a
+ * few days (weekends/holidays) before they are "aging"; defaults: fresh ≤ 4d,
+ * aging ≤ 10d, stale beyond that.
+ */
+export function classifyFreshness(
+  asOf: string | null | undefined,
+  opts: { freshDays?: number; agingDays?: number; now?: Date } = {}
+): FreshnessInfo {
+  const freshDays = opts.freshDays ?? 4;
+  const agingDays = opts.agingDays ?? 10;
+  if (!asOf) return { status: "UNKNOWN", ageDays: null, label: "", title: "No as-of date reported for this data." };
+  const ts = Date.parse(asOf.length <= 10 ? `${asOf}T00:00:00Z` : asOf);
+  if (!Number.isFinite(ts)) return { status: "UNKNOWN", ageDays: null, label: "", title: `Unparseable as-of date: ${asOf}` };
+  const now = opts.now ?? new Date();
+  const ageDays = Math.max(0, Math.floor((now.getTime() - ts) / 86_400_000));
+  if (ageDays <= freshDays) return { status: "FRESH", ageDays, label: "", title: `Data as of ${asOf} (${ageDays}d ago) — current.` };
+  if (ageDays <= agingDays) return { status: "AGING", ageDays, label: `${ageDays}d`, title: `Data as of ${asOf} (${ageDays}d ago) — aging; check upstream refresh.` };
+  return { status: "STALE", ageDays, label: `STALE · ${ageDays}d`, title: `Data as of ${asOf} (${ageDays}d ago) — stale; upstream has not refreshed.` };
+}
+
+/** Tailwind classes for the non-fresh freshness states: [pill, dot]. */
+export const FRESHNESS_TONE_CLASS: Record<"AGING" | "STALE", { pill: string; dot: string }> = {
+  AGING: { pill: "border-term-amber/40 bg-term-amber/10 text-term-amber", dot: "bg-term-amber" },
+  STALE: { pill: "border-term-down/40 bg-term-down/10 text-term-down", dot: "bg-term-down" },
+};
+
 /** Tailwind classes for each tone: [pill border+bg+text, dot bg]. */
 export const PROVENANCE_TONE_CLASS: Record<ProvenanceTone, { pill: string; dot: string }> = {
   live: { pill: "border-term-up/40 bg-term-up/10 text-term-up", dot: "bg-term-up animate-blink" },

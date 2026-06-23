@@ -77,7 +77,7 @@ export default function IndexReturnAnalyticsPage() {
         title="Index Return Analytics"
         desc="Monthly return matrix, annual totals and intra-year drawdowns"
         asOf={asof || liveData?.asof || null}
-        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={liveData?.asof} earliestAsOf={earliestAsOf} /><PipelineTag source={source} /></span>}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={liveData?.asof} earliestAsOf={earliestAsOf} /><PipelineTag source={source} asOf={liveData?.asof} /></span>}
       />
 
       <KpiStrip>
@@ -159,6 +159,6 @@ export default function IndexReturnAnalyticsPage() {
   );
 }
 
-function PipelineTag({ source }: { source: MarketSource }) {
-  return <ProvenanceBadge source={source} />;
+function PipelineTag({ source, asOf }: { source: MarketSource; asOf?: string | null }) {
+  return <ProvenanceBadge source={source} asOf={asOf} />;
 }
