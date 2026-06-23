@@ -20,10 +20,15 @@ export function fredEnabled(): boolean {
 }
 
 /**
- * `revalidateSec` controls both the Next Data Cache and our in-memory TTL.
- * Deep daily history (e.g. the curve point-in-time) only changes at its recent
- * tail once a day, so callers pass a long window to cache it over time and avoid
- * re-pulling decades of observations on every request.
+ * `revalidateSec` controls the in-memory TTL below. Deep daily history (e.g. the
+ * curve point-in-time) only changes at its recent tail once a day, so callers
+ * pass a long window to cache it over time and avoid re-pulling decades of
+ * observations on every request.
+ *
+ * The cache is a plain module-level `Map`, portable across runtimes (the
+ * dev-server middleware and the standalone production server). It is not a
+ * Next.js Data Cache — the previous `next: { revalidate }` fetch option was a
+ * no-op outside Next and has been removed.
  */
 async function fredGet<T>(path: string, params: Record<string, string>, revalidateSec = DEFAULT_REVALIDATE): Promise<T> {
   const key = process.env.FRED_API_KEY;
@@ -33,7 +38,7 @@ async function fredGet<T>(path: string, params: Record<string, string>, revalida
   const cached = cache.get(url);
   if (cached && Date.now() - cached.at < cached.ttlMs) return cached.data as T;
 
-  const res = await fetch(url, { next: { revalidate: revalidateSec } } as RequestInit);
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`FRED ${res.status}: ${await res.text().catch(() => res.statusText)}`);
   const data = (await res.json()) as T;
   cache.set(url, { at: Date.now(), ttlMs: revalidateSec * 1000, data });

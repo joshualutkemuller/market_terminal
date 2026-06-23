@@ -6,7 +6,10 @@
   "description": "Securities Finance Intelligence Platform — a Bloomberg-style operating system for Securities Lending, Prime Finance, Collateral & Cash Optimization, Sources & Uses Matching, Treasury Analytics and AI decision support.",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "vite build",
+    "build:server": "vite build --ssr src/server/index.ts --outDir dist-server",
+    "start": "node dist-server/index.js",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",

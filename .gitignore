@@ -5,6 +5,7 @@
 
 # vite
 /dist/
+/dist-server/
 /.vite/
 
 # production
