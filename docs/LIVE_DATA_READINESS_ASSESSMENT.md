@@ -42,7 +42,7 @@ The `/api/*` endpoints in this audit are standard Web `Request → Response` han
 | QUILT | `/asset-quilt` | Market pipeline Bilello/quilt JSON/API | `/api/market/bilello` | 60% if configured | 0% — `/api` 404 → snapshot | Snapshot fallback |
 | IRET | `/index-returns` | Market pipeline index returns | `/api/market/index-returns` | 60% if configured | 0% — `/api` 404 → snapshot | Snapshot fallback |
 | LENS | `/market-lens` | Optional Market Lens backend else embedded config/snapshot | `/api/market-lens` | 35% | 0% — `/api` 404 → snapshot | Snapshot fallback flagged, but analysis can appear live |
-| MKC | `/market-chart` | Chart API from catalog/econ/market histories | `/api/chart/series` | 45% | 0% — `/api/chart/series` 404 → empty charts (resolver returns ERR, no client fallback) | Synthetic chart histories when source is synthetic |
+| MKC | `/market-chart` | Chart API from catalog/econ/market histories | `/api/chart/series` | 45% | 0% — `/api/chart/series` 404; now shows an explicit `DATA UNAVAILABLE` notice + `ERR` badge instead of a silently blank chart | Synthetic chart histories when source is synthetic |
 | SLAB | `/securities-lending` | Seeded domain generator | local `src/data/securitiesLending.ts` | 0% | = dev (local fixture) | Appears like loan/inventory book |
 | SQZ | `/securities-lending/squeeze` | Seeded squeeze board | local `src/data/squeeze.ts` | 0% | = dev (local fixture) | Page labels SIM, but metrics look operational |
 | PB | `/prime-finance` | Seeded hedge-fund/client exposures | local `src/data/primeFinance.ts` | 0% | = dev (local fixture) | High false-live risk |
@@ -66,7 +66,7 @@ The `/api/*` endpoints in this audit are standard Web `Request → Response` han
 | EML | `/economics/ml` | Deterministic model outputs | local `econModels.ts` | 10% | = dev (local import, no `/api`) | ML outputs are not trained/live scored |
 | SFE | `/economics/sec-finance` | Macro-to-sec-finance local model | local/API | 20% | ≈0% live — API part 404, local model remains | Desk impacts simulated |
 | FUND | `/economics/funding` | Macro funding indicators + local desk data | local/API | 30% | ≈0% live — API part 404, local data remains | Actual funding books absent |
-| MGC/MOTN | chart/motion routes | Econ/market chart series (`useChartSeries`) | `/api/chart/series` | 45% | 0% — `/api/chart/series` 404 → empty charts (resolver returns ERR, no client fallback) | Depends on upstream source per series |
+| MGC/MOTN | chart/motion routes | Econ/market chart series (`useChartSeries`) | `/api/chart/series` | 45% | 0% — `/api/chart/series` 404; now shows an explicit `DATA UNAVAILABLE` notice + `ERR` badge instead of a silently blank chart | Depends on upstream source per series |
 | NEWS | `/news` | Optional providers else deterministic engine | `/api/news` | 20% | 0% — `/api` 404 → deterministic engine | Page states SIM by default |
 | SENT | `/sentiment` | Deterministic survey/social + possible VIX/FRED | `/api/social`, FRED | 15% | 0% — `/api` 404 → deterministic | AAII/NAAIM/social are simulated |
 | AI | `/copilot` | Optional LLM over local context else keyword fallback | `/api/copilot` | 15% | 0% — `/api` 404 → keyword fallback | Responses can summarize fixture data |
@@ -129,7 +129,7 @@ DataOps fixtures -> src/data/dataOps.ts -> /api/dataops/runs/page -> apparent li
 
 ## Freshness audit
 
-- Market JSON snapshots expose `asof` and currently indicate `2026-06-17` or `2026-06-18`. This is acceptable as a cache label, but not proof that a scheduler is running today.
+- Market JSON snapshots expose `asof` and currently indicate `2026-06-17` or `2026-06-18`. This is acceptable as a cache label, but not proof that a scheduler is running today. **Now surfaced:** the market modules (MKT, SNAP, QUILT, IRET) pass `asof` to the provenance badge, which classifies it via `classifyFreshness` (`src/lib/provenance.ts`) and shows an amber `Nd` once data is aging and a red `STALE · Nd` once it is stale — independent of the source tier, so a live-but-unrefreshed pipeline or an old committed snapshot no longer reads as current.
 - FRED economics pages can expose `DATA AS OF` from actual observations, but the fallback histories also produce dates and can be mistaken for real observations.
 - Macro ETL pages expose `as_of` for Fed probabilities, but global time-series JSON does not carry a top-level processing timestamp.
 - Seeded internal-book modules generally do not expose a real data observation date. Alerts use fixed generated timestamps around 2026-06-17 and should not be treated as live ops.
@@ -246,7 +246,7 @@ These scores assume the dev environment where `/api/*` routes resolve. The "Prod
 
 | Severity | Surface | Why it appears live | Reality | Fix |
 |---:|---|---|---|---|
-| 10 | Sidebar/status chrome | Displays `LIVE`/feed-live language | Status can be unrelated to module data lineage | Gate global live claim on provider manifests |
+| ~~10~~ → 3 | Sidebar/status chrome | ~~Always-green `FEED LIVE` + fabricated `KAFKA 8.2k msg/s` / `WS 14 streams`~~ | **Fixed:** `StatusBar` now derives `FEED LIVE/PARTIAL/SIM` from the real `useProviderHealth` probe (same source as the `DATA x/y LIVE` badge), and the Kafka/WS telemetry is muted and labelled `· SIM`. Residual: copy still mentions streaming. | Remaining streaming language to be removed if no bus is added |
 | 10 | DataOps provider fixtures | `getProviderHealth()` hardcodes FRED/MACRO_ETL as LIVE and synthetic as LIVE | `/api/dataops/health` may say SIM/CACHED | Remove fixture truth from production page |
 | 10 | Internal-book modules | Tables show borrowers, margin, cash, alerts, optimization runs | Seeded `Rng` generators | Add `SIMULATED BOOK` watermark and block production use |
 | 9 | Macro regime | Factors labelled FRED/YAHOO/LOCAL | Values are static arrays | Pull factors from source APIs or relabel simulated |
