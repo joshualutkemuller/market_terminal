@@ -104,26 +104,31 @@ function mergeByProvider<T extends { provider?: ProviderName; source?: ProviderN
   return [...liveRows, ...base.filter((r) => !liveProviders.has(r.provider ?? r.source))];
 }
 
+type ProviderRow = ProviderHealth & { verified: boolean };
+
 export default function DataOpsPage() {
   const baseProviders = getProviderHealth();
   const probe = useProviderHealth();
-  // Overlay the live probe onto the fixture baseline (status, freshness, detail).
-  const providers = useMemo(
+  // Status is driven by the real /api/dataops/health probe. Until the probe
+  // confirms a provider it is shown UNVERIFIED — the seeded fixture status is
+  // never presented as a live claim (no more hardcoded "FRED LIVE").
+  const providers = useMemo<ProviderRow[]>(
     () =>
       baseProviders.map((p) => {
         const h = probe.health?.[p.provider];
-        if (!h) return p;
+        if (!h) return { ...p, verified: false };
         return {
           ...p,
           status: h.status,
           freshnessMin: h.live ? 0 : p.freshnessMin,
           lastRun: probe.probedAt ? `probed ${probe.probedAt.slice(11, 19)}` : p.lastRun,
           upgradePath: h.detail || p.upgradePath,
+          verified: true,
         };
       }),
     [baseProviders, probe]
   );
-  const providersLive = providers.filter((p) => p.status === "LIVE").length;
+  const providersLive = providers.filter((p) => p.verified && p.status === "LIVE").length;
 
   // Live ingestion runs/series/lineage from the market pipeline manifest (else fixtures).
   const live = useLiveRuns();
@@ -149,9 +154,20 @@ export default function DataOpsPage() {
   const selectedIssue = issues.find((i) => i.id === selectedIssueId) ?? issues[0];
   const selectedLineage = lineage.find((l) => l.runId === selectedLineageId) ?? lineage[0];
 
-  const providerCols: Column<ProviderHealth>[] = [
+  const providerCols: Column<ProviderRow>[] = [
     { key: "provider", header: "Provider", render: (r) => <span className="font-semibold text-term-text">{r.provider}</span>, sortVal: (r) => r.provider },
-    { key: "status", header: "Status", align: "center", render: (r) => <Tag tone={STATUS_TONE[r.status]}>{r.status}</Tag>, sortVal: (r) => r.status },
+    {
+      key: "status",
+      header: "Status",
+      align: "center",
+      render: (r) =>
+        r.verified ? (
+          <Tag tone={STATUS_TONE[r.status]}>{r.status}</Tag>
+        ) : (
+          <Tag tone="neutral"><span title="Not confirmed — /api/dataops/health probe unavailable or not yet returned">UNVERIFIED</span></Tag>
+        ),
+      sortVal: (r) => (r.verified ? r.status : "ZZZ"),
+    },
     { key: "coverage", header: "Coverage", width: "130px", render: (r) => <ProgressBar value={r.coveragePct} color={r.coveragePct < 65 ? "#FF3B3B" : r.coveragePct < 80 ? "#FF8C00" : "#2ECC71"} showPct />, sortVal: (r) => r.coveragePct },
     { key: "fresh", header: "Fresh", align: "right", render: (r) => <span className="text-term-text-dim">{r.freshnessMin === 0 ? "now" : `${fmtInt(r.freshnessMin)}m`}</span>, sortVal: (r) => r.freshnessMin },
     { key: "series", header: "Series", align: "right", render: (r) => <span className="text-term-text">{fmtInt(r.seriesCount)}</span>, sortVal: (r) => r.seriesCount },
@@ -238,7 +254,10 @@ export default function DataOpsPage() {
       </KpiStrip>
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-12">
-        <Panel title="Provider Health" code="PROV" className="xl:col-span-12" right={<span className="flex items-center gap-2"><Tag tone={probe.health ? "blue" : "neutral"}>{probe.health && probe.probedAt ? `LIVE PROBE ${probe.probedAt.slice(11, 19)}` : "FIXTURES"}</Tag><button className="term-btn" onClick={() => downloadJson("dataops_providers", providers)}>Download</button></span>}>
+        <Panel title="Provider Health" code="PROV" className="xl:col-span-12" right={<span className="flex items-center gap-2"><Tag tone={probe.health ? "blue" : "neutral"}>{probe.health && probe.probedAt ? `LIVE PROBE ${probe.probedAt.slice(11, 19)}` : "PROBING…"}</Tag><button className="term-btn" onClick={() => downloadJson("dataops_providers", providers)}>Download</button></span>}>
+          <div className="px-3 py-1 text-3xs text-term-text-mute">
+            <span className="font-semibold">Status</span> is verified live by <span className="font-mono">/api/dataops/health</span> (FRED makes a real call); <span className="font-semibold">UNVERIFIED</span> = probe hasn't confirmed it. Coverage / Fresh / Series / Failed are illustrative targets, not live metrics.
+          </div>
           <DataGrid columns={providerCols} rows={providers} rowKey={(r) => r.provider} selectedKey={selectedProvider} onRowClick={(r) => {
             setSelectedProvider(r.provider);
             setSelectedRunId(runs.find((run) => run.provider === r.provider)?.runId ?? selectedRunId);
