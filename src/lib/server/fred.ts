@@ -70,8 +70,21 @@ async function fredGet<T>(path: string, params: Record<string, string>, revalida
   const cached = cache.get(url);
   if (cached && Date.now() - cached.at < cached.ttlMs) return cached.data as T;
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`FRED ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    // Network-level failure (blocked egress, DNS, proxy, TLS). The econ routes
+    // swallow this and fall back to SIM, so log it loudly here — it shows up in
+    // the `npm run dev` / server terminal as the real reason econ went SIM.
+    console.warn(`[fred] network error calling ${path}: ${(err as Error).message}`);
+    throw err;
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => res.statusText);
+    console.warn(`[fred] ${path} → HTTP ${res.status}: ${body.slice(0, 200)}`);
+    throw new Error(`FRED ${res.status}: ${body}`);
+  }
   const data = (await res.json()) as T;
   cache.set(url, { at: Date.now(), ttlMs: revalidateSec * 1000, data });
   return data;
