@@ -4,7 +4,7 @@ Audit date: 2026-06-22. Scope: Vite + React terminal, market data pipeline, macr
 
 ## Executive verdict
 
-The terminal is **not yet an institutional live-data platform**. It is a strong terminal prototype with partial live upgrade paths. The only consistently live-capable foundations are: FRED-backed economics APIs when `FRED_API_KEY` is present; market pipeline views when `MARKET_DB_URL`, `MARKET_DATA_DIR`, or `MARKET_PIPELINE_URL` are configured; and optional news/NLP services when provider keys or `NEWS_NLP_URL` are configured. Most securities-finance, optimization, cash, prime, collateral, liquidity, alerting, sentiment, and copilot workflows are deterministic fixtures generated from seeded local functions.
+The terminal is **not yet an institutional live-data platform**. It is a strong terminal prototype with partial live upgrade paths. The only consistently live-capable foundations are: FRED-backed economics APIs when `FRED_API_KEY` is present; market pipeline views when `MARKET_DB_URL`, `MARKET_DATA_DIR`, or `MARKET_PIPELINE_URL` are configured; and optional news/NLP services when provider keys or `NEWS_NLP_URL` are configured — and even these are reachable only in local development, because the `/api/*` handlers are served by a Vite dev plugin and are not deployed by a default `vite build` (see "API serving model: dev plugin vs. production deploy"). Most securities-finance, optimization, cash, prime, collateral, liquidity, alerting, sentiment, and copilot workflows are deterministic fixtures generated from seeded local functions.
 
 The primary risk is **false-live perception**: global chrome says `LIVE`, DataOps fixtures report providers as live, and some modules label generated values as `FRED`, `YAHOO`, `LOCAL`, or `LIVE` without verifying an upstream observation at render time.
 
@@ -18,6 +18,15 @@ The primary risk is **false-live perception**: global chrome says `LIVE`, DataOp
 - Macro ETL ships committed JSON exports and has CME/IMF fallback logic; CME FedWatch can be deterministic when public CME access fails.
 - News and social intelligence are explicitly deterministic unless external keys/services are configured.
 - Internal books are not connected. Securities lending, prime finance, collateral, cash, reinvestment, liquidity, sources/uses, and most optimization outputs are seeded generated data.
+
+## API serving model: dev plugin vs. production deploy
+
+The `/api/*` endpoints in this audit are not framework-native routes; how they are served differs sharply between local development and a default production build, and this gap caps real live coverage below the per-module numbers below.
+
+- **Development:** `src/app/api/**/route.ts` handlers run via a custom Vite plugin (`vite-plugins/dev-api.ts`) that walks the `app/api` tree and mirrors Next-style file-system routing (`[view]` → `:view`). Routes work end-to-end under `npm run dev`, so the coverage figures in this document reflect the dev environment.
+- **Production build:** `npm run build` is `vite build`, which emits a static SPA to `dist/`. The Vite dev plugin does not run in `build`/`preview`, and nothing else bundles `src/app/api/**/route.ts` into deployable functions. A stock `dist/` deploy therefore serves the SPA only; every `/api/*` request 404s and client hooks (e.g. `useMarketView` in `src/lib/useMarket.ts`) silently fall back to committed snapshots/fixtures. **Net effect: in a default production deploy, live coverage for all API-backed modules collapses to the snapshot/fixture baseline regardless of `FRED_API_KEY`, `MARKET_DB_URL`, or `MARKET_PIPELINE_URL`.**
+- **Documented vs. actual target:** the README and `src/app/api/cron/refresh/route.ts` describe a Vercel serverless deployment — `vercel.json` cron, `CRON_SECRET`, `MARKET_DB_URL` on Vercel, "any free Next.js host works with zero configuration." None of this is wired: there is no `vercel.json`, no root `/api` directory (Vercel's function convention), and no Next.js dependency. The handlers also still use Next-only fetch extensions (`src/lib/server/fred.ts:36` passes `next: { revalidate }`, a no-op outside Next), confirming an incomplete Next→Vite migration.
+- **Closing the gap requires** either adding a Vercel-compatible function layout plus `vercel.json` (and replacing the `next: { revalidate }` caching with a portable cache), hosting the route handlers behind a small standalone server, or reframing the app as snapshot-first and dropping the live-deploy language. Until one of these lands, treat the "X% if configured" figures as **dev-only** ceilings.
 
 ## Repository discovery inventory
 
@@ -66,7 +75,7 @@ The primary risk is **false-live perception**: global chrome says `LIVE`, DataOp
 
 | API/service | Purpose | Upstreams | Refresh/update behavior | Readiness |
 |---|---|---|---|---|
-| `/api/market/[view]` | Serves market snapshots/views | DB, exported files, FastAPI, committed JSON | Request-time lookup; no scheduler in route handler | Best pattern; production-ready shape, source-dependent |
+| `/api/market/[view]` | Serves market snapshots/views | DB, exported files, FastAPI, committed JSON | Request-time lookup; no scheduler in route handler | Best pattern by shape, but only served by the Vite dev plugin — not deployed in a default `vite build` (see "API serving model") |
 | `/api/econ/*` | FRED-backed economics series, curve, indicators, stats, calendar | FRED if key, local simulated histories otherwise | Request-time fetch/cache behavior in server FRED library | Useful but fallback transparency must be stricter |
 | `/api/dataops/health` | Actual runtime provider probe | env vars, service health URLs | Request-time probes | Good operational truth source |
 | `/api/dataops/runs` | Lineage/runs | fixture data + optional manifests | mostly fixture | Not authoritative |
