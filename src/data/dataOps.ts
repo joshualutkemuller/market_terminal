@@ -116,9 +116,12 @@ export interface DataOpsSummary {
 
 export function getProviderHealth(): ProviderHealth[] {
   return [
-    { provider: "FRED", status: "LIVE", coveragePct: 88, freshnessMin: 12, seriesCount: 142, failedSeries: 3, lastRun: "2026-06-18 09:10", upgradePath: "Keep as official macro source" },
+    // Seed statuses are intentionally NOT "LIVE" — provider liveness is verified
+    // at runtime by /api/dataops/health (the DataOps page overlays the real
+    // probe and shows UNVERIFIED for any provider the probe hasn't confirmed).
+    { provider: "FRED", status: "FALLBACK_AVAILABLE", coveragePct: 88, freshnessMin: 12, seriesCount: 142, failedSeries: 3, lastRun: "2026-06-18 09:10", upgradePath: "Keep as official macro source" },
     { provider: "YAHOO", status: "CACHED", coveragePct: 74, freshnessMin: 64, seriesCount: 96, failedSeries: 8, lastRun: "2026-06-18 08:18", upgradePath: "Replace with Polygon, Tiingo, FactSet or Bloomberg" },
-    { provider: "MACRO_ETL", status: "LIVE", coveragePct: 82, freshnessMin: 180, seriesCount: 44, failedSeries: 2, lastRun: "2026-06-18 06:30", upgradePath: "Add BIS, IMF, CME browser fetch hardening" },
+    { provider: "MACRO_ETL", status: "FALLBACK_AVAILABLE", coveragePct: 82, freshnessMin: 180, seriesCount: 44, failedSeries: 2, lastRun: "2026-06-18 06:30", upgradePath: "Add BIS, IMF, CME browser fetch hardening" },
     { provider: "NEWS_NLP", status: "SIM", coveragePct: 35, freshnessMin: 6, seriesCount: 12, failedSeries: 0, lastRun: "heuristic fallback", upgradePath: "Run the news_nlp FinBERT service and set NEWS_NLP_URL (else news/social providers + in-house lexicon)" },
     { provider: "LOCAL_BOOK", status: "SIM", coveragePct: 61, freshnessMin: 5, seriesCount: 38, failedSeries: 0, lastRun: "2026-06-18 09:17", upgradePath: "Connect custody, loan, margin and treasury books" },
     { provider: "SYNTHETIC", status: "FALLBACK_AVAILABLE", coveragePct: 100, freshnessMin: 0, seriesCount: 220, failedSeries: 0, lastRun: "deterministic", upgradePath: "Retain as explicit fallback provider; never count as live" },
