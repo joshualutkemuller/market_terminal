@@ -81,7 +81,7 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
     if (parsed.showSeasonality) setShowSeasonality(parsed.showSeasonality);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { axis, series, loading } = useChartSeries(refs, range, transform);
+  const { axis, series, loading, failed } = useChartSeries(refs, range, transform);
 
   const byId = useMemo(() => new Map(catalog.map((c) => [c.id, c])), [catalog]);
 
@@ -272,7 +272,11 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
   const mainSeries = candles ? allSeries.slice(1) : allSeries;
 
   const yFmt = transformFmt(transform);
-  const sources = Array.from(new Set(series.map((s) => s.source)));
+  // Include failed refs' sources (e.g. ERR) so the provenance is visible even
+  // when those series dropped out of `series` for contributing no axis points.
+  const sources = Array.from(new Set([...series.map((s) => s.source), ...failed.map((f) => f.source)]));
+  const showUnavailable = !loading && failed.length > 0;
+  const failedLabels = failed.map((f) => byId.get(f.ref.id)?.label ?? f.label).join(", ");
 
   const btn = "rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide transition-colors";
 
@@ -298,6 +302,20 @@ export function ChartStudio({ code, title, desc, catalog, defaultRefs, allowChar
         <Stat label="Points" value={axis.length} sub={loading ? "loading…" : "observations"} tone={axis.length ? "up" : "neutral"} />
         <Stat label="Sources" value={sources.join(", ") || "—"} sub="provenance" />
       </KpiStrip>
+
+      {showUnavailable && (
+        <div
+          className="mx-2 mt-2 flex items-center gap-2 rounded-sm border border-term-down/40 bg-term-down/10 px-2 py-1 text-3xs font-semibold text-term-down"
+          title="The chart series endpoint (/api/chart/series) did not return data. On a static-only deploy there is no API layer — serve via `npm start`. Otherwise the upstream source is unavailable."
+          role="status"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-term-down" />
+          DATA UNAVAILABLE
+          <span className="font-normal text-term-text-dim">
+            {series.length === 0 ? "no series resolved" : "partial"} — {failedLabels}
+          </span>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-term-border bg-term-panel px-3 py-1.5">

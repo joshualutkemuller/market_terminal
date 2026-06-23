@@ -15,6 +15,14 @@ export interface ChartData {
   axis: string[]; // ISO dates, ascending
   series: ResolvedSeries[];
   loading: boolean;
+  /**
+   * Refs that resolved to no usable data — a resolver/network error (`ERR`,
+   * e.g. `/api/chart/series` unreachable on a static-only deploy) or an empty
+   * observation set. Surfaced so the studio can show an explicit "unavailable"
+   * state instead of a silently blank chart; failed series are otherwise
+   * dropped from `series` because they contribute no axis dates.
+   */
+  failed: { ref: SeriesRef; label: string; source: string }[];
 }
 
 interface RawSeries {
@@ -105,5 +113,14 @@ export function useChartSeries(refs: SeriesRef[], range: RangePreset, transform:
     return { axis, series };
   }, [raw, range, transform]);
 
-  return { axis, series, loading };
+  // A ref failed when the resolver flagged it ERR or it carries no real points.
+  const failed = useMemo(
+    () =>
+      raw
+        .filter((r) => r.source === "ERR" || !r.obs.some((o) => o.value != null))
+        .map((r) => ({ ref: r.ref, label: r.label, source: r.source })),
+    [raw]
+  );
+
+  return { axis, series, loading, failed };
 }

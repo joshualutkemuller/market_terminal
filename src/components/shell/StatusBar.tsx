@@ -25,6 +25,10 @@ export function StatusBar() {
     ? entries.map(([k, v]) => `${k}: ${v.status} — ${v.detail}`).join("\n") + (probe.probedAt ? `\n\nprobed ${probe.probedAt.slice(11, 19)}` : "")
     : "Probing data providers…";
 
+  // Feed indicator reflects the same real provider probe as DATA, instead of a
+  // hardcoded green "LIVE" — there is no live tick stream in this build.
+  const feedLabel = !probe.health ? "···" : liveCount === 0 ? "SIM" : liveCount === total ? "LIVE" : "PARTIAL";
+
   const tz = (label: string, offset: number) => {
     if (!now) return "--:--:--";
     const d = new Date(now.getTime() + offset * 3600 * 1000);
@@ -34,8 +38,8 @@ export function StatusBar() {
   return (
     <footer className="flex h-6 shrink-0 items-center justify-between border-t border-term-border bg-term-panel px-3 text-3xs text-term-text-dim">
       <div className="flex items-center gap-4">
-        <span className="flex items-center gap-1.5 font-semibold text-term-up">
-          <span className="h-1.5 w-1.5 rounded-full bg-term-up animate-blink" /> FEED LIVE
+        <span className={clsx("flex items-center gap-1.5 font-semibold", dataText)} title={dataTitle}>
+          <span className={clsx("h-1.5 w-1.5 rounded-full", dataDot, feedLabel === "LIVE" && "animate-blink")} /> FEED {feedLabel}
         </span>
         <span className={clsx("flex items-center gap-1.5 font-semibold", dataText)} title={dataTitle}>
           <span className={clsx("h-1.5 w-1.5 rounded-full", dataDot)} /> DATA {probe.health ? `${liveCount}/${total} LIVE` : "···"}
@@ -46,8 +50,8 @@ export function StatusBar() {
         <span className="hidden tnum text-term-text-mute lg:inline">{tz("TKY", 9)}</span>
       </div>
       <div className="flex items-center gap-4">
-        <span className="tnum">KAFKA <span className="text-term-up">●</span> 8.2k msg/s</span>
-        <span className="tnum">WS <span className="text-term-up">●</span> 14 streams</span>
+        <span className="tnum text-term-text-mute" title="Illustrative — no streaming bus is wired in this build">KAFKA <span className="text-term-text-mute">●</span> 8.2k msg/s · SIM</span>
+        <span className="tnum text-term-text-mute" title="Illustrative — no live websocket streams in this build">WS <span className="text-term-text-mute">●</span> 14 streams · SIM</span>
         {critical > 0 && <span className="tnum font-semibold text-term-down">⚠ {critical} CRIT</span>}
         {high > 0 && <span className="tnum text-term-amber">{high} HIGH</span>}
         <span className="tnum text-term-text-mute">SFX-TERM v0.1.0</span>
