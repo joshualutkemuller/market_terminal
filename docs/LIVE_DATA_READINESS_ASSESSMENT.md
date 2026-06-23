@@ -32,44 +32,46 @@ The `/api/*` endpoints in this audit are not framework-native routes; how they a
 
 ### Frontend modules and data origins
 
-| Code | Route | Actual data origin | Endpoint/path | Live coverage | Simulation/staleness risk |
-|---|---|---|---|---:|---|
-| HOME | `/` | Aggregates local data modules and snapshots | local imports/API hooks | 20% | High: broad KPI surface from fixture domains |
-| MKT | `/markets` | Market pipeline API chain | `/api/market/market` | 60% if configured; 0% otherwise | Committed 2026-06-17 snapshot fallback |
-| SNAP | `/market-snapshot` | Market pipeline snapshots | `/api/market/market`, cross-asset | 60% if configured | Snapshot fallback can look current |
-| QUILT | `/asset-quilt` | Market pipeline Bilello/quilt JSON/API | `/api/market/bilello` | 60% if configured | Snapshot fallback |
-| IRET | `/index-returns` | Market pipeline index returns | `/api/market/index-returns` | 60% if configured | Snapshot fallback |
-| LENS | `/market-lens` | Optional Market Lens backend else embedded config/snapshot | `/api/market-lens` | 35% | Snapshot fallback flagged, but analysis can appear live |
-| MKC | `/market-chart` | Chart API from catalog/econ/market histories | `/api/chart/series` | 45% | Synthetic chart histories when source is synthetic |
-| SLAB | `/securities-lending` | Seeded domain generator | local `src/data/securitiesLending.ts` | 0% | Appears like loan/inventory book |
-| SQZ | `/securities-lending/squeeze` | Seeded squeeze board | local `src/data/squeeze.ts` | 0% | Page labels SIM, but metrics look operational |
-| PB | `/prime-finance` | Seeded hedge-fund/client exposures | local `src/data/primeFinance.ts` | 0% | High false-live risk |
-| COLL | `/collateral` | Seeded margin/collateral book | local `src/data/collateral.ts` | 0% | High false-live risk |
-| CASH | `/cash-optimizer` | Seeded treasury sources/uses | local `src/data/cash.ts` | 0% | High false-live risk |
-| REINV | `/reinvestment` | Seeded reinvestment portfolio | local `src/data/reinvestment.ts` | 0% | High false-live risk |
-| LIQ | `/liquidity` | Seeded liquidity ladder + partly macro labels | local `src/data/liquidity.ts` | 5% | Local/funding data are generated |
-| SXU | `/sources-uses` | Seeded matching engine | local `src/data/sourcesUses.ts` | 0% | All matching is simulated |
-| OPT | `/optimization` | Seeded solver runs/trades | local `src/data/optimization.ts` | 0% | No real solver persistence observed |
-| DESK | `/trading-desk` | Local trading scorecards | local data | 10% | Mostly fixture analytics |
-| ECON | `/economics` | FRED API overlay on simulated fallback | `/api/econ/indicators`, local histories | 55% with key | History panel explicitly SIM |
-| CURV | `/economics/curve` | FRED curve API else simulated curve | `/api/econ/curve`, `/curve-history` | 60% with key | Fallback silent at endpoint level except source field |
-| INFL | `/economics/inflation` | Local econ series + market inflation snapshot | local/API | 45% | Mixed static/sim/live |
-| GCPI | `/economics/global-cpi` | Committed macro ETL JSON | `src/data/etl/*` | 20% | ETL JSON is cached snapshot |
-| GPOL | `/economics/policy-rates` | Committed macro ETL JSON | `policy_rate_timeseries.json` | 20% | Cached/demo risk |
-| CRDT | `/economics/credit` | FRED spreads if available + fallback constants | FRED/local | 55% | Fallback values used per series |
-| FOMC | `/economics/rates` | Macro ETL Fed probabilities or deterministic fallback | `fed_probabilities.json`, CME ETL | 25% | CME fallback explicitly deterministic |
-| CAL | `/economics/calendar` | FRED release/calendar approximation else SIM | `/api/econ/calendar` | 30% | No authoritative calendar provider |
-| STAT | `/economics/stats` | FRED/SIM histories, client-side stats | `/api/econ/stats` | 50% | Computation OK; source mixed |
-| REGIME | `/economics/regime` | Static regime model factors | local `macroRegime.ts` | 15% | Factors labelled FRED/YAHOO/LOCAL but values are hardcoded |
-| EML | `/economics/ml` | Deterministic model outputs | local `econModels.ts` | 10% | ML outputs are not trained/live scored |
-| SFE | `/economics/sec-finance` | Macro-to-sec-finance local model | local/API | 20% | Desk impacts simulated |
-| FUND | `/economics/funding` | Macro funding indicators + local desk data | local/API | 30% | Actual funding books absent |
-| MGC/MOTN | chart/motion routes | Econ/market chart series | `/api/chart/series`, econ batch | 45% | Depends on upstream source per series |
-| NEWS | `/news` | Optional providers else deterministic engine | `/api/news` | 20% | Page states SIM by default |
-| SENT | `/sentiment` | Deterministic survey/social + possible VIX/FRED | `/api/social`, FRED | 15% | AAII/NAAIM/social are simulated |
-| AI | `/copilot` | Optional LLM over local context else keyword fallback | `/api/copilot` | 15% | Responses can summarize fixture data |
-| DATAOPS | `/dataops` | Health probe + generated fixture runs/coverage | `/api/dataops/*`, `dataOps.ts` | 30% | Fixture lineage is not source of truth |
-| ALRT | `/alerts` | Seeded templates + sentiment-derived alerts | local `alerts.ts` | 0% | Operational alerts are simulated |
+"Dev live coverage" is the ceiling reachable under `npm run dev` with providers configured. "Default-deploy coverage" is what a stock `vite build` → `dist/` deploy actually serves: rows whose data flows through `/api/*` drop to their snapshot/fixture fallback because those handlers are not deployed (see "API serving model: dev plugin vs. production deploy"); rows fed by local imports or seeded fixtures are unaffected. "= dev" means the row has no `/api` dependency and behaves identically in both.
+
+| Code | Route | Actual data origin | Endpoint/path | Dev live coverage | Default-deploy coverage | Simulation/staleness risk |
+|---|---|---|---|---:|---|---|
+| HOME | `/` | Aggregates local data modules and snapshots | local imports/API hooks | 20% | ≈0% live — API hooks 404, local snapshots remain | High: broad KPI surface from fixture domains |
+| MKT | `/markets` | Market pipeline API chain | `/api/market/market` | 60% if configured; 0% otherwise | 0% — `/api` 404 → committed snapshot | Committed 2026-06-17 snapshot fallback |
+| SNAP | `/market-snapshot` | Market pipeline snapshots | `/api/market/market`, cross-asset | 60% if configured | 0% — `/api` 404 → snapshot | Snapshot fallback can look current |
+| QUILT | `/asset-quilt` | Market pipeline Bilello/quilt JSON/API | `/api/market/bilello` | 60% if configured | 0% — `/api` 404 → snapshot | Snapshot fallback |
+| IRET | `/index-returns` | Market pipeline index returns | `/api/market/index-returns` | 60% if configured | 0% — `/api` 404 → snapshot | Snapshot fallback |
+| LENS | `/market-lens` | Optional Market Lens backend else embedded config/snapshot | `/api/market-lens` | 35% | 0% — `/api` 404 → snapshot | Snapshot fallback flagged, but analysis can appear live |
+| MKC | `/market-chart` | Chart API from catalog/econ/market histories | `/api/chart/series` | 45% | 0% — `/api` 404 → synthetic/snapshot | Synthetic chart histories when source is synthetic |
+| SLAB | `/securities-lending` | Seeded domain generator | local `src/data/securitiesLending.ts` | 0% | = dev (local fixture) | Appears like loan/inventory book |
+| SQZ | `/securities-lending/squeeze` | Seeded squeeze board | local `src/data/squeeze.ts` | 0% | = dev (local fixture) | Page labels SIM, but metrics look operational |
+| PB | `/prime-finance` | Seeded hedge-fund/client exposures | local `src/data/primeFinance.ts` | 0% | = dev (local fixture) | High false-live risk |
+| COLL | `/collateral` | Seeded margin/collateral book | local `src/data/collateral.ts` | 0% | = dev (local fixture) | High false-live risk |
+| CASH | `/cash-optimizer` | Seeded treasury sources/uses | local `src/data/cash.ts` | 0% | = dev (local fixture) | High false-live risk |
+| REINV | `/reinvestment` | Seeded reinvestment portfolio | local `src/data/reinvestment.ts` | 0% | = dev (local fixture) | High false-live risk |
+| LIQ | `/liquidity` | Seeded liquidity ladder + partly macro labels | local `src/data/liquidity.ts` | 5% | = dev (local fixture) | Local/funding data are generated |
+| SXU | `/sources-uses` | Seeded matching engine | local `src/data/sourcesUses.ts` | 0% | = dev (local fixture) | All matching is simulated |
+| OPT | `/optimization` | Seeded solver runs/trades | local `src/data/optimization.ts` | 0% | = dev (local fixture) | No real solver persistence observed |
+| DESK | `/trading-desk` | Local trading scorecards | local data | 10% | = dev (local fixture) | Mostly fixture analytics |
+| ECON | `/economics` | FRED API overlay on simulated fallback | `/api/econ/indicators`, local histories | 55% with key | 0% — `/api` 404 → local SIM histories | History panel explicitly SIM |
+| CURV | `/economics/curve` | FRED curve API else simulated curve | `/api/econ/curve`, `/curve-history` | 60% with key | 0% — `/api` 404 → simulated curve | Fallback silent at endpoint level except source field |
+| INFL | `/economics/inflation` | Local econ series + market inflation snapshot | local/API | 45% | ≈0% live — API part 404, local series remain | Mixed static/sim/live |
+| GCPI | `/economics/global-cpi` | Committed macro ETL JSON | `src/data/etl/*` | 20% | = dev (local import, no `/api`) | ETL JSON is cached snapshot |
+| GPOL | `/economics/policy-rates` | Committed macro ETL JSON | `policy_rate_timeseries.json` | 20% | = dev (local import, no `/api`) | Cached/demo risk |
+| CRDT | `/economics/credit` | FRED spreads if available + fallback constants | FRED/local | 55% | 0% — `/api` 404 → fallback constants | Fallback values used per series |
+| FOMC | `/economics/rates` | Macro ETL Fed probabilities or deterministic fallback | `fed_probabilities.json`, CME ETL | 25% | = dev (local import, no `/api`) | CME fallback explicitly deterministic |
+| CAL | `/economics/calendar` | FRED release/calendar approximation else SIM | `/api/econ/calendar` | 30% | 0% — `/api` 404 → SIM | No authoritative calendar provider |
+| STAT | `/economics/stats` | FRED/SIM histories, client-side stats | `/api/econ/stats` | 50% | 0% — `/api` 404 → SIM histories | Computation OK; source mixed |
+| REGIME | `/economics/regime` | Static regime model factors | local `macroRegime.ts` | 15% | = dev (local import, no `/api`) | Factors labelled FRED/YAHOO/LOCAL but values are hardcoded |
+| EML | `/economics/ml` | Deterministic model outputs | local `econModels.ts` | 10% | = dev (local import, no `/api`) | ML outputs are not trained/live scored |
+| SFE | `/economics/sec-finance` | Macro-to-sec-finance local model | local/API | 20% | ≈0% live — API part 404, local model remains | Desk impacts simulated |
+| FUND | `/economics/funding` | Macro funding indicators + local desk data | local/API | 30% | ≈0% live — API part 404, local data remains | Actual funding books absent |
+| MGC/MOTN | chart/motion routes | Econ/market chart series | `/api/chart/series`, econ batch | 45% | 0% — `/api` 404 → synthetic | Depends on upstream source per series |
+| NEWS | `/news` | Optional providers else deterministic engine | `/api/news` | 20% | 0% — `/api` 404 → deterministic engine | Page states SIM by default |
+| SENT | `/sentiment` | Deterministic survey/social + possible VIX/FRED | `/api/social`, FRED | 15% | 0% — `/api` 404 → deterministic | AAII/NAAIM/social are simulated |
+| AI | `/copilot` | Optional LLM over local context else keyword fallback | `/api/copilot` | 15% | 0% — `/api` 404 → keyword fallback | Responses can summarize fixture data |
+| DATAOPS | `/dataops` | Health probe + generated fixture runs/coverage | `/api/dataops/*`, `dataOps.ts` | 30% | ≈0% — health probe 404, fixtures are local | Fixture lineage is not source of truth |
+| ALRT | `/alerts` | Seeded templates + sentiment-derived alerts | local `alerts.ts` | 0% | = dev (local fixture) | Operational alerts are simulated |
 
 ### Backend/API inventory
 
@@ -185,16 +187,20 @@ Critical patterns:
 | DATAOPS | governance console | probe + fixtures | 30 | 70 | 35 | 90 | D | D | C | D | fixture lineage misleading | Critical: replace fixtures with manifests |
 | ALRT | alerts | seeded templates | 0 | 100 | 10 | 95 | F | F | D | F | not connected to event bus | Critical |
 
+The "Live %" column is the dev ceiling. In a default `vite build` deploy, every module whose sources route through `/api/*` (MKT, SNAP, QUILT, IRET, LENS, MKC, ECON, CURV, INFL, CRDT, CAL, STAT, SFE, FUND, MGC/MOTN, NEWS, SENT, AI, DATAOPS, and HOME's API portion) drops to a live % of ≈0 because those handlers are not deployed; readiness/lineage/freshness grades should be read against that snapshot/fixture floor. Modules fed by local imports or seeded fixtures (the F-graded financing book, GCPI, GPOL, FOMC, REGIME, EML, ALRT, DESK) are unchanged. See "API serving model: dev plugin vs. production deploy."
+
 ## Live vs simulation master matrix
 
 | Module class | Live | Partial | Simulated | Unknown | Estimated live |
 |---|---:|---:|---:|---:|---:|
-| Market pipeline modules | 0 | 5 | 0 | 0 | 60% when configured, else 0% |
-| Economics/FRED modules | 0 | 11 | 0 | 0 | 45-60% when key configured |
-| Macro ETL modules | 0 | 3 | 0 | 0 | 20-30% from cached exports |
-| Financing/internal-book modules | 0 | 0 | 8 | 0 | 0-5% |
-| Intelligence modules | 0 | 4 | 1 | 0 | 0-30% depending on env |
-| DataOps | 0 | 1 | 0 | 0 | 30% |
+| Market pipeline modules | 0 | 5 | 0 | 0 | 60% when configured (dev); 0% in default deploy |
+| Economics/FRED modules | 0 | 11 | 0 | 0 | 45-60% when key configured (dev); ≈0% live in default deploy, except local-import ETL rows |
+| Macro ETL modules | 0 | 3 | 0 | 0 | 20-30% from cached exports (local import; unaffected by deploy) |
+| Financing/internal-book modules | 0 | 0 | 8 | 0 | 0-5% (local fixtures; unaffected by deploy) |
+| Intelligence modules | 0 | 4 | 1 | 0 | 0-30% in dev; ≈0% live in default deploy (`/api`-served) |
+| DataOps | 0 | 1 | 0 | 0 | 30% in dev; ≈0% live in default deploy (probe `/api` 404s) |
+
+"Estimated live" reflects the dev environment; in a default `vite build` deploy the `/api`-served classes collapse to their fixture/snapshot floor. See "API serving model: dev plugin vs. production deploy."
 
 ## Readiness heatmap
 
@@ -208,6 +214,8 @@ Critical patterns:
 | Securities lending/PB/collateral/cash/liquidity | 10 | 20 | 5 | 10 | 15 | 10 |
 | Optimization/alerts/copilot | 15 | 25 | 10 | 20 | 20 | 20 |
 | DataOps governance | 35 | 30 | 25 | 25 | 45 | 35 |
+
+These scores assume the dev environment where `/api/*` routes resolve. The "Production readiness" column in particular should be read against the serving gap: until the API handlers are actually deployed (see "API serving model: dev plugin vs. production deploy"), the `/api`-served groups (Market views, FRED economics, Market Lens, News/NLP/social, DataOps) serve only snapshots/fixtures in a default build.
 
 ## Provider coverage gap analysis
 
