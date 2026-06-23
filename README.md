@@ -71,12 +71,18 @@ The connection is real but **optional and resilient**:
   dashboard indicators (units-corrected), yield-curve tenors (`DGS1MO…DGS30`), the **funding
   complex** (`IORB/EFFR/OBFR/SOFR/BGCR/TGCR/RRPONTSYD/WRESBAL/WALCL/DTB3…`), and release dates
   from `api.stlouisfed.org` (cached 10 min). Panels show a green **LIVE · FRED** badge.
-- **Without a key** — every module renders a **deterministic, seeded simulation** anchored
-  to a plausible mid-2026 macro regime. Panels show an amber **SIM** badge. No setup, no
-  hydration drift, fully functional offline.
+- **Committed snapshot (optional middle tier)** — run `npm run export:econ-snapshot` once
+  (with a key + egress) to capture real FRED observations for the redistributable catalog
+  series into `src/data/econSnapshot.json`. The econ routes/hooks then fall back to **real,
+  frozen data** labelled **SNAPSHOT** (not synthetic) whenever live FRED is unreachable — same
+  pattern the market pipeline uses. Licensing-restricted series (e.g. ISM PMIs) stay `SIM`.
+- **Without a key or snapshot** — every module renders a **deterministic, seeded simulation**
+  anchored to a plausible mid-2026 macro regime. Panels show an amber **SIM** badge. No setup,
+  no hydration drift, fully functional offline.
 
-Client hooks render the simulation instantly, then transparently upgrade to live FRED data
-when the API reports it — so the UI never blocks or breaks.
+Client hooks render the fallback instantly, then transparently upgrade — the resolution order
+per series is **live FRED → committed SNAPSHOT → SIM** — so the UI never blocks or breaks, and
+the badge always reflects what's actually shown.
 
 **Data as-of dates.** Rates/macro modules show a **`DATA AS OF <date>`** pill in the header
 so freshness is never ambiguous. The **Treasury Curve Lab** assembles **real point-in-time
@@ -93,7 +99,7 @@ pills reflect the simulation's anchor dates alongside the amber `SIM` badge.
 ```bash
 # Get a free key: https://fred.stlouisfed.org/docs/api/api_key.html
 FRED_API_KEY=your_key_here npm run dev
-# On Vercel/Netlify: add FRED_API_KEY as a project environment variable.
+# Deployed: add FRED_API_KEY as a project env var (Vercel), or your process host's env.
 ```
 
 ### AI Copilot (optional Claude integration)
@@ -111,13 +117,14 @@ desks, and is **optional and resilient** the same way:
 
 ```bash
 ANTHROPIC_API_KEY=your_key_here npm run dev
-# On Vercel/Netlify: add ANTHROPIC_API_KEY as a project environment variable.
+# Deployed: add ANTHROPIC_API_KEY as a project env var (Vercel), or your process host's env.
 ```
 
-**Daily refresh (Vercel Cron).** FRED data is fetched on-access and cached (curve history 6h,
+**Daily refresh (cron).** FRED data is fetched on-access and cached (curve history 6h,
 indicators 10 min), so a busy site is always fresh — but to guarantee the curve/rates refresh
 **once a day even with no traffic**, `vercel.json` registers a cron that hits
-`/api/cron/refresh` daily at 12:00 UTC. That endpoint re-pulls and re-warms the FRED-backed
+`/api/cron/refresh` daily at 12:00 UTC. (On a `npm start` process host, point any external
+scheduler — OS cron, GitHub Actions, etc. — at `/api/cron/refresh` instead.) That endpoint re-pulls and re-warms the FRED-backed
 econ routes (`curve-history`, `curve`, `indicators`, `calendar`) plus the market-data bridge
 routes (`/api/market/*`). If `MARKET_PIPELINE_URL` is configured, cron first POSTs to the
 pipeline's `/ingestion/run` endpoint with a recent start date so Yahoo-backed market data
@@ -282,8 +289,11 @@ MARKET_PIPELINE_URL=http://localhost:8000 npm run dev
 ```
 
 **Vercel/Postgres live-ish setup.** The cloud path is `MARKET_DB_URL=postgres://...`.
-The Next app reads Postgres directly, while the Python pipeline publishes the six
-compact terminal views into the `analytics_api_views` table after each refresh.
+The app's `/api/market/[view]` handler reads Postgres directly, while the Python pipeline
+publishes the six compact terminal views into the `analytics_api_views` table after each
+refresh. (On Vercel serverless, prefer `MARKET_PIPELINE_URL` — the `pg` driver is loaded via
+runtime `require` and isn't traced into the function bundle; a `npm start` process host has no
+such limit.)
 
 1. Create a managed Postgres database (Vercel Postgres, Neon, Supabase, etc.).
 2. Add `MARKET_DB_URL=postgres://...` to Vercel project env vars.
@@ -386,22 +396,28 @@ data-connectivity map across all 37 modules.
 
 ## Tech stack
 
-**This build** is fully client-rendered Next.js over **deterministic, seeded data
+**This build** is a **Vite + React single-page app** over **deterministic, seeded data
 generators**, so all 37 modules run with **zero configuration** — no database, no required
-keys — and stay reproducible across server/client renders. Optional live integrations include
-FRED for economics (104-series catalog), the committed/exported `macro_data_etl` FedWatch
-snapshot, the pluggable FRED/Yahoo-backed `market_data_pipeline`, a news provider chain
-(Alpha Vantage / Marketaux / Finnhub / NewsAPI) + Reddit/StockTwits social, and the `news_nlp`
-FinBERT stage — each degrading gracefully to local snapshots or simulation when no
-key/service is present.
+keys. The `/api/*` endpoints are standard Web `Request → Response` handlers in `src/app/api/**`,
+served from **one shared route registry** (`src/server/registry.ts`) in every environment (see
+"How `/api/*` is served"). Optional live integrations include FRED for economics (104-series
+catalog), the committed/exported `macro_data_etl` FedWatch snapshot, the pluggable
+FRED/Yahoo-backed `market_data_pipeline`, a news provider chain (Alpha Vantage / Marketaux /
+Finnhub / NewsAPI) + Reddit/StockTwits social, and the `news_nlp` FinBERT stage — each degrading
+gracefully through a **live → committed-snapshot → simulation** fallback chain (with an honest
+provenance badge) when no key/service is present.
 
-- **Next.js 14 (App Router) · React 18 · TypeScript (strict) · Tailwind CSS**
+- **Vite 5 · React 18 · react-router-dom · TypeScript (strict) · Tailwind CSS** (not Next.js —
+  the `src/app/**/route.ts` / `[view]` conventions are Next-style but served by our own registry)
 - **Zero-dependency SVG chart library** (sparklines, line/area, bars, candlesticks + VWAP,
   treemaps, Sankey, network graphs, revenue waterfalls, correlation matrices, donuts, gauges,
   heat grids, yield curves, scatter/regression plots)
 - **AG-Grid-style sortable data grids** built from scratch for density and speed
 - **Optional live data:** FRED via server-side route handlers (`FRED_API_KEY`) and
   `market_data_pipeline` via `MARKET_PIPELINE_URL` for FRED/Yahoo-backed market cards
+- **Provenance & freshness:** every data surface carries a `ProvenanceBadge`
+  (`FRED`/`DB`/`FILE`/`SNAPSHOT`/`ETL`/`SIM`) plus a staleness marker (`AGING`/`STALE`) derived
+  from the data's `asOf` date — see `docs/LIVE_DATA_READINESS_ASSESSMENT.md` for the full audit
 
 **Production architecture** (what the demo simulates) — see `ARCHITECTURE.md`:
 - Backend: **Python · FastAPI**, analytics in **Pandas / Polars / NumPy**
@@ -411,21 +427,59 @@ key/service is present.
 
 ---
 
+## How `/api/*` is served (dev · production · Vercel)
+
+The app is a Vite SPA, so the `/api/*` route handlers (`src/app/api/**/route.ts`) need a
+runtime. All environments mount the **same registry** (`src/server/registry.ts`, built from
+those handlers via `import.meta.glob`), so dev and prod resolve `/api/*` identically — there is
+no second source of truth:
+
+| Environment | How it runs | Command |
+|-------------|-------------|---------|
+| **Dev** | Vite plugin (`vite-plugins/dev-api.ts`) mounts the registry via `ssrLoadModule` (keeps HMR) | `npm run dev` |
+| **Standalone server** (Render / Railway / Fly.io / VM / local) | `src/server/index.ts` — a Node server serving `dist/` **and** `/api/*` from one process | `npm run build && npm start` |
+| **Vercel** | `api/[...path].ts` serverless function adapts the request to the registry; `vercel.json` sets `framework: vite` + the cron | merge → deploy (Framework Preset = **Vite**) |
+
+> ⚠️ A **static-only** host (plain `vite preview`, a CDN, or a Vercel project *without* this
+> `vercel.json`/`api/` function) serves the SPA but **no API** — so every module silently falls
+> back to its committed snapshot/simulation. Use `npm start` or the Vercel function, not a static host.
+
+### Scripts
+
+| Script | What it does |
+|--------|--------------|
+| `npm run dev` | Vite dev server + live `/api/*` at `http://localhost:3000` |
+| `npm run build` | Build client → `dist/` **and** the standalone server → `dist-server/` |
+| `npm run build:vercel` | Client + the Vite-built handler bundle (`dist-vercel/handler.js`) the Vercel function imports |
+| `npm start` | Run the standalone production server (`dist-server/index.js`) |
+| `npm run export:econ-snapshot` | Capture real FRED series into `src/data/econSnapshot.json` (needs `FRED_API_KEY` + egress) |
+| `npm run typecheck` / `npm run test` | `tsc --noEmit` / Vitest |
+
+### Diagnostics
+
+- **`/api/dataops/health`** — probes each provider; the `FRED` entry makes one real call and
+  reports `LIVE` (reachable), `SIM` (no key in this runtime), or `ERROR` with the exact reason
+  (HTTP status / network error). Fastest way to see why econ is `SIM`.
+- **`/api/_ping`** (Vercel only) — a zero-dependency function that returns `{ fredKeyPresent, … }`,
+  to confirm serverless functions run and the env var is bound on a deployment.
+
+---
+
 ## Run locally
 
-The terminal is a standard Next.js app — **zero config, no database, no keys**.
+The terminal is a **Vite + React** SPA — **zero config, no database, no keys**.
 All 37 modules (including Rate Probabilities, which renders the committed ETL
 FedWatch snapshot, and the news/sentiment modules backed by deterministic local
 fixtures) work fully offline.
 
 ```bash
 npm install                 # first time only
-npm run dev                 # → http://localhost:3000
+npm run dev                 # → http://localhost:3000  (serves the app + live /api/*)
 ```
 
-Requirements: **Node 18+**.
+Requirements: **Node 20+** (global `fetch` + the `undici` proxy support).
 
-Production build:
+Production build & serve (the standalone server runs the SPA **and** `/api/*`):
 
 ```bash
 npm run build && npm start  # → http://localhost:3000
@@ -514,6 +568,10 @@ modules serve the committed snapshot. Internal-book modules (lending, prime, col
 ## Project layout
 
 ```
+vercel.json                  # Vercel deploy: framework vite, build:vercel, /api routing, cron
+api/                         # Vercel-only serverless entry points
+├── [...path].ts             #   catch-all → adapts the request to the shared route registry
+└── _ping.ts                 #   zero-dep diagnostic (functions-run + env-present check)
 src/
 ├── app/                     # one route per module
 │   ├── (HOME, markets, securities-lending [+ /squeeze], prime-finance, collateral,
@@ -522,29 +580,37 @@ src/
 │   │    dataops, copilot, alerts)
 │   ├── economics/           # ECON + curve, inflation, global-cpi, policy-rates, credit,
 │   │                         #   rates, calendar, stats, regime, ml, sec-finance, funding, motion
-│   └── api/                 # FRED econ handlers, market pipeline proxy, news + social feeds
-│       ├── econ/            # series, batch, indicators, curve, calendar, stats, inversions
-│       ├── market/[view]/   # committed snapshot or live FastAPI market-data view
+│   └── api/                 # Web Request→Response handlers (served by the registry, see below)
+│       ├── econ/            # series, batch, indicators, curve, curve-history, calendar, stats, inversions
+│       ├── market/[view]/   # committed snapshot or live DB/file/FastAPI market-data view
 │       ├── chart/series/    # unified econ/market chart resolver
-│       ├── news/            # provider-chain headlines (+ optional FinBERT enrichment)
-│       └── social/          # Reddit + StockTwits aggregate
+│       ├── dataops/health/  # live provider probe (FRED reachability, market, news_nlp)
+│       ├── news/ · social/  # provider-chain headlines · Reddit + StockTwits aggregate
+│       ├── copilot/ · market-lens/   # Claude Q&A · Market Lens proxy
+│       └── cron/refresh/    # daily cache warmer (cron target)
+├── server/                  # the API runtime, shared by dev + standalone + Vercel
+│   ├── registry.ts          #   single route registry (import.meta.glob over app/api/**)
+│   ├── index.ts             #   standalone Node server (serves dist/ + /api/*) → `npm start`
+│   ├── handler.ts           #   Vite-built bundle the Vercel function imports
+│   ├── nodeAdapter.ts       #   Node ⇄ Web Request/Response helpers
+│   ├── routeMatch.ts        #   file-system route → matcher
+│   └── exportEconSnapshot.ts#   `npm run export:econ-snapshot` → econSnapshot.json
 ├── components/
 │   ├── shell/               # command bar, sidebar, status bar, ticker, command palette
-│   ├── ui/                  # Panel, Stat, Tag, DataGrid, PageHeader, KpiStrip, ProvenanceBadge
-│   ├── econ/               # SourceBadge (LIVE/SIM provenance)
+│   ├── ui/                  # Panel, Stat, Tag, DataGrid, PageHeader, ProvenanceBadge (+ staleness)
+│   ├── econ/               # SourceBadge (FRED/SNAPSHOT/SIM provenance)
 │   └── charts/              # SVG chart library (Sparkline, LineChart, CandleChart, Treemap,
 │                            #   Sankey, NetworkGraph, Waterfall, Matrix, Radial, YieldCurve, ScatterPlot)
-├── data/                    # deterministic domain generators (universe, markets, securitiesLending,
-│                            #   squeeze, primeFinance, collateral, cash, sourcesUses, optimization,
-│                            #   trading, alerts, econSeries [104-series FRED catalog], econCurve,
-│                            #   econRates, econModels, inflation, globalMacro, creditSpreads,
-│                            #   reinvestment, liquidity, macroRegime, funding, news, sentiment,
-│                            #   dataOps, econEnhancements)
-└── lib/                     # rng (seeded), format, hooks, nav, useEcon, useNews, useSocial,
-                             #   server/fred.ts, server/newsProviders.ts, server/socialProviders.ts,
-                             #   server/sentimentNlp.ts (heuristic + FinBERT enrichment)
+├── data/                    # deterministic domain generators + committed snapshots
+│                            #   (markets, securitiesLending, primeFinance, collateral, cash, …,
+│                            #   econSeries [104-series FRED catalog], econSnapshot.json, etl/, market/)
+└── lib/                     # rng, format, hooks, nav, provenance (badge + freshness),
+                             #   useEcon, useMarket, useNews, useSocial, charting/,
+                             #   server/fred.ts, server/fetchProxy.ts (proxy support),
+                             #   server/newsProviders.ts, server/socialProviders.ts, server/sentimentNlp.ts
 
 news_nlp/                    # Python FinBERT NLP stage (sentiment · NER · event clustering)
+docs/LIVE_DATA_READINESS_ASSESSMENT.md   # full live-vs-snapshot-vs-sim audit of all 37 modules
 ```
 
 ---
