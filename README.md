@@ -440,6 +440,34 @@ FRED_API_KEY=your_key_here npm run dev
 # free key: https://fred.stlouisfed.org/docs/api/api_key.html
 ```
 
+**Behind a corporate proxy / VPN?** If the browser can reach FRED but the app
+still shows `SIM` (the server terminal logs `[fred] network error …`), Node's
+`fetch` is ignoring your system proxy. Point it at the proxy explicitly — every
+server-side fetch (FRED, market pipeline, news) then routes through it:
+
+```bash
+FRED_PROXY_URL=http://your-proxy:port FRED_API_KEY=your_key_here npm run dev
+# (standard HTTPS_PROXY / HTTP_PROXY are also honoured)
+# alternate FRED endpoint/mirror: set FRED_BASE_URL=https://…
+# TLS-intercepting proxy? add NODE_EXTRA_CA_CERTS=/path/to/corp-ca.pem
+```
+
+Or, instead of env vars, drop a **`.proxy` file** in the project root (gitignored)
+— useful for `npm start`, where Vite's `.env` loader doesn't run:
+
+```
+# .proxy  (dotenv-style; .env is also read as a last resort)
+HTTPS_PROXY=http://your-proxy:port
+HTTP_PROXY=http://your-proxy:port
+```
+
+Resolution order is: proxy env vars → `.proxy` file → `.env` file → direct. The
+server terminal logs which one it used (`[proxy] server fetch routed through …`).
+
+Verify at `http://localhost:3000/api/dataops/health` — the `FRED` entry should
+read `LIVE` / `FRED reachable`. With no proxy var set, fetch goes direct (no
+change in behaviour).
+
 ### Optional — refresh the macro pipeline
 
 You **do not** need this to run the terminal; the gold JSON is already committed
