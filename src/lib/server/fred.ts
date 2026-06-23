@@ -9,7 +9,9 @@
  * Get a free key: https://fred.stlouisfed.org/docs/api/api_key.html
  */
 
-const BASE = "https://api.stlouisfed.org/fred";
+// Override with FRED_BASE_URL to point at a mirror/proxy endpoint; defaults to
+// the public FRED API.
+const BASE = (process.env.FRED_BASE_URL || "https://api.stlouisfed.org/fred").replace(/\/$/, "");
 const DEFAULT_REVALIDATE = 600; // 10 minutes
 
 type CacheEntry = { at: number; ttlMs: number; data: unknown };

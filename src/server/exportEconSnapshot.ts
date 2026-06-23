@@ -16,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { FRED_CATALOG, resolveFred } from "@/data/econSeries";
 import { fredSeries, fredEnabled } from "@/lib/server/fred";
+import { ensureProxy } from "@/lib/server/fetchProxy";
 
 const OUT = path.resolve(process.cwd(), "src/data/econSnapshot.json");
 // Enough history for YoY (13 months) plus the display windows the pages use.
@@ -26,6 +27,7 @@ async function main(): Promise<void> {
     console.error("FRED_API_KEY not set — cannot export the econ snapshot.");
     process.exit(1);
   }
+  await ensureProxy();
 
   const series: Record<string, { asOf: string; observations: { date: string; value: number }[] }> = {};
   let written = 0;

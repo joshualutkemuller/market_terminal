@@ -7,6 +7,7 @@
  * prod diverging. Each handler is a standard Web `Request → Response` function.
  */
 import { buildPattern, extractParams, bySpecificity, type RouteDef } from "./routeMatch";
+import { ensureProxy } from "@/lib/server/fetchProxy";
 
 type RouteHandler = (
   request: Request,
@@ -47,6 +48,9 @@ function jsonResponse(data: unknown, status: number): Response {
 export async function handleApiRequest(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/") && url.pathname !== "/api") return null;
+
+  // Configure the outbound proxy (if any) before any route makes a fetch.
+  await ensureProxy();
 
   for (const entry of entries) {
     const params = extractParams(entry, url.pathname);
