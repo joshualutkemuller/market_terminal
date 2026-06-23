@@ -1,12 +1,13 @@
 import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { getSeriesHistory, resolveFred } from "@/data/econSeries";
+import { getSnapshotObservations } from "@/data/econSnapshot";
 
 
 export interface BatchSeries {
   id: string;
   observations: { date: string; value: number }[];
-  source: "FRED" | "SIM";
+  source: "FRED" | "SNAPSHOT" | "SIM";
 }
 
 /**
@@ -34,9 +35,16 @@ export async function GET(req: Request) {
           /* fall through */
         }
       }
+      const snap = getSnapshotObservations(id, n);
+      if (snap) return { id, observations: snap as { date: string; value: number }[], source: "SNAPSHOT" };
       return { id, observations: getSeriesHistory(id, n), source: "SIM" };
     })
   );
 
-  return json({ source: series.some((s) => s.source === "FRED") ? "FRED" : "SIM", series });
+  const source = series.some((s) => s.source === "FRED")
+    ? "FRED"
+    : series.some((s) => s.source === "SNAPSHOT")
+    ? "SNAPSHOT"
+    : "SIM";
+  return json({ source, series });
 }
