@@ -20,6 +20,38 @@ export function fredEnabled(): boolean {
 }
 
 /**
+ * Lightweight liveness probe: does the configured key actually reach FRED?
+ * Makes one tiny real request (1 observation) and returns the outcome with the
+ * real error message, so health/diagnostics can distinguish "no key in this
+ * runtime" from "key present but rejected/unreachable" instead of silently
+ * falling back to SIM.
+ */
+let probeCache: { at: number; result: { keyPresent: boolean; ok: boolean; detail: string } } | null = null;
+const PROBE_TTL_MS = 60_000;
+
+export async function fredProbe(): Promise<{ keyPresent: boolean; ok: boolean; detail: string }> {
+  const key = process.env.FRED_API_KEY;
+  if (!key) return { keyPresent: false, ok: false, detail: "FRED_API_KEY not present in this runtime" };
+  if (probeCache && Date.now() - probeCache.at < PROBE_TTL_MS) return probeCache.result;
+  const masked = `${key.slice(0, 4)}…(${key.length} chars)`;
+  let result: { keyPresent: boolean; ok: boolean; detail: string };
+  try {
+    const url = `${BASE}/series/observations?series_id=DGS10&api_key=${encodeURIComponent(key)}&file_type=json&sort_order=desc&limit=1`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      result = { keyPresent: true, ok: false, detail: `FRED HTTP ${res.status} (key ${masked}): ${body.slice(0, 160)}` };
+    } else {
+      result = { keyPresent: true, ok: true, detail: `FRED reachable (key ${masked})` };
+    }
+  } catch (err) {
+    result = { keyPresent: true, ok: false, detail: `FRED fetch failed (key ${masked}): ${(err as Error).message}` };
+  }
+  probeCache = { at: Date.now(), result };
+  return result;
+}
+
+/**
  * `revalidateSec` controls the in-memory TTL below. Deep daily history (e.g. the
  * curve point-in-time) only changes at its recent tail once a day, so callers
  * pass a long window to cache it over time and avoid re-pulling decades of

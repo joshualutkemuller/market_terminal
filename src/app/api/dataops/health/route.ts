@@ -1,5 +1,5 @@
 import { json } from "@/lib/server/http";
-import { fredEnabled } from "@/lib/server/fred";
+import { fredProbe } from "@/lib/server/fred";
 import { configuredNewsProviders } from "@/lib/server/newsProviders";
 import { configuredSocialProviders } from "@/lib/server/socialProviders";
 
@@ -35,10 +35,16 @@ async function probe(base: string, path = "/health", ms = 3000): Promise<{ ok: b
 export async function GET() {
   const providers: Record<string, ProviderProbe> = {};
 
-  // FRED — key presence (we don't spend quota just to probe).
-  providers.FRED = fredEnabled()
-    ? { status: "LIVE", detail: "FRED_API_KEY configured", live: true }
-    : { status: "SIM", detail: "no FRED_API_KEY — deterministic econ model", live: false };
+  // FRED — make one tiny real request so this reflects actual reachability,
+  // not just key presence. Distinguishes "no key in this runtime" (e.g. the
+  // Vercel env var isn't bound to the function / needs a redeploy) from "key
+  // present but rejected/unreachable".
+  const fred = await fredProbe();
+  providers.FRED = !fred.keyPresent
+    ? { status: "SIM", detail: fred.detail + " — deterministic econ model", live: false }
+    : fred.ok
+    ? { status: "LIVE", detail: fred.detail, live: true }
+    : { status: "ERROR", detail: fred.detail, live: false };
 
   // Market pipeline (YAHOO) — resolver order DB → FILE → PIPELINE → snapshot.
   const { MARKET_DB_URL, MARKET_DATA_DIR, MARKET_PIPELINE_URL } = process.env;
