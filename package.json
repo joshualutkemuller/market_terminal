@@ -11,6 +11,7 @@
     "build:server": "vite build --ssr src/server/index.ts --outDir dist-server",
     "build:handler": "vite build --ssr src/server/handler.ts --outDir dist-vercel",
     "build:vercel": "npm run build:client && npm run build:handler",
+    "export:econ-snapshot": "vite build --ssr src/server/exportEconSnapshot.ts --outDir dist-tools && node dist-tools/exportEconSnapshot.js",
     "start": "node dist-server/index.js",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

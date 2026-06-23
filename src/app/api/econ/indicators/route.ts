@@ -1,7 +1,9 @@
 import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { FRED_CATALOG, getSeriesHistory, resolveFred, type FredSeries } from "@/data/econSeries";
+import { getSnapshotObservations } from "@/data/econSnapshot";
 
+type EconSource = "FRED" | "SNAPSHOT" | "SIM";
 
 export interface LiveIndicator {
   id: string;
@@ -14,7 +16,7 @@ export interface LiveIndicator {
   monthlyPrint: number | null;
   asOf: string;
   history: number[];
-  source: "FRED" | "SIM";
+  source: EconSource;
 }
 
 const pct = (now: number | undefined, then: number | undefined, decimals = 1): number | null => {
@@ -25,7 +27,7 @@ const pct = (now: number | undefined, then: number | undefined, decimals = 1): n
 function buildPoint(
   s: FredSeries,
   hist: { date: string; value: number }[],
-  source: "FRED" | "SIM",
+  source: EconSource,
   rawHist?: { date: string; value: number }[]
 ): LiveIndicator {
   const values = hist.map((h) => h.value);
@@ -83,9 +85,16 @@ export async function GET() {
           /* fall back */
         }
       }
+      // Real snapshot before synthetic SIM (matches the live display units).
+      const snap = getSnapshotObservations(s.id, 24);
+      if (snap) return buildPoint(s, snap as { date: string; value: number }[], "SNAPSHOT");
       return buildPoint(s, getSeriesHistory(s.id, 24), "SIM");
     })
   );
-  const source = out.some((o) => o.source === "FRED") ? "FRED" : "SIM";
+  const source: EconSource = out.some((o) => o.source === "FRED")
+    ? "FRED"
+    : out.some((o) => o.source === "SNAPSHOT")
+    ? "SNAPSHOT"
+    : "SIM";
   return json({ source, indicators: out });
 }

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { fetchJson, peekFresh } from "@/lib/fetchCache";
 import { getSeriesHistory, type Observation } from "@/data/econSeries";
+import { getSnapshotObservations } from "@/data/econSnapshot";
 import {
   getCurrentCurve,
   getCurveSnapshots,
@@ -13,27 +14,39 @@ import {
 } from "@/data/econCurve";
 import { getEconEvents, type EconEvent } from "@/data/econRates";
 
-export type DataSource = "FRED" | "SIM" | "LOADING" | "ETL";
+export type DataSource = "FRED" | "SNAPSHOT" | "SIM" | "LOADING" | "ETL";
+
+/** Map a route's `source` string to the badge vocabulary. */
+function mapSource(s: unknown): DataSource {
+  return s === "FRED" ? "FRED" : s === "SNAPSHOT" ? "SNAPSHOT" : "SIM";
+}
 
 /**
- * Resilient econ data hooks. Each returns the deterministic simulation value
- * immediately (SSR-safe, no empty states), then transparently swaps in live
- * FRED data if the API route reports `source: "FRED"`. `source` drives a
- * LIVE/SIM badge in the UI.
+ * Resilient econ data hooks. Each returns a fallback value immediately (SSR-safe,
+ * no empty states), then transparently swaps in whatever the API route reports
+ * (`FRED` live, `SNAPSHOT` real-frozen, else `SIM`). `fallbackSource` is what the
+ * fallback value itself represents — `SNAPSHOT` when seeded from the committed
+ * real snapshot, otherwise `SIM` — so a static-only deploy (no `/api`) still
+ * labels real frozen data correctly instead of calling it SIM.
  */
-function useEconResource<T>(url: string, fallback: T, pick: (json: any) => T): { data: T; source: DataSource } {
+function useEconResource<T>(
+  url: string,
+  fallback: T,
+  pick: (json: any) => T,
+  fallbackSource: DataSource = "SIM"
+): { data: T; source: DataSource } {
   // Seed from a recently-cached response so re-navigation renders real data
-  // instantly instead of flashing the SIM fallback.
+  // instantly instead of flashing the fallback.
   const cached = peekFresh<any>(url);
   const [data, setData] = useState<T>(cached ? pick(cached) : fallback);
-  const [source, setSource] = useState<DataSource>(cached ? (cached.source === "FRED" ? "FRED" : "SIM") : "SIM");
+  const [source, setSource] = useState<DataSource>(cached ? mapSource(cached.source) : fallbackSource);
 
   useEffect(() => {
     let alive = true;
     const seed = peekFresh<any>(url);
     if (seed) {
       setData(pick(seed));
-      setSource(seed.source === "FRED" ? "FRED" : "SIM");
+      setSource(mapSource(seed.source));
     } else {
       setSource("LOADING");
     }
@@ -41,11 +54,11 @@ function useEconResource<T>(url: string, fallback: T, pick: (json: any) => T): {
       .then((json) => {
         if (!alive) return;
         setData(pick(json));
-        setSource(json.source === "FRED" ? "FRED" : "SIM");
+        setSource(mapSource(json.source));
       })
       .catch(() => {
         if (!alive) return;
-        setSource("SIM");
+        setSource(fallbackSource);
       });
     return () => {
       alive = false;
@@ -57,7 +70,13 @@ function useEconResource<T>(url: string, fallback: T, pick: (json: any) => T): {
 }
 
 export function useEconSeries(id: string, n = 120): { data: Observation[]; source: DataSource } {
-  return useEconResource<Observation[]>(`/api/econ/series?id=${id}&n=${n}`, getSeriesHistory(id, n), (j) => j.observations ?? []);
+  const snap = getSnapshotObservations(id, n);
+  return useEconResource<Observation[]>(
+    `/api/econ/series?id=${id}&n=${n}`,
+    snap ?? getSeriesHistory(id, n),
+    (j) => j.observations ?? [],
+    snap ? "SNAPSHOT" : "SIM"
+  );
 }
 
 export function useLiveCurve(): { data: CurveSnapshot; source: DataSource } {
@@ -147,12 +166,23 @@ export function useLiveSeriesSet(
   ids: string[],
   units?: string,
   n = 15
-): { data: Record<string, { observations: { date: string; value: number }[]; source: "FRED" | "SIM" }>; source: DataSource } {
+): { data: Record<string, { observations: { date: string; value: number }[]; source: "FRED" | "SNAPSHOT" | "SIM" }>; source: DataSource } {
   const key = ids.join(",");
   const url = `/api/econ/batch?ids=${encodeURIComponent(key)}${units ? `&units=${units}` : ""}&n=${n}`;
+  // Seed from the committed snapshot so a static-only deploy still shows real
+  // frozen series (labelled SNAPSHOT) rather than nothing/SIM.
+  const seeded = Object.fromEntries(
+    ids
+      .map((id) => {
+        const obs = getSnapshotObservations(id, n);
+        return obs ? ([id, { observations: obs, source: "SNAPSHOT" as const }] as const) : null;
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null)
+  );
   return useEconResource(
     url,
-    {} as Record<string, { observations: { date: string; value: number }[]; source: "FRED" | "SIM" }>,
-    (j) => Object.fromEntries((j.series ?? []).map((s: { id: string; observations: { date: string; value: number }[]; source: "FRED" | "SIM" }) => [s.id, { observations: s.observations, source: s.source }]))
+    seeded as Record<string, { observations: { date: string; value: number }[]; source: "FRED" | "SNAPSHOT" | "SIM" }>,
+    (j) => Object.fromEntries((j.series ?? []).map((s: { id: string; observations: { date: string; value: number }[]; source: "FRED" | "SNAPSHOT" | "SIM" }) => [s.id, { observations: s.observations, source: s.source }])),
+    Object.keys(seeded).length ? "SNAPSHOT" : "SIM"
   );
 }
