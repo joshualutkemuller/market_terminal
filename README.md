@@ -461,15 +461,25 @@ live data; CME blocks non-browser clients, so FedWatch falls back to a
 deterministic futures curve (flagged in the page tooltip). Refresh the browser
 after exporting.
 
-## Deploy free
+## Deploy
 
-Module pages are statically prerendered and the FRED API routes are lightweight serverless
-functions, so any free Next.js host works with **zero configuration** (the `FRED_API_KEY`
-env var is optional — without it the econ modules use simulation):
+This is a **Vite + React SPA** with Web-standard `/api/*` route handlers (not a Next.js app).
+The handlers must be served by a runtime — a static-only host serves the SPA but no API, so
+every module falls back to committed snapshots/simulation. Two supported paths:
 
-- **Vercel (recommended):** import the repo → pick this branch → Deploy → get a `*.vercel.app`
-  URL. Add `FRED_API_KEY` in project settings to enable live economic data.
-- **Netlify / Cloudflare Pages:** same — build command `npm run build`
+- **Vercel:** the committed `vercel.json` sets `framework: vite`, builds with
+  `npm run build:vercel`, and routes `/api/*` to the `api/[...path].ts` serverless function
+  (which mounts the same route registry). Import the repo → Deploy. Set `FRED_API_KEY` for live
+  economics and `MARKET_PIPELINE_URL` (preferred over a direct `MARKET_DB_URL` on serverless)
+  for live markets; set `CRON_SECRET` to lock the daily refresh cron. **Make sure the project's
+  Framework Preset is _Vite_ (or "Other"), not Next.js.**
+- **Node process host (Render / Railway / Fly.io / VM):** `npm run build` then `npm start` runs
+  the standalone server in `src/server/index.ts`, serving `dist/` and `/api/*` from one process.
+  Drive the daily refresh with an external scheduler hitting `/api/cron/refresh`.
+
+Without `FRED_API_KEY` the econ modules use simulation; without a market source the market
+modules serve the committed snapshot. Internal-book modules (lending, prime, collateral, cash,
+…) are seeded fixtures in every environment.
 
 ---
 
