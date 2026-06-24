@@ -176,3 +176,12 @@ Reports should never erase existing master data on provider failure.
 
 Started in this handoff by adding shared TypeScript types for master JSON series, observations, manifests, refresh reports, and provenance.
 
+## Step 2 Status
+
+Implemented an incremental FRED master exporter:
+
+```bash
+FRED_API_KEY=xxxx npm run refresh:fred-master
+```
+
+The exporter writes raw `lin` values into `data/master/fred/{SERIES}.json`, updates `data/master/manifest.json`, and emits a timestamped refresh report under `data/master/reports/`. It preserves existing master files on provider failure and uses overlap windows for revisions.

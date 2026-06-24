@@ -10,6 +10,9 @@
 /dist-tools/
 /.vite/
 
+# local provider cache
+/data/master/
+
 # production
 /build
 /.next/
