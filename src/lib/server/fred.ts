@@ -10,8 +10,20 @@
  */
 
 // Override with FRED_BASE_URL to point at a mirror/proxy endpoint; defaults to
-// the public FRED API.
-const BASE = (process.env.FRED_BASE_URL || "https://api.stlouisfed.org/fred").replace(/\/$/, "");
+// the public FRED API. FRED rejects plain HTTP, so upgrade the official host even
+// if an older runtime env var still says http://api.stlouisfed.org/fred.
+function normalizeFredBaseUrl(value: string): string {
+  const trimmed = value.trim().replace(/\/$/, "");
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname === "api.stlouisfed.org") url.protocol = "https:";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return trimmed;
+  }
+}
+
+const BASE = normalizeFredBaseUrl(process.env.FRED_BASE_URL || "https://api.stlouisfed.org/fred");
 const DEFAULT_REVALIDATE = 600; // 10 minutes
 
 type CacheEntry = { at: number; ttlMs: number; data: unknown };
