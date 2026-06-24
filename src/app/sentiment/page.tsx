@@ -142,8 +142,8 @@ export default function SentimentModule() {
   const tickers = useMemo(() => getTickerSentiment(16, social), [social]);
   const btn = "rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide transition-colors";
   const recent = aaii.slice(-10).reverse();
-  const pageSource = vixLive ? "FRED" : socialLive ? "LIVE" : "SIM";
   const aaiiSource = hasAaiiSnapshot() ? "SNAPSHOT" : "SIM";
+  const pageSource = vixLive ? "FRED" : socialLive ? "LIVE" : aaiiSource === "SNAPSHOT" ? "SNAPSHOT" : "SIM";
 
   return (
     <div className="flex min-h-full flex-col">
@@ -207,7 +207,7 @@ export default function SentimentModule() {
                   ))}
                 </div>
                 <div className="border-t border-term-border px-3 py-1 text-3xs text-term-text-mute">
-                  Social upgrades through /api/social ({socialSource}); survey inputs remain deterministic until AAII/NAAIM connectors are wired. Market inputs (put/call, breadth, haven) upgrade via the market layer.
+                  Social upgrades through /api/social ({socialSource}); AAII reads the committed snapshot before SIM. NAAIM remains deterministic until a connector is wired. Market inputs (put/call, breadth, haven) upgrade via the market layer.
                 </div>
               </Panel>
             </div>

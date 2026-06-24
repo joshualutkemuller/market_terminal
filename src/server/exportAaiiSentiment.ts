@@ -112,8 +112,35 @@ function rowsFromTable(headers: string[], rows: string[][]): AaiiWeek[] {
   if (dateI < 0 || bullI < 0 || neutralI < 0 || bearI < 0) return [];
 
   const out: AaiiWeek[] = [];
+  let inferredYear = new Date().getUTCFullYear();
+  let lastMonth = 13;
+  const monthNum: Record<string, number> = {
+    jan: 1,
+    feb: 2,
+    mar: 3,
+    apr: 4,
+    may: 5,
+    jun: 6,
+    jul: 7,
+    aug: 8,
+    sep: 9,
+    oct: 10,
+    nov: 11,
+    dec: 12,
+  };
   for (const row of rows) {
-    const date = parseDate(row[dateI] ?? "");
+    const rawDate = (row[dateI] ?? "").replace(/\s+/g, " ").trim();
+    const noYear = rawDate.match(/^([A-Za-z]{3,9})\s+(\d{1,2})$/);
+    let date: string | null;
+    if (noYear) {
+      const month = monthNum[noYear[1].slice(0, 3).toLowerCase()];
+      if (!month) continue;
+      if (month > lastMonth) inferredYear -= 1;
+      lastMonth = month;
+      date = `${inferredYear}-${String(month).padStart(2, "0")}-${String(Number(noYear[2])).padStart(2, "0")}`;
+    } else {
+      date = parseDate(rawDate);
+    }
     const bullish = parseNumber(row[bullI] ?? "");
     const neutral = parseNumber(row[neutralI] ?? "");
     const bearish = parseNumber(row[bearI] ?? "");
@@ -165,6 +192,48 @@ function parseHtmlTable(html: string): AaiiWeek[] {
   return [];
 }
 
+function parsePlainHistoricalText(text: string): AaiiWeek[] {
+  const section = text.match(/Sentiment Survey Historical Data[\s\S]*?(?:The sentiment survey measures|Take the Sentiment Survey|Download Complete Historical Data)/i)?.[0] ?? text;
+  const rows: AaiiWeek[] = [];
+  const currentYear = new Date().getUTCFullYear();
+  let inferredYear = currentYear;
+  let lastMonth = 13;
+  const monthNum: Record<string, number> = {
+    jan: 1,
+    feb: 2,
+    mar: 3,
+    apr: 4,
+    may: 5,
+    jun: 6,
+    jul: 7,
+    aug: 8,
+    sep: 9,
+    oct: 10,
+    nov: 11,
+    dec: 12,
+  };
+  const monthName = Object.keys(monthNum).join("|");
+  const re = new RegExp(`\\b(${monthName})\\s+(\\d{1,2})\\s+(-?\\d+(?:\\.\\d+)?)%?\\s+(-?\\d+(?:\\.\\d+)?)%?\\s+(-?\\d+(?:\\.\\d+)?)%?`, "gi");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(section))) {
+    const month = monthNum[m[1].toLowerCase()];
+    if (month > lastMonth) inferredYear -= 1;
+    lastMonth = month;
+    const bullish = Number(m[3]);
+    const neutral = Number(m[4]);
+    const bearish = Number(m[5]);
+    if (![bullish, neutral, bearish].every(Number.isFinite)) continue;
+    rows.push({
+      date: `${inferredYear}-${String(month).padStart(2, "0")}-${String(Number(m[2])).padStart(2, "0")}`,
+      bullish,
+      neutral,
+      bearish,
+      spread: Number((bullish - bearish).toFixed(1)),
+    });
+  }
+  return rows;
+}
+
 function findDownloadCandidates(html: string, baseUrl: string): string[] {
   const urls = new Set<string>();
   const linkRe = /<a\b[^>]*href=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi;
@@ -187,7 +256,7 @@ async function fetchText(url: string): Promise<{ text: string; contentType: stri
     cache: "no-store",
     headers: {
       accept: "text/csv,text/tab-separated-values,text/html,application/vnd.ms-excel,*/*",
-      "user-agent": "MarketTerminalSnapshotBot/1.0 (+https://www.aaii.com/sentimentsurvey)",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
     },
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -205,6 +274,9 @@ async function tryUrl(url: string, seen = new Set<string>()): Promise<{ rows: Aa
 
   const tableRows = parseHtmlTable(text);
   if (tableRows.length) return { rows: tableRows, url };
+
+  const plainRows = parsePlainHistoricalText(text);
+  if (plainRows.length) return { rows: plainRows, url };
 
   for (const candidate of findDownloadCandidates(text, url)) {
     const nested = await tryUrl(candidate, seen).catch(() => null);
