@@ -75,6 +75,7 @@ export const NAV: NavItem[] = [
   { code: "BMRK", label: "Benchmark Rates", href: "/economics/benchmark", icon: Activity, desc: "Daily rates — trend, status, comparison & regime", group: "ECONOMICS" },
   { code: "UTIL", label: "Utilization Analytics", href: "/economics/utilization", icon: Gauge, desc: "Lending utilization, benchmark overlays & custom rate blends", group: "ECONOMICS" },
   { code: "YCURV", label: "Yield Curve Analytics", href: "/economics/yield-curve", icon: Spline, desc: "Daily curve shape, slope history & regime shifts", group: "ECONOMICS" },
+  { code: "RVOL", label: "Rate Volatility", href: "/economics/rate-vol", icon: Activity, desc: "Realized vol surface, vol regimes & vol-of-vol", group: "ECONOMICS" },
   { code: "MGC", label: "Macro Chart Studio", href: "/macro-chart", icon: AreaChart, desc: "Freeform economic & macro charting", group: "ECONOMICS" },
   { code: "MOTN", label: "Macro Motion Studio", href: "/economics/motion", icon: Clapperboard, desc: "Animate economic series over time", group: "ECONOMICS" },
   { code: "NEWS", label: "News & Signal Intel", href: "/news", icon: Newspaper, desc: "Market news, social & signal engine", group: "INTELLIGENCE" },
