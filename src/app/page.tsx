@@ -13,10 +13,10 @@ import { getPrimeSummary } from "@/data/primeFinance";
 import { getCollateralSummary } from "@/data/collateral";
 import { getCashSummary } from "@/data/cash";
 import { getOptimizationRuns } from "@/data/optimization";
-import { getIndices, getHeatmap, getMovers } from "@/data/markets";
+import { getIndices, getHeatmap, getMovers, INDEX_FRED_IDS, mergeLiveIndices, heatmapFromCards, moversFromCards, type PipelineCard } from "@/data/markets";
 import { getActiveAlerts, SEVERITY_TONE, CATEGORY_LABEL, type Alert } from "@/data/alerts";
-import { INDEX_FRED_IDS, mergeLiveIndices } from "@/data/markets";
 import { useLiveSeriesSet } from "@/lib/useEcon";
+import { useMarketView } from "@/lib/useMarket";
 import { fmtUsdAbbr, fmtSignedPct, fmtNum, pnlClass, fmtAbbr } from "@/lib/format";
 import { NAV } from "@/lib/nav";
 
@@ -27,13 +27,21 @@ export default function CommandCenter() {
   const cash = getCashSummary();
   const runs = getOptimizationRuns();
   const simIndices = getIndices();
-  const heat = getHeatmap();
-  const movers = getMovers();
+  const simHeat = getHeatmap();
+  const simMovers = getMovers();
   const alerts = getActiveAlerts().slice(0, 7);
 
   const { data: indexFred } = useLiveSeriesSet(INDEX_FRED_IDS, "lin", 30);
   const anyIndexLive = INDEX_FRED_IDS.some((id) => indexFred[id]?.source === "FRED");
   const indices = useMemo(() => mergeLiveIndices(simIndices, indexFred), [simIndices, indexFred]);
+
+  const { data: marketData, source: mktSource } = useMarketView<{ cards: PipelineCard[] }>("market");
+  const pipelineLive = mktSource !== "SNAPSHOT" && mktSource !== "LOADING" && !!marketData?.cards?.length;
+  const heat = useMemo(() => pipelineLive ? heatmapFromCards(marketData!.cards) : simHeat, [pipelineLive, marketData, simHeat]);
+  const movers = useMemo(() => {
+    if (pipelineLive) { const m = moversFromCards(marketData!.cards); return { ...simMovers, gainers: m.gainers, losers: m.losers }; }
+    return simMovers;
+  }, [pipelineLive, marketData, simMovers]);
 
   const alertCols: Column<Alert>[] = [
     { key: "sev", header: "", width: "8px", render: (a) => <span className={`inline-block h-2 w-2 rounded-full ${a.severity === "CRITICAL" ? "bg-term-down" : a.severity === "HIGH" ? "bg-term-amber" : "bg-term-blue"}`} /> },
