@@ -12,7 +12,7 @@ rem   MACRO_START_YEAR=2000
 rem
 rem Optional env:
 rem   FRED_API_KEY=...       Enables FRED econ snapshot + FRED master JSON refresh.
-rem   AAII_SENTIMENT_URL=... Optional override for AAII historical download/page.
+rem   AAII_SENTIMENT_URL=... Defaults to https://www.aaii.com/sentimentsurvey/sent_results.
 rem   MDP_OFFLINE=1          Forces the market pipeline to synthetic/offline sources.
 rem   MARKET_DATA_DIR=...    Defaults to market_data_pipeline\data\export.
 
@@ -30,6 +30,7 @@ call :LoadEnv "%ROOT%\.env"
 call :LoadEnv "%ROOT%\.proxy"
 
 if "%MARKET_DATA_DIR%"=="" set "MARKET_DATA_DIR=%ROOT%\market_data_pipeline\data\export"
+if "%AAII_SENTIMENT_URL%"=="" set "AAII_SENTIMENT_URL=https://www.aaii.com/sentimentsurvey/sent_results"
 set "PYTHONPATH=%ROOT%;%PYTHONPATH%"
 if "%MDP_ALLOW_YAHOO%"=="" set "MDP_ALLOW_YAHOO=1"
 if "%MDP_MARKET_REFRESH_LOOKBACK_DAYS%"=="" set "MDP_MARKET_REFRESH_LOOKBACK_DAYS=14"
