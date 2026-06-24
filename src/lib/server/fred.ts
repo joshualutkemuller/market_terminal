@@ -28,6 +28,21 @@ const DEFAULT_REVALIDATE = 600; // 10 minutes
 
 type CacheEntry = { at: number; ttlMs: number; data: unknown };
 const cache = new Map<string, CacheEntry>();
+const FRED_HEADERS = {
+  accept: "application/json,text/csv,text/plain,*/*",
+  "user-agent": "market-terminal/0.1 (+https://github.com/joshualutkemuller/market_terminal)",
+};
+
+class FredHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: string
+  ) {
+    super(message);
+    this.name = "FredHttpError";
+  }
+}
 
 export function fredEnabled(): boolean {
   return Boolean(process.env.FRED_API_KEY);
@@ -51,7 +66,7 @@ export async function fredProbe(): Promise<{ keyPresent: boolean; ok: boolean; d
   let result: { keyPresent: boolean; ok: boolean; detail: string };
   try {
     const url = `${BASE}/series/observations?series_id=DGS10&api_key=${encodeURIComponent(key)}&file_type=json&sort_order=desc&limit=1`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(url, { headers: FRED_HEADERS, signal: AbortSignal.timeout(6000) });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       result = { keyPresent: true, ok: false, detail: `FRED HTTP ${res.status} (key ${masked}): ${body.slice(0, 160)}` };
@@ -86,7 +101,7 @@ async function fredGet<T>(path: string, params: Record<string, string>, revalida
 
   let res: Response;
   try {
-    res = await fetch(url);
+    res = await fetch(url, { headers: FRED_HEADERS });
   } catch (err) {
     // Network-level failure (blocked egress, DNS, proxy, TLS). The econ routes
     // swallow this and fall back to SIM, so log it loudly here — it shows up in
@@ -96,11 +111,88 @@ async function fredGet<T>(path: string, params: Record<string, string>, revalida
   }
   if (!res.ok) {
     const body = await res.text().catch(() => res.statusText);
-    console.warn(`[fred] ${path} → HTTP ${res.status}: ${body.slice(0, 200)}`);
-    throw new Error(`FRED ${res.status}: ${body}`);
+    console.warn(`[fred] ${path} via ${new URL(url).protocol} → HTTP ${res.status}: ${body.slice(0, 200)}`);
+    throw new FredHttpError(`FRED ${res.status}: ${body}`, res.status, body);
   }
   const data = (await res.json()) as T;
   cache.set(url, { at: Date.now(), ttlMs: revalidateSec * 1000, data });
+  return data;
+}
+
+function parseFredCsv(csv: string, seriesId: string): FredObservation[] {
+  const rows = csv.trim().split(/\r?\n/);
+  const out: FredObservation[] = [];
+  for (const row of rows.slice(1)) {
+    const [date, raw] = row.split(",");
+    if (!date || raw == null) continue;
+    out.push({ date, value: raw === "." ? null : Number(raw) });
+  }
+  if (!out.length) throw new Error(`FRED CSV fallback returned no observations for ${seriesId}`);
+  return out.filter((o) => o.value == null || Number.isFinite(o.value));
+}
+
+function medianGapDays(obs: FredObservation[]): number {
+  const gaps: number[] = [];
+  for (let i = 1; i < Math.min(obs.length, 40); i++) {
+    const a = Date.parse(obs[i - 1].date);
+    const b = Date.parse(obs[i].date);
+    if (Number.isFinite(a) && Number.isFinite(b)) gaps.push((b - a) / 86400000);
+  }
+  if (!gaps.length) return 30;
+  return gaps.sort((a, b) => a - b)[Math.floor(gaps.length / 2)];
+}
+
+function periodsPerYear(obs: FredObservation[]): number {
+  const gap = medianGapDays(obs);
+  if (gap <= 3) return 252;
+  if (gap <= 10) return 52;
+  if (gap <= 45) return 12;
+  if (gap <= 110) return 4;
+  return 1;
+}
+
+function transformFredObservations(obs: FredObservation[], units?: string): FredObservation[] {
+  if (!units || units === "lin") return obs;
+  const perYear = periodsPerYear(obs);
+  const yoyLag = perYear === 252 ? 252 : perYear;
+  return obs.map((o, i) => {
+    const prev = obs[i - 1]?.value;
+    const yearAgo = obs[i - yoyLag]?.value;
+    const value =
+      o.value == null ? null
+      : units === "chg" ? (prev == null ? null : o.value - prev)
+      : units === "pch" ? (prev == null || prev === 0 ? null : ((o.value - prev) / Math.abs(prev)) * 100)
+      : units === "pc1" ? (yearAgo == null || yearAgo === 0 ? null : ((o.value - yearAgo) / Math.abs(yearAgo)) * 100)
+      : units === "pca" ? (prev == null || prev <= 0 || o.value <= 0 ? null : (Math.pow(o.value / prev, perYear) - 1) * 100)
+      : o.value;
+    return { date: o.date, value };
+  });
+}
+
+async function fredGraphSeries(
+  seriesId: string,
+  opts: { start?: string; end?: string; units?: string; scale?: number; revalidateSec?: number } = {}
+): Promise<FredObservation[]> {
+  const params = new URLSearchParams({ id: seriesId });
+  if (opts.start) params.set("cosd", opts.start);
+  if (opts.end) params.set("coed", opts.end);
+  const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?${params.toString()}`;
+  const cacheKey = `${url}|units=${opts.units ?? "lin"}|scale=${opts.scale ?? 1}`;
+  const cached = cache.get(cacheKey);
+  if (cached && Date.now() - cached.at < cached.ttlMs) return cached.data as FredObservation[];
+
+  const res = await fetch(url, { headers: FRED_HEADERS });
+  if (!res.ok) {
+    const body = await res.text().catch(() => res.statusText);
+    throw new FredHttpError(`FRED CSV ${res.status}: ${body}`, res.status, body);
+  }
+  const raw = parseFredCsv(await res.text(), seriesId);
+  const scale = opts.scale ?? 1;
+  const data = transformFredObservations(raw, opts.units).map((o) => ({
+    date: o.date,
+    value: o.value == null ? null : o.value * scale,
+  }));
+  cache.set(cacheKey, { at: Date.now(), ttlMs: (opts.revalidateSec ?? DEFAULT_REVALIDATE) * 1000, data });
   return data;
 }
 
@@ -128,7 +220,17 @@ export async function fredSeries(
     params.limit = String(opts.limit + (opts.units && opts.units !== "lin" ? 14 : 1));
     params.sort_order = "desc";
   }
-  const json = await fredGet<{ observations: { date: string; value: string }[] }>("/series/observations", params, opts.revalidateSec);
+  let json: { observations: { date: string; value: string }[] };
+  try {
+    json = await fredGet<{ observations: { date: string; value: string }[] }>("/series/observations", params, opts.revalidateSec);
+  } catch (err) {
+    if (!(err instanceof FredHttpError)) throw err;
+    console.warn(`[fred] JSON API failed for ${seriesId}; trying public CSV fallback (${err.status})`);
+    let fallback = await fredGraphSeries(seriesId, opts);
+    fallback = fallback.filter((o) => o.value !== null);
+    if (opts.limit && fallback.length > opts.limit) fallback = fallback.slice(fallback.length - opts.limit);
+    return fallback;
+  }
   const scale = opts.scale ?? 1;
   let obs = json.observations.map((o) => ({ date: o.date, value: o.value === "." ? null : Number(o.value) * scale }));
   if (opts.limit) obs = obs.reverse();
