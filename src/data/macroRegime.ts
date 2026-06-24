@@ -3,7 +3,9 @@ import { Rng } from "@/lib/rng";
 /** Macro regime to desk playbook analytics. */
 
 export type RegimeState = "EASING" | "TIGHTENING" | "RISK_ON" | "RISK_OFF" | "STAGFLATION" | "RECESSION_WATCH";
+export type NamedRegime = "Goldilocks" | "Reflation" | "Stagflation" | "Growth Scare" | "Liquidity Squeeze" | "Policy Easing";
 export type Desk = "SLAB" | "COLL" | "CASH" | "REINV" | "LIQ" | "OPT";
+export type CrossDesk = "Repo" | "Agency" | "Prime" | "E-Trading" | "Financing" | "Treasury";
 
 export interface RegimeSummary {
   state: RegimeState;
@@ -155,4 +157,112 @@ export function getRegimeExposures(): RegimeExposure[] {
       recommendedBias: total > 2e6 ? "ADD_RISK" : total < -2e6 ? "DEFEND" : "HOLD",
     };
   });
+}
+
+// ── Impulse Scores ──────────────────────────────────────────────────────────
+
+export interface ImpulseScore {
+  label: string;
+  value: number;
+  direction: "Accelerating" | "Stable" | "Decelerating";
+  detail: string;
+  source: "FRED" | "YAHOO" | "LOCAL";
+}
+
+export function getImpulseScores(): ImpulseScore[] {
+  return [
+    { label: "Growth", value: 46, direction: "Decelerating", detail: "ISM 48.7, GDPNOW 1.8%, payrolls softening", source: "FRED" },
+    { label: "Inflation", value: 52, direction: "Stable", detail: "Core PCE 2.7% YoY, shelter sticky, goods disinflating", source: "FRED" },
+    { label: "Policy", value: 38, direction: "Decelerating", detail: "Fed on hold, dot-plot dovish tilt, 2 cuts priced", source: "FRED" },
+    { label: "Liquidity", value: 61, direction: "Stable", detail: "RRP draining, reserves adequate, QT pace halved", source: "FRED" },
+    { label: "Credit", value: 55, direction: "Accelerating", detail: "HY OAS widening, IG stable, leveraged loans soft", source: "FRED" },
+    { label: "Risk Appetite", value: 58, direction: "Stable", detail: "VIX sub-18, equity breadth narrowing, flows neutral", source: "YAHOO" },
+  ];
+}
+
+// ── Named Regime Classification ─────────────────────────────────────────────
+
+export interface NamedRegimeResult {
+  regime: NamedRegime;
+  probability: number;
+  drivers: string;
+  history: { regime: NamedRegime; probability: number }[];
+}
+
+export function getNamedRegime(): NamedRegimeResult {
+  const rng = new Rng("named-regime");
+  const regimes: NamedRegime[] = ["Goldilocks", "Reflation", "Stagflation", "Growth Scare", "Liquidity Squeeze", "Policy Easing"];
+  const probs = [18, 8, 12, 22, 6, 34];
+  const best = probs.indexOf(Math.max(...probs));
+  return {
+    regime: regimes[best],
+    probability: probs[best],
+    drivers: "Fed dovish tilt + growth softening = classic late-cycle easing setup. Watch for stagflation risk if inflation re-accelerates.",
+    history: regimes.map((r, i) => ({ regime: r, probability: probs[i] })),
+  };
+}
+
+// ── Cross-Desk Playbooks (Agency/Prime/E-Trading) ───────────────────────────
+
+export interface CrossDeskPlaybook {
+  desk: CrossDesk;
+  action: string;
+  rationale: string;
+  urgency: "HIGH" | "MED" | "LOW";
+  regime: NamedRegime;
+  impactBps: number;
+}
+
+export function getCrossDeskPlaybooks(): CrossDeskPlaybook[] {
+  const regime = getNamedRegime().regime;
+  return [
+    {
+      desk: "Repo",
+      action: regime === "Liquidity Squeeze" ? "Term out aggressively and widen marks." : "Keep GC pricing normal; watch term repo for quarter-end.",
+      rationale: "Repo markets tighten first in liquidity stress; proactive terming protects financing continuity.",
+      urgency: regime === "Liquidity Squeeze" ? "HIGH" : "MED",
+      regime,
+      impactBps: regime === "Liquidity Squeeze" ? 15 : 3,
+    },
+    {
+      desk: "Agency",
+      action: regime === "Growth Scare" ? "Protect rebate floors and review recall exposure." : "Standard lending economics; monitor specials.",
+      rationale: "Growth scares lift borrow demand but increase recall risk and volatility in GC-specials.",
+      urgency: regime === "Growth Scare" ? "HIGH" : "LOW",
+      regime,
+      impactBps: regime === "Growth Scare" ? 8 : 2,
+    },
+    {
+      desk: "Prime",
+      action: regime === "Stagflation" ? "Widen financing, review margin sensitivity across HF book." : "Maintain client financing assumptions; watch leverage.",
+      rationale: "Stagflation pressures both equity and rates books simultaneously — double margin exposure.",
+      urgency: regime === "Stagflation" ? "HIGH" : "MED",
+      regime,
+      impactBps: regime === "Stagflation" ? 20 : 4,
+    },
+    {
+      desk: "E-Trading",
+      action: regime === "Liquidity Squeeze" ? "Reduce aggression, raise slippage assumptions, passive algos only." : "Standard parameters; watch vol ratio.",
+      rationale: "Electronic market-making profitability inverts when liquidity evaporates — protect capital.",
+      urgency: regime === "Liquidity Squeeze" ? "HIGH" : "LOW",
+      regime,
+      impactBps: regime === "Liquidity Squeeze" ? 12 : 1,
+    },
+    {
+      desk: "Financing",
+      action: regime === "Policy Easing" ? "Lock in term financing at current rates before cuts compress spreads." : "Roll short; capture carry in current rate environment.",
+      rationale: "Easing compresses term financing spreads — early movers capture the premium.",
+      urgency: regime === "Policy Easing" ? "HIGH" : "MED",
+      regime,
+      impactBps: regime === "Policy Easing" ? 10 : 3,
+    },
+    {
+      desk: "Treasury",
+      action: regime === "Reflation" ? "Shorten duration, increase TIPS allocation." : "Maintain benchmark duration; ladder maturities.",
+      rationale: "Reflation erodes real returns on nominal duration — rotate into linkers.",
+      urgency: regime === "Reflation" ? "HIGH" : "LOW",
+      regime,
+      impactBps: regime === "Reflation" ? 18 : 2,
+    },
+  ];
 }

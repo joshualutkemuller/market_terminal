@@ -19,7 +19,19 @@ import {
   type Inversion,
 } from "@/data/econCurve";
 import { getTermFundingCarry, type TermFundingCarry } from "@/data/econEnhancements";
-import { fmtNum, fmtSigned, fmtBps, fmtUsdAbbr, pnlClass } from "@/lib/format";
+import {
+  computeButterflies,
+  computeSpreadZScores,
+  computeCarryRoll,
+  computeRealBreakeven,
+  classifyCurveMove,
+  type ButterflySpread,
+  type SpreadZRow,
+  type CarryRollRow,
+  type RealBreakevenRow,
+} from "@/data/ratesRV";
+import { Sparkline } from "@/components/charts/Sparkline";
+import { fmtNum, fmtSigned, fmtBps, fmtPct, fmtUsdAbbr, pnlClass } from "@/lib/format";
 
 const PALETTE = ["#3B9DFF", "#2ECC71", "#A78BFA", "#22D3EE", "#EC4899", "#FFB400"];
 
@@ -447,6 +459,98 @@ export default function TreasuryCurveLab() {
             Carry = reinvestment yield minus funding and balance-sheet charge. This feeds REINV ladder choices and CASH funding path costs.
           </div>
         </Panel>
+
+        {/* ── Rates Relative Value ─────────────────────────────────────── */}
+        {(() => {
+          const butterflies = computeButterflies(today);
+          const spreadZs = computeSpreadZScores(today);
+          const carryRoll = computeCarryRoll(today);
+          const realBe = computeRealBreakeven();
+          const priorSnap = snapshots.find((s) => s.id === "1m") ?? snapshots[1];
+          const curveMove = classifyCurveMove(today, priorSnap);
+
+          const SIGNAL_TONE_RV: Record<string, "up" | "amber" | "down" | "violet"> = { Rich: "down", Fair: "amber", Cheap: "up" };
+          const TREND_TONE: Record<string, "up" | "amber" | "down"> = { Widening: "down", Stable: "amber", Tightening: "up" };
+          const MOVE_TONE: Record<string, "up" | "amber" | "down" | "blue" | "violet"> = {
+            "Bull Steepener": "up", "Bear Steepener": "amber", "Bull Flattener": "blue", "Bear Flattener": "down", "Parallel Shift": "neutral" as any, "Twist": "violet",
+          };
+
+          const flyCols: Column<ButterflySpread>[] = [
+            { key: "label", header: "Fly", render: (r) => <span className="font-semibold text-term-text">{r.label}</span>, sortVal: (r) => r.label },
+            { key: "wings", header: "Wings", render: (r) => <span className="text-term-text-mute">{r.wings}</span> },
+            { key: "belly", header: "Belly", render: (r) => <span className="text-term-amber">{r.belly}</span> },
+            { key: "value", header: "Value", align: "right", render: (r) => <span className="tnum text-term-text">{fmtSigned(r.valueBps, 1)}</span>, sortVal: (r) => r.valueBps },
+            { key: "spark", header: "20d", align: "right", width: "70px", render: (r) => <Sparkline data={r.hist20d} width={60} height={16} /> },
+            { key: "z", header: "Z", align: "right", render: (r) => <span className={pnlClass(-Math.abs(r.zScore))}>{fmtNum(r.zScore, 2)}</span>, sortVal: (r) => r.zScore },
+            { key: "pctile", header: "%ile", align: "right", render: (r) => <span className="tnum text-term-text-dim">{r.percentile}%</span>, sortVal: (r) => r.percentile },
+            { key: "signal", header: "Signal", align: "center", render: (r) => <Tag tone={SIGNAL_TONE_RV[r.signal] ?? "amber"}>{r.signal}</Tag>, sortVal: (r) => r.signal },
+          ];
+
+          const szCols: Column<SpreadZRow>[] = [
+            { key: "label", header: "Spread", render: (r) => <span className="font-semibold text-term-text">{r.label}</span>, sortVal: (r) => r.label },
+            { key: "value", header: "Value", align: "right", render: (r) => <span className={pnlClass(r.valueBps)}>{fmtSigned(r.valueBps, 1)}bps</span>, sortVal: (r) => r.valueBps },
+            { key: "z3", header: "Z (3m)", align: "right", render: (r) => <span className={pnlClass(-Math.abs(r.zScore3m))}>{fmtNum(r.zScore3m, 2)}</span>, sortVal: (r) => r.zScore3m },
+            { key: "z1", header: "Z (1y)", align: "right", render: (r) => <span className={pnlClass(-Math.abs(r.zScore1y))}>{fmtNum(r.zScore1y, 2)}</span>, sortVal: (r) => r.zScore1y },
+            { key: "pctile", header: "%ile (1y)", align: "right", render: (r) => <span className="tnum text-term-text-dim">{r.percentile1y}%</span>, sortVal: (r) => r.percentile1y },
+            { key: "trend", header: "Trend", align: "center", render: (r) => <Tag tone={TREND_TONE[r.trend]}>{r.trend}</Tag>, sortVal: (r) => r.trend },
+          ];
+
+          const crCols: Column<CarryRollRow>[] = [
+            { key: "tenor", header: "Tenor", render: (r) => <span className="font-semibold text-term-text">{r.tenor}</span>, sortVal: (r) => r.rank },
+            { key: "yield", header: "Yield", align: "right", render: (r) => <span className="text-term-text">{fmtNum(r.yield, 2)}%</span>, sortVal: (r) => r.yield },
+            { key: "carry", header: "Carry 3m", align: "right", render: (r) => <span className={pnlClass(r.carryBps3m)}>{fmtSigned(r.carryBps3m, 0)}bps</span>, sortVal: (r) => r.carryBps3m },
+            { key: "roll", header: "Roll 3m", align: "right", render: (r) => <span className={pnlClass(r.rollBps3m)}>{fmtSigned(r.rollBps3m, 0)}bps</span>, sortVal: (r) => r.rollBps3m },
+            { key: "total", header: "Total", align: "right", render: (r) => <span className={`font-semibold ${pnlClass(r.totalBps3m)}`}>{fmtSigned(r.totalBps3m, 0)}bps</span>, sortVal: (r) => r.totalBps3m },
+            { key: "rank", header: "Rank", align: "right", render: (r) => <span className={r.rank <= 2 ? "font-bold text-term-amber" : "text-term-text-mute"}>{r.rank}</span>, sortVal: (r) => r.rank },
+          ];
+
+          const rbCols: Column<RealBreakevenRow>[] = [
+            { key: "tenor", header: "Tenor", render: (r) => <span className="font-semibold text-term-text">{r.tenor}</span> },
+            { key: "nominal", header: "Nominal", align: "right", render: (r) => <span className="text-term-text">{fmtNum(r.nominal, 2)}%</span>, sortVal: (r) => r.nominal },
+            { key: "real", header: "Real Yield", align: "right", render: (r) => <span className="text-term-amber">{fmtNum(r.realYield, 2)}%</span>, sortVal: (r) => r.realYield },
+            { key: "be", header: "Breakeven", align: "right", render: (r) => <span className="text-term-up">{fmtNum(r.breakeven, 2)}%</span>, sortVal: (r) => r.breakeven },
+            { key: "tp", header: "Term Prem", align: "right", render: (r) => <span className="text-term-text-dim">{fmtNum(r.termPremium, 2)}%</span>, sortVal: (r) => r.termPremium },
+          ];
+
+          return (
+            <>
+              {/* Curve Move Classifier */}
+              <Panel title="Curve Move Classifier" code="MOVE" accent className="xl:col-span-3">
+                <div className="grid grid-cols-2 gap-px bg-term-border sm:grid-cols-5">
+                  <Stat label="Classification" value={<Tag tone={(MOVE_TONE[curveMove.classification] ?? "amber") as any}>{curveMove.classification}</Tag>} className="bg-term-panel" />
+                  <Stat label="Front Δ (2Y)" value={`${fmtSigned(curveMove.frontChange, 1)}bps`} className="bg-term-panel" tone={curveMove.frontChange > 0 ? "down" : "up"} />
+                  <Stat label="Back Δ (10Y)" value={`${fmtSigned(curveMove.backChange, 1)}bps`} className="bg-term-panel" tone={curveMove.backChange > 0 ? "down" : "up"} />
+                  <Stat label="Slope Δ" value={`${fmtSigned(curveMove.slopeChange, 1)}bps`} className="bg-term-panel" tone={curveMove.slopeChange > 0 ? "up" : "down"} />
+                  <Stat label="vs" value={priorSnap.label} sub={priorSnap.date} className="bg-term-panel" />
+                </div>
+                <div className="px-3 py-2 text-2xs text-term-text-dim">{curveMove.description}</div>
+              </Panel>
+
+              {/* Butterfly Spreads */}
+              <Panel title="Butterfly Spreads" code="FLY" className="xl:col-span-2" right={<span className="text-3xs text-term-text-mute">2·belly − wing1 − wing2</span>}>
+                <DataGrid columns={flyCols} rows={butterflies} rowKey={(r) => r.id} maxHeight="200px" zebra />
+              </Panel>
+
+              {/* Spread Z-Scores */}
+              <Panel title="Spread Z-Scores & Percentiles" code="ZSPR">
+                <DataGrid columns={szCols} rows={spreadZs} rowKey={(r) => r.id} maxHeight="280px" zebra />
+              </Panel>
+
+              {/* Carry & Roll */}
+              <Panel title="Carry & Roll Proxy (3m)" code="C&R" className="xl:col-span-2" right={<span className="text-3xs text-term-text-mute">funded at 3M bill rate</span>}>
+                <DataGrid columns={crCols} rows={carryRoll} rowKey={(r) => r.tenor} maxHeight="280px" zebra />
+              </Panel>
+
+              {/* Real Yield vs Breakeven */}
+              <Panel title="Real Yield vs Breakeven Decomposition" code="TIPS" right={<span className="text-3xs text-term-text-mute">TIPS-implied</span>}>
+                <DataGrid columns={rbCols} rows={realBe} rowKey={(r) => r.tenor} maxHeight="260px" zebra />
+                <div className="border-t border-term-border px-3 py-1.5 text-3xs text-term-text-mute">
+                  Nominal = Real Yield + Breakeven Inflation. Term premium is model-implied residual.
+                </div>
+              </Panel>
+            </>
+          );
+        })()}
       </div>
     </div>
   );
