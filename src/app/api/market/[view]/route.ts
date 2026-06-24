@@ -90,7 +90,10 @@ async function readFromDb(dbUrl: string, view: string): Promise<unknown | null> 
   const isPg = /^postgres(ql)?:\/\//.test(dbUrl);
   if (isPg) {
     const pg = optionalRequire("pg");
-    if (!pg) return null;
+    if (!pg) {
+      console.warn("[market] MARKET_DB_URL is Postgres but the 'pg' driver isn't available in this runtime");
+      return null;
+    }
     const client = new pg.Client({ connectionString: dbUrl });
     try {
       await client.connect();
@@ -98,7 +101,11 @@ async function readFromDb(dbUrl: string, view: string): Promise<unknown | null> 
         "SELECT payload_json FROM analytics_api_views WHERE view = $1",
         [view]
       );
-      return r.rows[0]?.payload_json ? JSON.parse(r.rows[0].payload_json) : null;
+      if (!r.rows[0]?.payload_json) {
+        console.warn(`[market] connected to Postgres, but analytics_api_views has no row for view '${view}' — run 'publish-views' to populate it`);
+        return null;
+      }
+      return JSON.parse(r.rows[0].payload_json);
     } finally {
       await client.end().catch(() => {});
     }
@@ -106,7 +113,10 @@ async function readFromDb(dbUrl: string, view: string): Promise<unknown | null> 
 
   // DuckDB file
   const duckdb = optionalRequire("duckdb");
-  if (!duckdb) return null;
+  if (!duckdb) {
+    console.warn("[market] MARKET_DB_URL is a DuckDB file but the 'duckdb' driver isn't installed (run `npm i duckdb`)");
+    return null;
+  }
   const file = dbUrl.replace(/^duckdb:/, "");
   const db = new duckdb.Database(file, duckdb.OPEN_READONLY ?? 1);
   const con = db.connect();
@@ -118,7 +128,11 @@ async function readFromDb(dbUrl: string, view: string): Promise<unknown | null> 
         (err: Error | null, res: any[]) => (err ? reject(err) : resolve(res))
       )
     );
-    return rows[0]?.payload_json ? JSON.parse(rows[0].payload_json) : null;
+    if (!rows[0]?.payload_json) {
+      console.warn(`[market] DuckDB opened, but analytics_api_views has no row for view '${view}' — run 'publish-views'/'export-views'`);
+      return null;
+    }
+    return JSON.parse(rows[0].payload_json);
   } finally {
     db.close();
   }
@@ -547,8 +561,10 @@ export async function GET(req: Request, { params }: { params: { view: string } }
         const earliestAsOf = extractEarliestAsOf(data, view);
         return json({ source: "DB", view, basis, earliestAsOf, data });
       }
-    } catch {
-      // fall through
+    } catch (err) {
+      // Connection/auth/SSL/query failure — log it (the route otherwise falls
+      // back to the snapshot silently, hiding why MARKET_DB_URL didn't work).
+      console.warn(`[market] MARKET_DB_URL read failed for view '${viewKey}': ${(err as Error).message}`);
     }
   }
 
@@ -577,8 +593,9 @@ export async function GET(req: Request, { params }: { params: { view: string } }
         const filtered = asof ? filterSnapshotByAsOf(livePayload, view, asof) : livePayload;
         return json({ source: "LIVE", view, basis, ...(asof ? { asof } : {}), earliestAsOf, data: filtered });
       }
-    } catch {
-      // fall through
+      console.warn(`[market] MARKET_PIPELINE_URL returned HTTP ${r.status} for ${ENDPOINT[view]}`);
+    } catch (err) {
+      console.warn(`[market] MARKET_PIPELINE_URL fetch failed for ${ENDPOINT[view]}: ${(err as Error).message}`);
     }
   }
 
