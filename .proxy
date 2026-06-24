@@ -1,4 +1,8 @@
-# placeholder for HTTP_PATH and HTTPS_PATH
+# Optional outbound proxy settings for server-side provider calls.
+#
+# Leave these commented when you do not have a real corporate proxy. Active
+# placeholder values such as http://your-proxy:port make Node/Python try an
+# invalid proxy before falling back direct.
 
-HTTPS_PROXY=http://your-proxy:port
-HTTP_PROXY=http://your-proxy:port
+# HTTPS_PROXY=http://your-proxy:port
+# HTTP_PROXY=http://your-proxy:port

@@ -179,6 +179,10 @@ class YahooConnector(MarketDataAdapter):
             payload = client.get_json(url, params=params)
         except Exception as exc:  # noqa: BLE001 - degrade gracefully offline
             logger.warning("Yahoo fetch failed for %s: %s", symbol, exc)
+            stale = self.cache.get_stale(cache_key)
+            if stale is not None:
+                logger.warning("Using stale Yahoo cache for %s after provider failure", symbol)
+                return _result(self._parse_chart(stale, symbol), "ok:stale_cache")
             return _result(empty_market_frame(), f"error:{type(exc).__name__}")
 
         try:

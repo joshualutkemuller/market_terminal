@@ -8,6 +8,9 @@
  *
  * Get a free key: https://fred.stlouisfed.org/docs/api/api_key.html
  */
+import { execFile } from "node:child_process";
+import path from "node:path";
+import { promisify } from "node:util";
 import { fetchWithProxyFallback } from "@/lib/server/fetchProxy";
 
 // Override with FRED_BASE_URL to point at a mirror/proxy endpoint; defaults to
@@ -26,6 +29,7 @@ function normalizeFredBaseUrl(value: string): string {
 
 const BASE = normalizeFredBaseUrl(process.env.FRED_BASE_URL || "https://api.stlouisfed.org/fred");
 const DEFAULT_REVALIDATE = 600; // 10 minutes
+const execFileAsync = promisify(execFile);
 
 type CacheEntry = { at: number; ttlMs: number; data: unknown };
 const cache = new Map<string, CacheEntry>();
@@ -170,6 +174,43 @@ function transformFredObservations(obs: FredObservation[], units?: string): Fred
   });
 }
 
+async function fredPythonSeries(
+  seriesId: string,
+  opts: { start?: string; end?: string; units?: string; scale?: number; revalidateSec?: number } = {}
+): Promise<FredObservation[]> {
+  if (process.env.FRED_PYTHON_FALLBACK !== "1") {
+    throw new Error("FRED_PYTHON_FALLBACK is not enabled");
+  }
+  const script = path.resolve(process.cwd(), "scripts/fredapi_fallback.py");
+  const args = [script, seriesId];
+  if (opts.start) args.push("--start", opts.start);
+  if (opts.end) args.push("--end", opts.end);
+
+  const bins = process.env.FRED_PYTHON_BIN ? [process.env.FRED_PYTHON_BIN] : ["python", "python3"];
+  let lastErr: unknown = null;
+  for (const bin of bins) {
+    try {
+      const { stdout } = await execFileAsync(bin, args, {
+        env: process.env,
+        timeout: 20_000,
+        maxBuffer: 8 * 1024 * 1024,
+      });
+      const payload = JSON.parse(stdout) as { observations?: FredObservation[] };
+      const raw = (payload.observations ?? []).filter((o) => o.value == null || Number.isFinite(o.value));
+      if (!raw.length) throw new Error(`fredapi fallback returned no observations for ${seriesId}`);
+      const scale = opts.scale ?? 1;
+      return transformFredObservations(raw, opts.units).map((o) => ({
+        date: o.date,
+        value: o.value == null ? null : o.value * scale,
+      }));
+    } catch (err) {
+      lastErr = err;
+      if (process.env.FRED_PYTHON_BIN) break;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("fredapi fallback failed");
+}
+
 async function fredGraphSeries(
   seriesId: string,
   opts: { start?: string; end?: string; units?: string; scale?: number; revalidateSec?: number } = {}
@@ -225,12 +266,23 @@ export async function fredSeries(
   try {
     json = await fredGet<{ observations: { date: string; value: string }[] }>("/series/observations", params, opts.revalidateSec);
   } catch (err) {
-    if (!(err instanceof FredHttpError)) throw err;
-    console.warn(`[fred] JSON API failed for ${seriesId}; trying public CSV fallback (${err.status})`);
-    let fallback = await fredGraphSeries(seriesId, opts);
-    fallback = fallback.filter((o) => o.value !== null);
-    if (opts.limit && fallback.length > opts.limit) fallback = fallback.slice(fallback.length - opts.limit);
-    return fallback;
+    console.warn(
+      `[fred] JSON API failed for ${seriesId}; trying public CSV fallback` +
+      (err instanceof FredHttpError ? ` (${err.status})` : ` (${(err as Error).message})`)
+    );
+    try {
+      let fallback = await fredGraphSeries(seriesId, opts);
+      fallback = fallback.filter((o) => o.value !== null);
+      if (opts.limit && fallback.length > opts.limit) fallback = fallback.slice(fallback.length - opts.limit);
+      return fallback;
+    } catch (csvErr) {
+      if (process.env.FRED_PYTHON_FALLBACK !== "1") throw csvErr;
+      console.warn(`[fred] CSV fallback failed for ${seriesId}; trying Python fredapi fallback: ${(csvErr as Error).message}`);
+      let fallback = await fredPythonSeries(seriesId, opts);
+      fallback = fallback.filter((o) => o.value !== null);
+      if (opts.limit && fallback.length > opts.limit) fallback = fallback.slice(fallback.length - opts.limit);
+      return fallback;
+    }
   }
   const scale = opts.scale ?? 1;
   let obs = json.observations.map((o) => ({ date: o.date, value: o.value === "." ? null : Number(o.value) * scale }));

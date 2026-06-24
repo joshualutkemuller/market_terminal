@@ -151,6 +151,10 @@ class FredConnector(MacroDataAdapter):
             payload = client.get_json(FRED_ENDPOINT, params=params)
         except Exception as exc:  # noqa: BLE001 - degrade gracefully on any failure
             logger.warning("FRED fetch failed for %s: %s", series_id, exc)
+            stale = self.cache.get_stale(cache_key)
+            if stale is not None:
+                logger.warning("Using stale FRED cache for %s after provider failure", series_id)
+                return _result(self._parse_observations(stale, series_id), "ok:stale_cache")
             return _result(empty_macro_frame(), f"error:{type(exc).__name__}")
 
         try:

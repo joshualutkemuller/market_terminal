@@ -151,6 +151,23 @@ class ResponseCache:
             return None
         return envelope.get("payload")
 
+    def get_stale(self, key: str) -> Optional[dict[str, Any]]:
+        """Return a cached payload regardless of age.
+
+        This is used only after a live provider request fails, so stale real
+        data can keep local fallback snapshots useful instead of returning an
+        empty frame.
+        """
+        path = self._path(key)
+        if not path.exists():
+            return None
+        try:
+            envelope = json.loads(path.read_text("utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+        payload = envelope.get("payload")
+        return payload if isinstance(payload, dict) else None
+
     def put(self, key: str, payload: dict[str, Any]) -> None:
         """Store ``payload`` under ``key`` with a fresh ``cached_at`` stamp."""
         envelope = {

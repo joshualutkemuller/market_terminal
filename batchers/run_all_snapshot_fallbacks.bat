@@ -15,6 +15,7 @@ rem   FRED_API_KEY=...       Enables FRED econ snapshot + FRED master JSON refre
 rem   AAII_SENTIMENT_URL=... Defaults to https://www.aaii.com/sentimentsurvey/sent_results.
 rem   MDP_OFFLINE=1          Forces the market pipeline to synthetic/offline sources.
 rem   MARKET_DATA_DIR=...    Defaults to market_data_pipeline\data\export.
+rem   FRED_PYTHON_FALLBACK=1 Allows Node FRED refreshes to retry via Python fredapi.
 
 set "ROOT=%~dp0.."
 for %%I in ("%ROOT%") do set "ROOT=%%~fI"
@@ -57,7 +58,7 @@ call "%VENV%\Scripts\activate.bat" || exit /b 1
 echo [setup] Installing/updating Python pipeline dependencies
 python -m pip install --upgrade pip || exit /b 1
 python -m pip install -e "%ROOT%\macro_data_etl" || exit /b 1
-python -m pip install polars duckdb pyarrow httpx tenacity pydantic pydantic-settings pyyaml fastapi "uvicorn[standard]" apscheduler structlog yfinance pytest pytest-asyncio || exit /b 1
+python -m pip install polars duckdb pyarrow httpx tenacity pydantic pydantic-settings pyyaml fastapi "uvicorn[standard]" apscheduler structlog yfinance fredapi pytest pytest-asyncio || exit /b 1
 
 if not exist "%ROOT%\node_modules" (
   echo [setup] Installing npm dependencies
