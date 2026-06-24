@@ -24,7 +24,7 @@ export function isRealEconSource(source: unknown): source is RealEconSource {
 
 /** Map a route's `source` string to the badge vocabulary. */
 function mapSource(s: unknown): DataSource {
-  return s === "FRED" ? "FRED" : s === "SNAPSHOT" ? "SNAPSHOT" : "SIM";
+  return s === "FRED" ? "FRED" : s === "SNAPSHOT" ? "SNAPSHOT" : s === "ETL" ? "ETL" : "SIM";
 }
 
 /**

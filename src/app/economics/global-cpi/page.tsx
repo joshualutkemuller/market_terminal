@@ -8,7 +8,7 @@ import { Sparkline } from "@/components/charts/Sparkline";
 import { useDrill } from "@/components/econ/DrillProvider";
 import { SourceBadge } from "@/components/econ/SourceBadge";
 import { isRealEconSource, useLiveSeriesSet } from "@/lib/useEcon";
-import { getGlobalCPI, getGlobalSummary, liveCountryCPI, type CountryInflation, type Region } from "@/data/globalMacro";
+import { etlCountryCPI, getGlobalCPI, getGlobalSummary, liveCountryCPI, type CountryInflation, type Region } from "@/data/globalMacro";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
 
 const REGIONS: Array<"ALL" | Region> = ["ALL", "AMER", "EMEA", "APAC"];
@@ -33,13 +33,24 @@ export default function GlobalInflation() {
   const { open } = useDrill();
   const [region, setRegion] = useState<"ALL" | Region>("ALL");
 
-  // Take country CPI face values live from FRED index series (units=lin -> derive YoY/MoM/streak).
-  const baseAll = getGlobalCPI();
+  // Source order: live FRED raw levels -> committed FRED snapshot raw levels -> macro ETL gold snapshot -> deterministic SIM.
+  const baseAll = getGlobalCPI().map(etlCountryCPI);
   const { data: liveMap, source } = useLiveSeriesSet(baseAll.map((c) => c.fredId), "lin", 26);
   const all = baseAll.map((c) => {
     const L = liveMap[c.fredId];
-    return L && isRealEconSource(L.source) && L.observations.length ? liveCountryCPI(c, L.observations) : c;
+    return L && isRealEconSource(L.source) && L.observations.length
+      ? { ...liveCountryCPI(c, L.observations), source: L.source }
+      : c;
   });
+  const pageSource = all.some((c) => c.source === "FRED")
+    ? "FRED"
+    : all.some((c) => c.source === "SNAPSHOT")
+    ? "SNAPSHOT"
+    : all.some((c) => c.source === "ETL")
+    ? "ETL"
+    : source === "LOADING"
+    ? "LOADING"
+    : "SIM";
   const base = getGlobalSummary();
   const ys = all.map((c) => c.yoy).sort((a, b) => a - b);
   const summary = {
@@ -52,8 +63,17 @@ export default function GlobalInflation() {
   };
   const rows = region === "ALL" ? all : all.filter((c) => c.region === region);
 
-  const drill = (row: CountryInflation) =>
-    open({ id: row.fredId, label: `${row.country} CPI`, units: "lin", unitLabel: "level · derived MoM/YoY", decimals: 2, growthMetrics: true });
+  const drill = (row: CountryInflation) => {
+    const hasRawLevels = row.source === "FRED" || row.source === "SNAPSHOT";
+    open({
+      id: row.fredId,
+      label: `${row.country} CPI`,
+      units: "lin",
+      unitLabel: hasRawLevels ? "level · derived MoM/YoY" : row.source === "ETL" ? "YoY % · ETL annual" : "simulation",
+      decimals: hasRawLevels ? 2 : 1,
+      growthMetrics: hasRawLevels,
+    });
+  };
 
   const trendTag = (t: CountryInflation["trend"]) =>
     t === "RISING" ? (
@@ -84,13 +104,26 @@ export default function GlobalInflation() {
       render: (c) => <span className={yoyClass(c.yoy)}>{fmtNum(c.yoy, 1)}</span>,
       sortVal: (c) => c.yoy,
     },
-    { key: "prior", header: "Prior %", align: "right", render: (c) => <span className="text-term-text-dim">{fmtNum(c.priorYoy, 1)}</span>, sortVal: (c) => c.priorYoy },
+    {
+      key: "yoyDelta",
+      header: "ΔYoY",
+      align: "right",
+      render: (c) => <span className={c.yoyDelta == null ? "text-term-text-mute" : pnlClass(c.yoyDelta)}>{c.yoyDelta == null ? "—" : `${fmtSigned(c.yoyDelta, 2)} pp`}</span>,
+      sortVal: (c) => c.yoyDelta ?? -999,
+    },
     {
       key: "mom",
       header: "MoM %",
       align: "right",
-      render: (c) => <span className={pnlClass(c.mom)}>{fmtSigned(c.mom, 2)}</span>,
-      sortVal: (c) => c.mom,
+      render: (c) => <span className={c.mom == null ? "text-term-text-mute" : pnlClass(c.mom)}>{c.mom == null ? "—" : fmtSigned(c.mom, 2)}</span>,
+      sortVal: (c) => c.mom ?? -999,
+    },
+    {
+      key: "momDelta",
+      header: "ΔMoM",
+      align: "right",
+      render: (c) => <span className={c.momDelta == null ? "text-term-text-mute" : pnlClass(c.momDelta)}>{c.momDelta == null ? "—" : `${fmtSigned(c.momDelta, 2)} pp`}</span>,
+      sortVal: (c) => c.momDelta ?? -999,
     },
     {
       key: "vsTarget",
@@ -118,6 +151,13 @@ export default function GlobalInflation() {
       width: "84px",
       render: (c) => <Sparkline data={c.history} width={72} height={20} />,
     },
+    {
+      key: "source",
+      header: "Src",
+      align: "center",
+      render: (c) => <Tag tone={c.source === "FRED" ? "up" : c.source === "SNAPSHOT" ? "blue" : c.source === "ETL" ? "amber" : "neutral"}>{c.source}</Tag>,
+      sortVal: (c) => c.source,
+    },
   ];
 
   const falling = [...all].filter((c) => c.trend === "FALLING").sort((a, b) => b.streak - a.streak).slice(0, 6);
@@ -135,7 +175,7 @@ export default function GlobalInflation() {
         code="GCPI"
         title="Global Inflation"
         desc="CPI YoY & MoM by country — trend & streaks"
-        right={<div className="flex items-center gap-2"><SourceBadge source={source} /><Tag tone="amber">{all.length} TRACKED</Tag></div>}
+        right={<div className="flex items-center gap-2"><SourceBadge source={pageSource} /><Tag tone="amber">{all.length} TRACKED</Tag></div>}
       />
 
       <KpiStrip>
@@ -216,8 +256,9 @@ export default function GlobalInflation() {
       </div>
 
       <div className="border-t border-term-border bg-term-panel px-3 py-1.5 text-3xs text-term-text-mute">
-        Trend = latest YoY print vs the prior print · Streak = consecutive prints moving in the same direction · Click any country to
-        drill into its rolling 24-month CPI history (live FRED when keyed, else simulation).
+        Source order: live FRED raw levels → committed FRED raw snapshot → macro ETL gold snapshot → SIM. MoM / ΔMoM are shown only when
+        raw monthly index levels are available; ETL-only World Bank rows show YoY / ΔYoY without fabricating monthly prints. Click any country
+        to drill into raw index-level history where available.
       </div>
     </div>
   );

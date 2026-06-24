@@ -60,7 +60,7 @@ export function DrillProvider({ children }: { children: ReactNode }) {
       .then((j) => {
         if (!alive) return;
         setObs(j.observations ?? []);
-        setSource(j.source === "FRED" ? "FRED" : j.source === "SNAPSHOT" ? "SNAPSHOT" : "SIM");
+        setSource(j.source === "FRED" ? "FRED" : j.source === "SNAPSHOT" ? "SNAPSHOT" : j.source === "ETL" ? "ETL" : "SIM");
       })
       .catch(() => alive && setSource("SIM"));
     return () => {
@@ -171,7 +171,7 @@ export function DrillProvider({ children }: { children: ReactNode }) {
               </table>
             </div>
             <footer className="border-t border-term-border px-3 py-1.5 text-3xs text-term-text-mute">
-              {source === "FRED" ? "Live observations from FRED · api.stlouisfed.org" : source === "SNAPSHOT" ? "Committed economic snapshot" : "Deterministic simulation — set FRED_API_KEY for live data"} · press ESC to close
+              {source === "FRED" ? "Live observations from FRED · api.stlouisfed.org" : source === "SNAPSHOT" ? "Committed economic snapshot" : source === "ETL" ? "Committed macro ETL gold snapshot" : "Deterministic simulation — set FRED_API_KEY for live data"} · press ESC to close
             </footer>
           </>
         )}

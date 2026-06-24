@@ -1,4 +1,6 @@
 import { Rng } from "@/lib/rng";
+import { etlCountryMacro, etlInflationTimeseries, type EtlCountryMacro } from "@/data/etlMacro";
+import type { DataSource } from "@/lib/useEcon";
 
 /**
  * Global inflation & policy-rate monitors.
@@ -18,12 +20,16 @@ export interface CountryInflation {
   fredId: string;
   yoy: number;
   priorYoy: number;
-  mom: number;
+  mom: number | null;
+  momDelta: number | null;
+  yoyDelta: number | null;
   trend: Trend;
   streak: number; // consecutive prints in same YoY direction
   target: number;
   vsTarget: number; // yoy - target
   history: number[]; // recent YoY prints (oldest -> newest)
+  source: DataSource;
+  asOf: string | null;
 }
 
 export interface PolicyRate {
@@ -52,7 +58,7 @@ const CPI_DEFS: [string, string, Region, string, number, number][] = [
   ["Japan", "🇯🇵", "APAC", "JPNCPIALLMINMEI", 2.5, 2.0],
   ["Germany", "🇩🇪", "EMEA", "DEUCPIALLMINMEI", 2.2, 2.0],
   ["France", "🇫🇷", "EMEA", "FRACPIALLMINMEI", 1.8, 2.0],
-  ["Italy", "🇮🇹", "EMEA", "ITAL_CPI", 1.9, 2.0],
+  ["Italy", "🇮🇹", "EMEA", "ITACPIALLMINMEI", 1.9, 2.0],
   ["Canada", "🇨🇦", "AMER", "CANCPIALLMINMEI", 2.0, 2.0],
   ["China", "🇨🇳", "APAC", "CHNCPIALLMINMEI", 0.6, 3.0],
   ["India", "🇮🇳", "APAC", "INDCPIALLMINMEI", 4.2, 4.0],
@@ -67,6 +73,29 @@ const CPI_DEFS: [string, string, Region, string, number, number][] = [
   ["South Africa", "🇿🇦", "EMEA", "ZAFCPIALLMINMEI", 4.4, 4.5],
   ["Saudi Arabia", "🇸🇦", "EMEA", "SAUCPIALLMINMEI", 1.9, 2.0],
 ];
+
+const CPI_ISO: Record<string, string> = {
+  "United States": "USA",
+  "Euro Area": "EMU",
+  "United Kingdom": "GBR",
+  Japan: "JPN",
+  Germany: "DEU",
+  France: "FRA",
+  Italy: "ITA",
+  Canada: "CAN",
+  China: "CHN",
+  India: "IND",
+  Brazil: "BRA",
+  Mexico: "MEX",
+  Australia: "AUS",
+  "South Korea": "KOR",
+  Switzerland: "CHE",
+  Spain: "ESP",
+  Turkey: "TUR",
+  Indonesia: "IDN",
+  "South Africa": "ZAF",
+  "Saudi Arabia": "SAU",
+};
 
 // country, flag, region, central bank, current rate, bias dir (-1 cut/+1 hike/0 hold), FRED id
 const RATE_DEFS: [string, string, Region, string, number, number, string | undefined][] = [
@@ -120,13 +149,66 @@ export function getGlobalCPI(): CountryInflation[] {
       country, flag, region, fredId,
       yoy, priorYoy,
       mom: Number((yoy / 12 + rng.normal(0, 0.1)).toFixed(2)),
+      momDelta: Number(rng.normal(0, 0.08).toFixed(2)),
+      yoyDelta: Number((yoy - priorYoy).toFixed(2)),
       trend,
       streak: trend === "FLAT" ? 0 : streak,
       target,
       vsTarget: Number((yoy - target).toFixed(1)),
       history: hist,
+      source: "SIM",
+      asOf: null,
     };
   });
+}
+
+function etlRowFor(base: CountryInflation): EtlCountryMacro | undefined {
+  const iso = CPI_ISO[base.country];
+  if (!iso) return undefined;
+  return etlCountryMacro.find((r) => r.country_iso3 === iso);
+}
+
+function etlHistory(iso: string): number[] {
+  return etlInflationTimeseries
+    .map((r) => (typeof r[iso] === "number" ? Number(r[iso]) : null))
+    .filter((v): v is number => v != null && Number.isFinite(v))
+    .slice(-12)
+    .map((v) => Number(v.toFixed(1)));
+}
+
+export function getEtlInflationObservations(fredId: string, n?: number): { date: string; value: number }[] | null {
+  const iso = Object.entries(CPI_ISO).find(([country]) => CPI_DEFS.some(([name, , , id]) => name === country && id === fredId))?.[1];
+  if (!iso) return null;
+  const obs = etlInflationTimeseries
+    .map((r) => (typeof r[iso] === "number" ? { date: String(r.date), value: Number(Number(r[iso]).toFixed(2)) } : null))
+    .filter((v): v is { date: string; value: number } => v != null);
+  if (!obs.length) return null;
+  return typeof n === "number" && n < obs.length ? obs.slice(obs.length - n) : obs;
+}
+
+/** Overlay the committed macro ETL gold snapshot before falling back to SIM. */
+export function etlCountryCPI(base: CountryInflation): CountryInflation {
+  const row = etlRowFor(base);
+  if (!row || row.cpi_yoy == null) return base;
+  const yoy = Number(row.cpi_yoy.toFixed(1));
+  const priorYoy = row.cpi_prior != null ? Number(row.cpi_prior.toFixed(1)) : base.priorYoy;
+  const trend = row.cpi_trend === "RISING" || row.cpi_trend === "FALLING" || row.cpi_trend === "FLAT" ? row.cpi_trend : trendOf(yoy, priorYoy);
+  const history = etlHistory(row.country_iso3);
+  return {
+    ...base,
+    yoy,
+    priorYoy,
+    mom: null,
+    momDelta: null,
+    yoyDelta: Number((yoy - priorYoy).toFixed(2)),
+    trend,
+    streak: row.cpi_streak ?? (trend === "FLAT" ? 0 : 1),
+    target: row.vs_target != null ? Number((yoy - row.vs_target).toFixed(1)) : base.target,
+    vsTarget: row.vs_target != null ? Number(row.vs_target.toFixed(1)) : Number((yoy - base.target).toFixed(1)),
+    history: history.length >= 2 ? history : base.history,
+    source: "ETL",
+    asOf: row.last_updated,
+  };
 }
 
 /**
@@ -137,12 +219,14 @@ export function getGlobalCPI(): CountryInflation[] {
 export function liveCountryCPI(base: CountryInflation, obs: { date: string; value: number }[]): CountryInflation {
   const v = obs.map((o) => o.value);
   if (v.length < 14) return base;
-  const pct = (a: number, b: number) => (b ? Number(((a / b - 1) * 100).toFixed(1)) : 0);
+  const pct = (a: number, b: number, dp = 1) => (b ? Number(((a / b - 1) * 100).toFixed(dp)) : 0);
   const yoyArr: number[] = [];
   for (let i = 12; i < v.length; i++) yoyArr.push(pct(v[i], v[i - 12]));
   if (yoyArr.length < 2) return base;
   const yoy = yoyArr[yoyArr.length - 1];
   const priorYoy = yoyArr[yoyArr.length - 2];
+  const mom = pct(v[v.length - 1], v[v.length - 2], 2);
+  const priorMom = v.length >= 3 ? pct(v[v.length - 2], v[v.length - 3], 2) : null;
   const trend = trendOf(yoy, priorYoy);
   let streak = 1;
   for (let i = yoyArr.length - 1; i > 0; i--) {
@@ -153,11 +237,14 @@ export function liveCountryCPI(base: CountryInflation, obs: { date: string; valu
   return {
     ...base,
     yoy, priorYoy,
-    mom: pct(v[v.length - 1], v[v.length - 2]),
+    mom,
+    momDelta: priorMom == null ? null : Number((mom - priorMom).toFixed(2)),
+    yoyDelta: Number((yoy - priorYoy).toFixed(2)),
     trend,
     streak: trend === "FLAT" ? 0 : streak,
     vsTarget: Number((yoy - base.target).toFixed(1)),
     history: yoyArr.slice(-11),
+    asOf: obs[obs.length - 1]?.date ?? base.asOf,
   };
 }
 

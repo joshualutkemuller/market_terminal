@@ -14,6 +14,7 @@
 
 import fedProbabilitiesRaw from "./etl/fed_probabilities.json";
 import countryLatestRaw from "./etl/country_macro_latest.json";
+import inflationTimeseriesRaw from "./etl/inflation_timeseries.json";
 import { CURRENT_TARGET, type FomcMeeting } from "./econRates";
 
 // Effective fed funds trades a few bp inside the target midpoint; the ETL's
@@ -52,8 +53,11 @@ export interface EtlCountryMacro {
   last_updated: string | null;
 }
 
+export type EtlInflationTimeseriesRow = { date: string } & Record<string, number | string | null>;
+
 export const etlFedProbabilities: EtlFedProbability[] = fedProbabilitiesRaw as EtlFedProbability[];
 export const etlCountryMacro: EtlCountryMacro[] = countryLatestRaw as EtlCountryMacro[];
+export const etlInflationTimeseries: EtlInflationTimeseriesRow[] = inflationTimeseriesRaw as EtlInflationTimeseriesRow[];
 
 /** True when an ETL snapshot is present and non-empty. */
 export function hasEtlFedData(): boolean {
