@@ -84,6 +84,34 @@ export function getIndices(): IndexQuote[] {
   });
 }
 
+export type LiveFredData = Record<string, { observations: { date: string; value: number }[]; source: string }>;
+
+const INDEX_FRED: Record<string, string> = {
+  VIX: "VIXCLS",
+  DXY: "DTWEXBGS",
+  UST10Y: "DGS10",
+  SOFR: "SOFR",
+  GC: "GOLDPMGBD228NLBM",
+  CL: "DCOILWTICO",
+};
+
+export const INDEX_FRED_IDS = Object.values(INDEX_FRED);
+
+export function mergeLiveIndices(sim: IndexQuote[], fred: LiveFredData): IndexQuote[] {
+  return sim.map((q) => {
+    const fredId = INDEX_FRED[q.symbol];
+    if (!fredId) return q;
+    const obs = fred[fredId]?.observations;
+    if (!obs?.length) return q;
+    const latest = obs[obs.length - 1].value;
+    const prior = obs.length > 1 ? obs[obs.length - 2].value : latest;
+    const chg = latest - prior;
+    const chgPct = prior !== 0 ? (chg / prior) * 100 : 0;
+    const spark = obs.slice(-30).map((o) => o.value);
+    return { ...q, last: latest, chg, chgPct, spark };
+  });
+}
+
 export interface HeatCell {
   ticker: string;
   sector: string;

@@ -94,6 +94,29 @@ export function getCashSummary(): CashSummary {
   };
 }
 
+export type LiveRateData = Record<string, { observations: { date: string; value: number }[]; source: string }>;
+
+const RATE_MAP: Record<string, string> = {
+  "Operating Cash (USD)": "DFF",
+  "GC Repo": "SOFR",
+  "Term Repo (1W)": "SOFR",
+  "Reverse Repo Investment": "SOFR",
+  "Commercial Paper": "DCPF3M",
+};
+
+export function mergeLiveFundingRates(sources: FundingSource[], fred: LiveRateData): FundingSource[] {
+  return sources.map((s) => {
+    const fredId = RATE_MAP[s.source];
+    if (!fredId) return s;
+    const obs = fred[fredId]?.observations;
+    if (!obs?.length) return s;
+    const liveRate = obs[obs.length - 1].value;
+    const bps = liveRate * 100;
+    const spread = s.source === "Term Repo (1W)" ? 7 : 0;
+    return { ...s, rateBps: bps + spread };
+  });
+}
+
 /** Optimal funding path: cheapest sources matched to highest-priority uses. */
 export interface FundingPath {
   use: string;

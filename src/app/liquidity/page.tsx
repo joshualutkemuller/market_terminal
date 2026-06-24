@@ -14,12 +14,16 @@ import {
   getLiquidityBuckets,
   getLiquidityStressScenarios,
   getLiquiditySummary,
+  mergeLiveEWS,
   type EarlyWarningSignal,
   type FundingFacility,
   type LiquidityBucket,
   type LiquidityStressScenario,
 } from "@/data/liquidity";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import { fmtAbbr, fmtBps, fmtNum, fmtPct, fmtUsdAbbr, pnlClass } from "@/lib/format";
+
+const EWS_FRED_IDS = ["SOFR", "EFFR", "BAMLH0A0HYM2"] as const;
 
 const FACILITY_TONE: Record<FundingFacility["type"], "up" | "blue" | "amber" | "violet" | "neutral"> = {
   CASH: "up",
@@ -54,8 +58,12 @@ export default function LiquidityPage() {
   const buckets = getLiquidityBuckets();
   const facilities = getFundingFacilities();
   const scenarios = getLiquidityStressScenarios();
-  const signals = getEarlyWarningSignals();
+  const simSignals = getEarlyWarningSignals();
   const summary = getLiquiditySummary();
+
+  const { data: ewsFred } = useLiveSeriesSet([...EWS_FRED_IDS], "lin", 10);
+  const anyEwsLive = EWS_FRED_IDS.some((id) => ewsFred[id]?.source === "FRED");
+  const signals = useMemo(() => mergeLiveEWS(simSignals, ewsFred), [simSignals, ewsFred]);
 
   const [sevFilter, setSevFilter] = useState("ALL");
   const filteredScenarios = useMemo(() => sevFilter === "ALL" ? scenarios : scenarios.filter((s) => s.severity === sevFilter), [scenarios, sevFilter]);
@@ -114,7 +122,7 @@ export default function LiquidityPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="LIQ" title="Liquidity & Funding Stress" desc="Margin shocks, funding capacity and early warning signals" right={<span className="flex items-center gap-1"><ProvenanceBadge source="SIM" /><Tag tone="amber">FRED/YAHOO READY</Tag></span>} />
+      <PageHeader code="LIQ" title="Liquidity & Funding Stress" desc="Margin shocks, funding capacity and early warning signals" right={<span className="flex items-center gap-1"><ProvenanceBadge source={anyEwsLive ? "FRED" : "SIM"} />{!anyEwsLive && <Tag tone="amber">FRED/YAHOO READY</Tag>}</span>} />
 
       <KpiStrip>
         <Stat label="Liquid Assets" value={fmtUsdAbbr(summary.totalLiquidAssets)} sub="cash plus undrawn capacity" />

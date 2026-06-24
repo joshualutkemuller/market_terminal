@@ -6,16 +6,21 @@ import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { LineChart } from "@/components/charts/LineChart";
 import { Sankey } from "@/components/charts/Sankey";
 import { Donut, Gauge, ProgressBar } from "@/components/charts/Radial";
+import { useMemo } from "react";
 import {
   getFundingSources,
   getFundingUses,
   getCashSummary,
   getFundingPath,
+  mergeLiveFundingRates,
   type FundingSource,
   type FundingUse,
   type FundingPath,
 } from "@/data/cash";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import { fmtUsdAbbr, fmtAbbr, fmtNum, pnlClass } from "@/lib/format";
+
+const CASH_FRED_IDS = ["SOFR", "DFF", "DCPF3M"] as const;
 
 const SRC_TONE: Record<FundingSource["type"], "amber" | "blue" | "up" | "violet" | "neutral"> = {
   CASH: "up",
@@ -37,10 +42,14 @@ const USE_TONE: Record<FundingUse["type"], "amber" | "blue" | "up" | "violet" | 
 const DONUT_COLORS = ["#FF8C00", "#3B9DFF", "#2ECC71", "#A78BFA", "#22D3EE", "#EC4899", "#FFB400", "#5E5E66"];
 
 export default function CashOptimizer() {
-  const sources = getFundingSources();
+  const simSources = getFundingSources();
   const uses = getFundingUses();
   const sum = getCashSummary();
   const path = getFundingPath();
+
+  const { data: cashFred } = useLiveSeriesSet([...CASH_FRED_IDS], "lin", 5);
+  const anyLive = CASH_FRED_IDS.some((id) => cashFred[id]?.source === "FRED");
+  const sources = useMemo(() => mergeLiveFundingRates(simSources, cashFred), [simSources, cashFred]);
 
   const srcCols: Column<FundingSource>[] = [
     { key: "source", header: "Source", render: (r) => <span className="text-term-text">{r.source}</span> },
@@ -115,7 +124,7 @@ export default function CashOptimizer() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="CASH" title="Cash Optimizer" desc="Treasury Funding Optimization" right={<ProvenanceBadge source="SIM" />} />
+      <PageHeader code="CASH" title="Cash Optimizer" desc="Treasury Funding Optimization" right={<ProvenanceBadge source={anyLive ? "FRED" : "SIM"} />} />
 
       <KpiStrip>
         <Stat label="Total Sources" value={fmtUsdAbbr(sum.totalSources)} sub={`${sources.length} facilities`} />

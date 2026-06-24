@@ -13,11 +13,15 @@ import {
   getReinvestmentRecommendations,
   getReinvestmentScenarios,
   getReinvestmentSummary,
+  mergeLiveYields,
   type ReinvestmentConstraint,
   type ReinvestmentPosition,
   type ReinvestmentRecommendation,
 } from "@/data/reinvestment";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import { fmtAbbr, fmtBps, fmtNum, fmtPct, fmtUsdAbbr, pnlClass } from "@/lib/format";
+
+const REINV_FRED_IDS = ["SOFR", "DGS3MO", "DCPF3M", "DGS6MO", "DGS1"] as const;
 
 const BUCKET_TONE: Record<ReinvestmentPosition["bucket"], "up" | "blue" | "amber" | "violet"> = {
   "T+0": "up",
@@ -55,11 +59,15 @@ function formatConstraint(c: ReinvestmentConstraint, v: number): string {
 }
 
 export default function ReinvestmentPage() {
-  const positions = getReinvestmentPositions();
+  const simPositions = getReinvestmentPositions();
   const summary = getReinvestmentSummary();
   const scenarios = getReinvestmentScenarios();
   const constraints = getReinvestmentConstraints();
   const recommendations = getReinvestmentRecommendations();
+
+  const { data: reinvFred } = useLiveSeriesSet([...REINV_FRED_IDS], "lin", 5);
+  const anyLive = REINV_FRED_IDS.some((id) => reinvFred[id]?.source === "FRED");
+  const positions = useMemo(() => mergeLiveYields(simPositions, reinvFred), [simPositions, reinvFred]);
   const [shockBps, setShockBps] = useState(-25);
 
   const weightedFedBeta = useMemo(
@@ -113,7 +121,7 @@ export default function ReinvestmentPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="REINV" title="Cash Collateral Reinvestment" desc="Yield ladder, Fed beta, liquidity and constraints" right={<span className="flex items-center gap-1"><ProvenanceBadge source="SIM" /><Tag tone="amber">FRED/YAHOO READY</Tag></span>} />
+      <PageHeader code="REINV" title="Cash Collateral Reinvestment" desc="Yield ladder, Fed beta, liquidity and constraints" right={<span className="flex items-center gap-1"><ProvenanceBadge source={anyLive ? "FRED" : "SIM"} />{!anyLive && <Tag tone="amber">FRED/YAHOO READY</Tag>}</span>} />
 
       <KpiStrip>
         <Stat label="Cash Collateral" value={fmtUsdAbbr(summary.cashCollateral)} sub="reinvestment pool" />
