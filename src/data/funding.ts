@@ -228,6 +228,137 @@ export function computeGauge(map: SeriesMap): FundingGauge {
   return { score, regime, readThrough, components, quarterEndDays: qe };
 }
 
+// ── Desk-action read-throughs ────────────────────────────────────────────────
+
+export type FundingDesk = "Repo" | "Agency" | "Prime" | "Cash" | "Collateral" | "E-Trading";
+export type DeskSignalTone = "Calm" | "Watch" | "Stress";
+export type FundingSignalSource = "FRED" | "SIM";
+
+export interface FundingDeskSignal {
+  desk: FundingDesk;
+  signal: string;
+  score: number;
+  tone: DeskSignalTone;
+  driver: string;
+  derivation: string;
+  action: string;
+  source: FundingSignalSource;
+}
+
+function toneFor(score: number): DeskSignalTone {
+  if (score >= 70) return "Stress";
+  if (score >= 40) return "Watch";
+  return "Calm";
+}
+
+function sourceFor(ids: string[], liveIds?: Set<string>): FundingSignalSource {
+  return ids.some((id) => liveIds?.has(id)) ? "FRED" : "SIM";
+}
+
+function trendDelta(obs: Obs[] | undefined, periods = 20): number | null {
+  if (!obs || obs.length < 2) return null;
+  const end = obs[obs.length - 1].value;
+  const start = obs[Math.max(0, obs.length - 1 - periods)].value;
+  return end - start;
+}
+
+function fundingAction(tone: DeskSignalTone, calm: string, watch: string, stress: string): string {
+  if (tone === "Stress") return stress;
+  if (tone === "Watch") return watch;
+  return calm;
+}
+
+export function computeDeskSignals(map: SeriesMap, liveIds?: Set<string>): FundingDeskSignal[] {
+  const sofrEffr = diffBps(map["SOFR"], map["EFFR"]).value ?? 0;
+  const tgcrEffr = diffBps(map["TGCR"], map["EFFR"]).value ?? 0;
+  const sofrIorb = diffBps(map["SOFR"], map["IORB"]).value ?? -10;
+  const billOis = diffBps(map["DTB3"], map["EFFR"]).value ?? -10;
+  const fra = latest(map["FRA_OIS"]) ?? 17;
+  const rrp = latest(map["RRPONTSYD"]) ?? 470;
+  const rrpDelta20 = trendDelta(map["RRPONTSYD"], 20) ?? 0;
+  const reserves = latest(map["WRESBAL"]) ?? 3.25;
+  const reservesDelta20 = trendDelta(map["WRESBAL"], 20) ?? 0;
+  const eurBasis = latest(map["XCCY_EUR"]) ?? -14;
+  const qe = daysToQuarterEnd();
+
+  const repoScore = Math.round(clamp(sofrEffr * 3.5 + tgcrEffr * 2.5 + Math.max(0, sofrIorb + 8) * 4));
+  const agencyScore = Math.round(clamp(repoScore * 0.45 + Math.max(0, -billOis) * 1.2 + Math.max(0, -rrpDelta20 / 5) + Math.max(0, 10 - qe) * 4));
+  const primeScore = Math.round(clamp(repoScore * 0.35 + fra * 1.4 + Math.max(0, 3.1 - reserves) * 35 + Math.max(0, -eurBasis - 10) * 1.1));
+  const cashScore = Math.round(clamp(Math.max(0, -billOis) * 1.6 + Math.max(0, -rrpDelta20 / 8) + Math.max(0, -reservesDelta20 * 90)));
+  const collateralScore = Math.round(clamp(tgcrEffr * 3 + Math.max(0, -billOis) * 1.3 + Math.max(0, 600 - rrp) / 8));
+  const etradingScore = Math.round(clamp(primeScore * 0.35 + collateralScore * 0.35 + fra * 0.8 + Math.max(0, 10 - qe) * 3));
+
+  const repoTone = toneFor(repoScore);
+  const agencyTone = toneFor(agencyScore);
+  const primeTone = toneFor(primeScore);
+  const cashTone = toneFor(cashScore);
+  const collateralTone = toneFor(collateralScore);
+  const etradingTone = toneFor(etradingScore);
+
+  return [
+    {
+      desk: "Repo",
+      signal: "GC pressure",
+      score: repoScore,
+      tone: repoTone,
+      driver: `SOFR-EFFR ${sofrEffr.toFixed(1)}bps; TGCR-EFFR ${tgcrEffr.toFixed(1)}bps`,
+      derivation: "Score blends SOFR-EFFR, TGCR-EFFR, and SOFR proximity to IORB; wider secured funding spreads raise stress.",
+      action: fundingAction(repoTone, "Keep GC pricing normal.", "Watch term repo prints and avoid underpricing specials funding.", "Term out funding and widen repo/financing marks."),
+      source: sourceFor(["SOFR", "EFFR", "TGCR", "IORB"], liveIds),
+    },
+    {
+      desk: "Agency",
+      signal: "Lending economics",
+      score: agencyScore,
+      tone: agencyTone,
+      driver: `Bill-OIS ${billOis.toFixed(1)}bps; RRP 20d ${rrpDelta20.toFixed(0)}B; q-end ${qe}d`,
+      derivation: "Score combines repo pressure, bill scarcity, RRP buffer change, and quarter-end proximity to flag reinvestment and specials pressure.",
+      action: fundingAction(agencyTone, "Normal agency lending spread backdrop.", "Review GC-specials assumptions and cash reinvestment duration.", "Protect spread, recheck rebate floors, and source collateral early."),
+      source: sourceFor(["SOFR", "EFFR", "DTB3", "RRPONTSYD"], liveIds),
+    },
+    {
+      desk: "Prime",
+      signal: "Financing pressure",
+      score: primeScore,
+      tone: primeTone,
+      driver: `FRA-OIS ${fra.toFixed(1)}bps; reserves $${reserves.toFixed(2)}T; EUR basis ${eurBasis.toFixed(0)}bps`,
+      derivation: "Score blends repo spread, bank funding stress, reserve buffer, and USD basis pressure as a proxy for prime financing tightness.",
+      action: fundingAction(primeTone, "Keep client financing assumptions steady.", "Check concentrated balance-sheet users and term financing rolls.", "Widen financing, review margin sensitivity, and reduce balance-sheet concessions."),
+      source: sourceFor(["SOFR", "EFFR", "WRESBAL"], liveIds),
+    },
+    {
+      desk: "Cash",
+      signal: "Reinvestment stance",
+      score: cashScore,
+      tone: cashTone,
+      driver: `Bill-OIS ${billOis.toFixed(1)}bps; RRP 20d ${rrpDelta20.toFixed(0)}B; reserves 20d ${reservesDelta20.toFixed(2)}T`,
+      derivation: "Score rises when bills richen versus OIS, RRP drains, or reserves fall; this can compress reinvestment optionality.",
+      action: fundingAction(cashTone, "Leave reinvestment ladder unchanged.", "Keep optionality in overnight/short bills.", "Avoid reaching for term; prioritize liquidity over yield pickup."),
+      source: sourceFor(["DTB3", "EFFR", "RRPONTSYD", "WRESBAL"], liveIds),
+    },
+    {
+      desk: "Collateral",
+      signal: "Scarcity risk",
+      score: collateralScore,
+      tone: collateralTone,
+      driver: `TGCR-EFFR ${tgcrEffr.toFixed(1)}bps; Bill-OIS ${billOis.toFixed(1)}bps; RRP $${rrp.toFixed(0)}B`,
+      derivation: "Score combines GC spread, bill scarcity, and remaining RRP liquidity buffer as a proxy for high-quality collateral tightness.",
+      action: fundingAction(collateralTone, "Collateral schedule can stay standard.", "Pre-position HQLA and review haircut-sensitive exposures.", "Tighten collateral eligibility and escalate substitution requests early."),
+      source: sourceFor(["TGCR", "EFFR", "DTB3", "RRPONTSYD"], liveIds),
+    },
+    {
+      desk: "E-Trading",
+      signal: "Liquidity stance",
+      score: etradingScore,
+      tone: etradingTone,
+      driver: `Prime ${primeScore}/100; collateral ${collateralScore}/100; q-end ${qe}d`,
+      derivation: "Score maps funding, collateral, bank funding, and calendar pressure into an execution-liquidity caution proxy.",
+      action: fundingAction(etradingTone, "Normal participation and routing assumptions.", "Use more patient execution on funding-sensitive products.", "Reduce aggression, raise slippage assumptions, and monitor ETF/credit liquidity."),
+      source: sourceFor(["SOFR", "EFFR", "TGCR", "WRESBAL"], liveIds),
+    },
+  ];
+}
+
 // ── Headline summary ─────────────────────────────────────────────────────────
 
 export interface FundingSummary {

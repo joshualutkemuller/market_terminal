@@ -16,8 +16,10 @@ import {
   computeSpreads,
   computeGauge,
   computeSummary,
+  computeDeskSignals,
   type FundingDef,
   type FundingGroup,
+  type DeskSignalTone,
   type SeriesMap,
 } from "@/data/funding";
 
@@ -43,6 +45,7 @@ function chgStr(def: FundingDef, cur: number | null, prev: number | null): { tex
 }
 
 const REGIME_TONE = { Calm: "up", Watch: "amber", Stressed: "down" } as const;
+const DESK_TONE: Record<DeskSignalTone, "up" | "amber" | "down"> = { Calm: "up", Watch: "amber", Stress: "down" };
 
 export default function FundingPulse() {
   const fallback = useMemo<SeriesMap>(() => {
@@ -63,9 +66,11 @@ export default function FundingPulse() {
   }, [live, fallback]);
 
   const anyLive = FUNDING_FRED_IDS.some((id) => live[id]?.source === "FRED");
+  const liveIds = useMemo(() => new Set(FUNDING_FRED_IDS.filter((id) => live[id]?.source === "FRED")), [live]);
   const spreads = useMemo(() => computeSpreads(map), [map]);
   const gauge = useMemo(() => computeGauge(map), [map]);
   const summary = useMemo(() => computeSummary(map, gauge), [map, gauge]);
+  const deskSignals = useMemo(() => computeDeskSignals(map, liveIds), [map, liveIds]);
 
   const seriesSource = (def: FundingDef) => (def.hasFred && live[def.id]?.source === "FRED" ? "FRED" : "SIM");
 
@@ -131,6 +136,43 @@ export default function FundingPulse() {
                   </div>
                 );
               })}
+            </div>
+          </Panel>
+        </div>
+
+        <div className="col-span-12">
+          <Panel
+            title="Desk Action Map"
+            code="ACTION"
+            accent
+            right={<span className="text-3xs text-term-text-mute">scores derive from funding spreads, balances, bill scarcity and q-end proximity</span>}
+          >
+            <div className="analytics-scroll">
+              <div className="min-w-[980px] divide-y divide-term-border-soft">
+                <div className="grid grid-cols-[5.5rem_7rem_4rem_8.5rem_1fr_1.25fr_1.4fr] gap-2 px-3 py-1.5 text-3xs uppercase tracking-wide text-term-text-mute">
+                  <span>Desk</span>
+                  <span>Signal</span>
+                  <span className="text-right">Score</span>
+                  <span>Source</span>
+                  <span>Driver</span>
+                  <span>Derivation</span>
+                  <span>Action</span>
+                </div>
+                {deskSignals.map((s) => (
+                  <div key={s.desk} className="grid grid-cols-[5.5rem_7rem_4rem_8.5rem_1fr_1.25fr_1.4fr] items-center gap-2 px-3 py-2 text-2xs">
+                    <span className="font-semibold text-term-text">{s.desk}</span>
+                    <span className="text-term-text-dim">{s.signal}</span>
+                    <span className="tnum text-right font-semibold text-term-text">{s.score}</span>
+                    <span>
+                      <Tag tone={DESK_TONE[s.tone]}>{s.tone}</Tag>
+                      <span className="ml-1 text-3xs text-term-text-mute">{s.source}</span>
+                    </span>
+                    <span className="truncate text-term-text-dim" title={s.driver}>{s.driver}</span>
+                    <span className="truncate text-3xs text-term-text-mute" title={s.derivation}>{s.derivation}</span>
+                    <span className="text-term-text">{s.action}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </Panel>
         </div>
