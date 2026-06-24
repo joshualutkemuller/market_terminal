@@ -6,7 +6,7 @@ import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { ChartLink } from "@/components/charting/ChartLink";
-import { useLiveSeriesSet } from "@/lib/useEcon";
+import { isRealEconSource, useLiveSeriesSet, type DataSource } from "@/lib/useEcon";
 import { fmtSigned, pnlClass } from "@/lib/format";
 import { DataLegend } from "@/components/ui/DataLegend";
 import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
@@ -56,27 +56,27 @@ export default function FundingPulse() {
     return m;
   }, []);
 
-  const { data: live } = useLiveSeriesSet(FUNDING_FRED_IDS, "lin", 260);
+  const { data: live, source } = useLiveSeriesSet(FUNDING_FRED_IDS, "lin", 260);
 
   const map = useMemo<SeriesMap>(() => {
     const m: SeriesMap = { ...fallback };
     for (const id of FUNDING_FRED_IDS) {
       const L = live[id];
-      if (L && L.source === "FRED" && L.observations.length) m[id] = L.observations;
+      if (L && isRealEconSource(L.source) && L.observations.length) m[id] = L.observations;
     }
     return m;
   }, [live, fallback]);
 
   const [groupFilter, setGroupFilter] = useState<string>("ALL");
 
-  const anyLive = FUNDING_FRED_IDS.some((id) => live[id]?.source === "FRED");
-  const liveIds = useMemo(() => new Set(FUNDING_FRED_IDS.filter((id) => live[id]?.source === "FRED")), [live]);
+  const anyReal = FUNDING_FRED_IDS.some((id) => isRealEconSource(live[id]?.source));
+  const liveIds = useMemo(() => new Set(FUNDING_FRED_IDS.filter((id) => isRealEconSource(live[id]?.source))), [live]);
   const spreads = useMemo(() => computeSpreads(map), [map]);
   const gauge = useMemo(() => computeGauge(map), [map]);
   const summary = useMemo(() => computeSummary(map, gauge), [map, gauge]);
   const deskSignals = useMemo(() => computeDeskSignals(map, liveIds), [map, liveIds]);
 
-  const seriesSource = (def: FundingDef) => (def.hasFred && live[def.id]?.source === "FRED" ? "FRED" : "SIM");
+  const seriesSource = (def: FundingDef): DataSource => (def.hasFred && isRealEconSource(live[def.id]?.source) ? live[def.id].source : "SIM");
 
   return (
     <div className="flex min-h-full flex-col">
@@ -84,7 +84,7 @@ export default function FundingPulse() {
         code="FUND"
         title="Funding & Liquidity Pulse"
         desc="Repo, the corridor, balances & funding stress"
-        right={<ProvenanceBadge source={anyLive ? "FRED" : "SIM"} />}
+        right={<ProvenanceBadge source={anyReal ? (source === "FRED" ? "FRED" : "SNAPSHOT") : "SIM"} />}
       />
 
       <KpiStrip>
@@ -209,7 +209,7 @@ export default function FundingPulse() {
                   })}
                 </div>
                 <div className="border-t border-term-border px-3 py-1 text-3xs text-term-text-mute">
-                  {rows.some((r) => seriesSource(r) === "FRED") ? "Live FRED where available." : "Deterministic — set FRED_API_KEY for live rates."}
+                  {rows.some((r) => seriesSource(r) === "FRED") ? "Live FRED where available." : rows.some((r) => seriesSource(r) === "SNAPSHOT") ? "Committed snapshots where available." : "Deterministic — set FRED_API_KEY for live rates."}
                 </div>
               </Panel>
             </div>

@@ -9,6 +9,7 @@ import { BarChart } from "@/components/charts/BarChart";
 import { LineChart } from "@/components/charts/LineChart";
 import { Gauge, ProgressBar } from "@/components/charts/Radial";
 import { getMLModels, REGIME_STATES, type MLModel } from "@/data/econModels";
+import { isRealEconSource, useLiveSeriesSet, type DataSource } from "@/lib/useEcon";
 import { fmtNum, fmtPct } from "@/lib/format";
 
 const STATUS_TONE: Record<MLModel["status"], "up" | "amber" | "blue"> = {
@@ -21,8 +22,67 @@ function statusOf(models: MLModel[], id: string): MLModel | undefined {
   return models.find((m) => m.id === id);
 }
 
+function recessionProbFromSpread(bps: number): number {
+  const z = -bps / 60;
+  return Number((1 / (1 + Math.exp(-(z * 2 - 1.2))) * 100).toFixed(1));
+}
+
+function zHistory(values: number[]): number[] {
+  const mean = values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
+  const sd = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, values.length)) || 1;
+  return values.map((v) => Number((-(v - mean) / sd).toFixed(2)));
+}
+
+function latestMomPct(obs: { date: string; value: number }[]): number | null {
+  if (obs.length < 2) return null;
+  const cur = obs[obs.length - 1].value;
+  const prev = obs[obs.length - 2].value;
+  return prev ? Number(((cur / prev - 1) * 100).toFixed(2)) : null;
+}
+
+function overlayModel(model: MLModel, liveMap: Record<string, { observations: { date: string; value: number }[]; source: "FRED" | "SNAPSHOT" | "SIM" }>): MLModel {
+  if (model.id === "rec-prob") {
+    const L = liveMap["T10Y2Y"];
+    if (L && isRealEconSource(L.source) && L.observations.length) {
+      const history = L.observations.map((o) => recessionProbFromSpread(o.value));
+      return { ...model, output: history[history.length - 1], history, updated: L.observations[L.observations.length - 1].date };
+    }
+  }
+  if (model.id === "infl-now") {
+    const L = liveMap["PCEPILFE"];
+    if (L && isRealEconSource(L.source) && L.observations.length) {
+      const history = L.observations.slice(1).map((_, i) => latestMomPct(L.observations.slice(0, i + 2)) ?? 0);
+      return { ...model, output: history[history.length - 1] ?? model.output, history, updated: L.observations[L.observations.length - 1].date };
+    }
+  }
+  if (model.id === "rate-path") {
+    const L = liveMap["FEDFUNDS"];
+    if (L && isRealEconSource(L.source) && L.observations.length) {
+      const last = L.observations[L.observations.length - 1];
+      return { ...model, output: Number(Math.max(0, last.value - 0.75).toFixed(2)), history: L.observations.map((o) => o.value), updated: last.date };
+    }
+  }
+  if (model.id === "fci") {
+    const L = liveMap["NFCI"];
+    if (L && isRealEconSource(L.source) && L.observations.length) {
+      const history = L.observations.map((o) => Number(o.value.toFixed(2)));
+      return { ...model, output: history[history.length - 1], history, updated: L.observations[L.observations.length - 1].date };
+    }
+  }
+  if (model.id === "labor-mom") {
+    const L = liveMap["ICSA"];
+    if (L && isRealEconSource(L.source) && L.observations.length) {
+      const history = zHistory(L.observations.map((o) => o.value));
+      return { ...model, output: history[history.length - 1], history, updated: L.observations[L.observations.length - 1].date };
+    }
+  }
+  return model;
+}
+
 export default function MLApplications() {
-  const models = getMLModels();
+  const { data: liveMap, source } = useLiveSeriesSet(["T10Y2Y", "PCEPILFE", "FEDFUNDS", "NFCI", "ICSA"], "lin", 48);
+  const models = getMLModels().map((m) => overlayModel(m, liveMap));
+  const modelSource: DataSource = source === "FRED" ? "FRED" : source === "SNAPSHOT" ? "SNAPSHOT" : "SIM";
   const rec = statusOf(models, "rec-prob");
   const infl = statusOf(models, "infl-now");
   const rate = statusOf(models, "rate-path");
@@ -114,7 +174,7 @@ export default function MLApplications() {
         code="EML"
         title="ML Applications"
         desc="Recession, nowcast & rate-path models"
-        right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "UNRATE" }, { source: "econ", id: "T10Y2Y" }]} range="5Y" /><ProvenanceBadge source="SIM" /><Tag tone="up">{liveCount} LIVE</Tag></span>}
+        right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "UNRATE" }, { source: "econ", id: "T10Y2Y" }]} range="5Y" /><ProvenanceBadge source={modelSource} /><Tag tone="up">{liveCount} LIVE</Tag></span>}
       />
 
       <KpiStrip>

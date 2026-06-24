@@ -15,6 +15,12 @@ import {
 import { getEconEvents, type EconEvent } from "@/data/econRates";
 
 export type DataSource = "FRED" | "SNAPSHOT" | "SIM" | "LOADING" | "ETL";
+export type RealEconSource = "FRED" | "SNAPSHOT";
+
+/** True when a row came from an external/committed source rather than generated SIM. */
+export function isRealEconSource(source: unknown): source is RealEconSource {
+  return source === "FRED" || source === "SNAPSHOT";
+}
 
 /** Map a route's `source` string to the badge vocabulary. */
 function mapSource(s: unknown): DataSource {
@@ -157,7 +163,7 @@ export function useLiveIndicators(): { data: Record<string, LiveIndicator>; sour
 
 export interface SeriesObs {
   observations: { date: number; value: number }[] | { date: string; value: number }[];
-  source: "FRED" | "SIM";
+  source: "FRED" | "SNAPSHOT" | "SIM";
 }
 
 /**

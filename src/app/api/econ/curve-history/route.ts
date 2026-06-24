@@ -1,6 +1,16 @@
 import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { CURVE_TENORS, buildLiveSnapshots, getCurveSnapshots, type CurveHistory } from "@/data/econCurve";
+import { getSnapshotObservations, getSnapshotRawObservations } from "@/data/econSnapshot";
+
+function snapshotHistory(): CurveHistory | null {
+  const history: CurveHistory = {};
+  for (const [, , fredId] of CURVE_TENORS) {
+    const obs = getSnapshotRawObservations(fredId) ?? getSnapshotObservations(fredId);
+    if (obs?.length) history[fredId] = obs.map((o) => ({ date: o.date, value: o.value }));
+  }
+  return Object.keys(history).length ? history : null;
+}
 
 
 /**
@@ -13,13 +23,15 @@ import { CURVE_TENORS, buildLiveSnapshots, getCurveSnapshots, type CurveHistory 
  * point-in-time data — not the curated presets. Cached server-side (the FRED
  * client memoizes + Next revalidates), so the heavy fetch is paid once.
  *
- * Always 200 with a `source` field (FRED | SIM); falls back to the simulated
- * presets without a key or on error.
+ * Always 200 with a `source` field (FRED | SNAPSHOT | SIM); falls back to the
+ * committed econ snapshot before the simulated presets without a key or on error.
  */
 export async function GET(req: Request) {
   const sim = getCurveSnapshots();
+  const snapHistory = snapshotHistory();
+  const snap = snapHistory ? buildLiveSnapshots(snapHistory) : null;
   if (!fredEnabled()) {
-    return json({ source: "SIM", snapshots: sim });
+    return snap ? json({ source: "SNAPSHOT", snapshots: snap }) : json({ source: "SIM", snapshots: sim });
   }
 
   const reqYears = Number(new URL(req.url).searchParams.get("years") ?? 7);
@@ -41,10 +53,8 @@ export async function GET(req: Request) {
     const asOf = snapshots.find((s) => s.id === "now")?.date ?? null;
     return json({ source: "FRED", asOf, years, snapshots });
   } catch (err) {
-    return json({
-      source: "SIM",
-      note: err instanceof Error ? err.message : "FRED error",
-      snapshots: sim,
-    });
+    return snap
+      ? json({ source: "SNAPSHOT", note: err instanceof Error ? err.message : "FRED error", snapshots: snap })
+      : json({ source: "SIM", note: err instanceof Error ? err.message : "FRED error", snapshots: sim });
   }
 }

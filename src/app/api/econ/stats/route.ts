@@ -2,6 +2,7 @@ import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { resolveFred } from "@/data/econSeries";
 import { STAT_SERIES, simStatFull, monthlyDate } from "@/data/statsConfig";
+import { getSnapshotObservations, getSnapshotRawObservations } from "@/data/econSnapshot";
 import type { Obs } from "@/lib/stats";
 
 
@@ -29,6 +30,7 @@ export async function GET(req: Request) {
   const live = fredEnabled();
   const sim = simStatFull(320);
   let anyFred = false;
+  let anySnapshot = false;
 
   const series = await Promise.all(
     STAT_SERIES.map(async ([id, label], idx) => {
@@ -45,9 +47,17 @@ export async function GET(req: Request) {
           /* fall through */
         }
       }
+      const snap = getSnapshotRawObservations(id) ?? getSnapshotObservations(id);
+      if (snap) {
+        const pts = toMonthly(snap, start, end);
+        if (pts.length > 6) {
+          anySnapshot = true;
+          return { id, label, points: pts };
+        }
+      }
       return { id, label, points: sim[idx].points.filter((p) => p.date >= start && p.date <= end) };
     })
   );
 
-  return json({ source: anyFred ? "FRED" : "SIM", start, end, series });
+  return json({ source: anyFred ? "FRED" : anySnapshot ? "SNAPSHOT" : "SIM", start, end, series });
 }

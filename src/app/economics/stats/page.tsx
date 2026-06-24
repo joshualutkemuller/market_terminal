@@ -59,7 +59,7 @@ export default function StatisticalAnalysis() {
   const tSeries = series.map((s) => ({ label: s.label, obs: transformObs(s.points, transform) }));
   const active = tSeries.filter((s) => !excluded.has(s.label));
   const labels = active.map((s) => s.label);
-  const p = buildStatsPayload(active, source === "FRED" ? "FRED" : "SIM", lag);
+  const p = buildStatsPayload(active, source === "SNAPSHOT" ? "SNAPSHOT" : source === "FRED" ? "FRED" : "SIM", lag);
 
   const byLabel = (l: string) => active.find((s) => s.label === l) ?? active[0] ?? { label: "", obs: [] };
   const rx = (l: string) => (labels.includes(l) ? l : labels[0] ?? "");

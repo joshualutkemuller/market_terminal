@@ -456,7 +456,7 @@ export default function TreasuryCurveLab() {
 
         {/* ── Rates Relative Value ─────────────────────────────────────── */}
         {(() => {
-          const histSnaps = source === "FRED" ? snapshots.filter((s) => s.id !== "now") : [];
+          const histSnaps = source === "FRED" || source === "SNAPSHOT" ? snapshots.filter((s) => s.id !== "now") : [];
           const butterflies = histSnaps.length >= 20 ? computeButterfliesFromHistory(today, histSnaps) : computeButterflies(today);
           const spreadZs = histSnaps.length >= 20 ? computeSpreadZFromHistory(today, histSnaps) : computeSpreadZScores(today);
           const carryRoll = computeCarryRoll(today);

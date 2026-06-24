@@ -15,7 +15,7 @@ import { STAT_SERIES, monthlyDate, simStatFull, type StatSeries } from "@/data/s
 const CACHE = {
   byLabel: new Map<string, Map<string, number>>(),
   earliest: null as string | null, // earliest start date held
-  source: "SIM" as "FRED" | "SIM",
+  source: "SIM" as "FRED" | "SNAPSHOT" | "SIM",
 };
 
 function mergePoints(label: string, points: { date: string; value: number }[]) {
@@ -68,7 +68,7 @@ export function useStatsData(defaultMonths = 240): {
     const fetchEnd = CACHE.earliest ?? endDate; // only the older delta when extending
     fetch(`/api/econ/stats?start=${startDate}&end=${fetchEnd}`)
       .then((r) => r.json())
-      .then((j: { source: "FRED" | "SIM"; series: { label: string; points: { date: string; value: number }[] }[] }) => {
+      .then((j: { source: "FRED" | "SNAPSHOT" | "SIM"; series: { label: string; points: { date: string; value: number }[] }[] }) => {
         if (!alive) return;
         for (const s of j.series) mergePoints(s.label, s.points);
         CACHE.earliest = CACHE.earliest && startDate >= CACHE.earliest ? CACHE.earliest : startDate;

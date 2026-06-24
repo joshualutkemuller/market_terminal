@@ -28,7 +28,7 @@ import {
 } from "@/data/econEnhancements";
 import { getSeriesHistory } from "@/data/econSeries";
 import { SourceBadge } from "@/components/econ/SourceBadge";
-import { useLiveSeriesSet } from "@/lib/useEcon";
+import { isRealEconSource, useLiveSeriesSet } from "@/lib/useEcon";
 import { fmtNum, fmtSigned, fmtBps, fmtUsdAbbr, fmtPct, pnlClass } from "@/lib/format";
 
 const DONUT_COLORS = ["#FF8C00", "#3B9DFF", "#2ECC71", "#A78BFA", "#22D3EE", "#EC4899"];
@@ -72,11 +72,11 @@ export default function SecFinanceEconomics() {
   const { data: liveMap, source } = useLiveSeriesSet(liveIds, "lin", 60);
   const liveSofr = (() => {
     const L = liveMap["SOFR"];
-    return L && L.source === "FRED" && L.observations.length ? L.observations[L.observations.length - 1].value : baseRepo.find((r) => r.rate === "SOFR")!.level;
+    return L && isRealEconSource(L.source) && L.observations.length ? L.observations[L.observations.length - 1].value : baseRepo.find((r) => r.rate === "SOFR")!.level;
   })();
   const repo = baseRepo.map((r) => {
     const L = r.fredId ? liveMap[r.fredId] : undefined;
-    return L && L.source === "FRED" && L.observations.length ? liveRepoRow(r, L.observations, liveSofr) : r;
+    return L && isRealEconSource(L.source) && L.observations.length ? liveRepoRow(r, L.observations, liveSofr) : r;
   });
 
   // ── Scenario control: number of 25bp Fed cuts (0 → −4) ────────────────
@@ -168,11 +168,11 @@ export default function SecFinanceEconomics() {
   // ── Funding backdrop series ───────────────────────────────────────────
   const fedFunds = useMemo(() => {
     const L = liveMap["FEDFUNDS"];
-    return L && L.source === "FRED" && L.observations.length ? L.observations.map((o) => o.value) : getSeriesHistory("FEDFUNDS", 60).map((o) => o.value);
+    return L && isRealEconSource(L.source) && L.observations.length ? L.observations.map((o) => o.value) : getSeriesHistory("FEDFUNDS", 60).map((o) => o.value);
   }, [liveMap]);
   const sofrHist = useMemo(() => {
     const L = liveMap["SOFR"];
-    return L && L.source === "FRED" && L.observations.length ? L.observations.map((o) => o.value) : getSeriesHistory("SOFR", 60).map((o) => o.value);
+    return L && isRealEconSource(L.source) && L.observations.length ? L.observations.map((o) => o.value) : getSeriesHistory("SOFR", 60).map((o) => o.value);
   }, [liveMap]);
 
   // ── Column defs ───────────────────────────────────────────────────────

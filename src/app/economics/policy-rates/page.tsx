@@ -9,7 +9,7 @@ import { Sparkline } from "@/components/charts/Sparkline";
 import { Donut } from "@/components/charts/Radial";
 import { useDrill } from "@/components/econ/DrillProvider";
 import { SourceBadge } from "@/components/econ/SourceBadge";
-import { useLiveSeriesSet } from "@/lib/useEcon";
+import { isRealEconSource, useLiveSeriesSet } from "@/lib/useEcon";
 import { getGlobalPolicyRates, getGlobalSummary, livePolicyRate, type PolicyRate, type Region } from "@/data/globalMacro";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
 
@@ -33,7 +33,7 @@ export default function GlobalPolicyRates() {
   const { data: liveMap, source } = useLiveSeriesSet(baseAll.map((r) => r.fredId).filter(Boolean) as string[], "lin", 36);
   const all = baseAll.map((r) => {
     const L = r.fredId ? liveMap[r.fredId] : undefined;
-    return L && L.source === "FRED" && L.observations.length ? livePolicyRate(r, L.observations) : r;
+    return L && isRealEconSource(L.source) && L.observations.length ? livePolicyRate(r, L.observations) : r;
   }).sort((a, b) => b.rate - a.rate);
   const summary = {
     ...base,

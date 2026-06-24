@@ -2,6 +2,10 @@ import { json } from "@/lib/server/http";
 import { fredEnabled, fredReleaseDates } from "@/lib/server/fred";
 import { getEconEvents } from "@/data/econRates";
 
+function snapshotEvents() {
+  return getEconEvents(new Date("2026-06-24T00:00:00Z"));
+}
+
 
 /**
  * GET /api/econ/calendar
@@ -9,9 +13,9 @@ import { getEconEvents } from "@/data/econRates";
  * curated importance/forecast metadata. Otherwise the simulated calendar.
  */
 export async function GET() {
-  const sim = getEconEvents();
+  const snapshot = snapshotEvents();
   if (!fredEnabled()) {
-    return json({ source: "SIM", events: sim });
+    return json({ source: "SNAPSHOT", events: snapshot });
   }
   try {
     const releases = await fredReleaseDates(60);
@@ -34,6 +38,6 @@ export async function GET() {
     });
     return json({ source: "FRED", events });
   } catch (err) {
-    return json({ source: "SIM", note: err instanceof Error ? err.message : "FRED error", events: sim });
+    return json({ source: "SNAPSHOT", note: err instanceof Error ? err.message : "FRED error", events: snapshot });
   }
 }

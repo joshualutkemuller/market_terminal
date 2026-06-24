@@ -8,7 +8,7 @@ import { BarChart } from "@/components/charts/BarChart";
 import { useDrill } from "@/components/econ/DrillProvider";
 import { SourceBadge } from "@/components/econ/SourceBadge";
 import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
-import { useLiveSeriesSet } from "@/lib/useEcon";
+import { isRealEconSource, useLiveSeriesSet } from "@/lib/useEcon";
 import {
   getInflationHeadlines,
   getInflationComponents,
@@ -50,7 +50,7 @@ export default function InflationExplorer() {
   const { data: liveMap, source } = useLiveSeriesSet(allIds, "lin", 15);
   const merge = (it: InflationItem) => {
     const L = liveMap[it.id];
-    return L && L.source === "FRED" && L.observations.length ? liveInflationItem(it, L.observations) : it;
+    return L && isRealEconSource(L.source) && L.observations.length ? liveInflationItem(it, L.observations) : it;
   };
 
   const headlines = headBase.map(merge);

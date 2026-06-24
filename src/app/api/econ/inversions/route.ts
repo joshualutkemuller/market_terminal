@@ -1,5 +1,6 @@
 import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
+import { getSnapshotObservations, getSnapshotRawObservations } from "@/data/econSnapshot";
 import {
   computeInversionStats,
   detectInversions,
@@ -15,6 +16,10 @@ import {
 
 const HISTORY_START = "1976-01-01"; // T10Y2Y begins 1976; DGS2 likewise
 const REVALIDATE = 12 * 60 * 60; // 12h — deep daily history changes only at the tail
+
+function snapshotObs(id: string) {
+  return getSnapshotRawObservations(id) ?? getSnapshotObservations(id);
+}
 
 /**
  * GET /api/econ/inversions?spread=10Y2Y
@@ -38,7 +43,41 @@ export async function GET(req: Request) {
     timeline: getSpreadSeriesFor(spreadId),
   });
 
-  if (!fredEnabled()) return json(sim());
+  const snap = () => {
+    let series: { date: string; bps: number }[] = [];
+    if (def.fredId) {
+      const obs = snapshotObs(def.fredId);
+      if (obs?.length) series = obs.map((o) => ({ date: o.date, bps: o.value }));
+    } else {
+      const longId = tenorToFredId(def.longT);
+      const shortId = tenorToFredId(def.shortT);
+      const lo = longId ? snapshotObs(longId) : null;
+      const sh = shortId ? snapshotObs(shortId) : null;
+      if (lo?.length && sh?.length) {
+        const shMap = new Map(sh.map((o) => [o.date, o.value]));
+        series = lo
+          .filter((o) => shMap.has(o.date))
+          .map((o) => ({ date: o.date, bps: (o.value - (shMap.get(o.date) as number)) * 100 }));
+      }
+    }
+    if (series.length < 30) return null;
+    const usrec = snapshotObs("USREC") ?? [];
+    const recessions = recessionRangesFromUsrec(usrec.map((o) => ({ date: o.date, value: o.value })));
+    const fallbackRec = recessions.length ? recessions : [];
+    const inversions = detectInversions(series, fallbackRec);
+    const stats = computeInversionStats(inversions);
+    const timeline = monthlySpreadTimeline(series, fallbackRec);
+    return {
+      source: "SNAPSHOT" as const,
+      spread: spreadId,
+      asOf: series[series.length - 1].date,
+      inversions: inversions.length ? inversions : getInversionsForSpread(spreadId),
+      stats: inversions.length ? stats : getInversionStats(spreadId),
+      timeline: timeline.length ? timeline : getSpreadSeriesFor(spreadId),
+    };
+  };
+
+  if (!fredEnabled()) return json(snap() ?? sim());
 
   try {
     // 1. Build the daily spread series (bps).
@@ -85,6 +124,6 @@ export async function GET(req: Request) {
       timeline,
     });
   } catch (err) {
-    return json({ ...sim(), note: err instanceof Error ? err.message : "FRED error" });
+    return json({ ...(snap() ?? sim()), note: err instanceof Error ? err.message : "FRED error" });
   }
 }
