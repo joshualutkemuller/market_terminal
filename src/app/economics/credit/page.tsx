@@ -9,9 +9,12 @@ import { ProgressBar } from "@/components/charts/Radial";
 import { useDrill } from "@/components/econ/DrillProvider";
 import { SourceBadge } from "@/components/econ/SourceBadge";
 import { useLiveSeriesSet } from "@/lib/useEcon";
+import { Sparkline } from "@/components/charts/Sparkline";
 import {
   getCreditCurve, getCreditSummary, getSpreadHistory, getSectorSpreads, getStressEpisodes, getCreditLinkages, liveRung,
+  getSpreadDecomposition, getEtfDivergences, getCreditBetas, getHaircutPressure,
   type CreditRung, type SectorSpread, type CreditStress,
+  type SpreadDecomp, type EtfDivergence, type CreditBeta, type HaircutPressure,
 } from "@/data/creditSpreads";
 import {
   getCounterpartyCreditOverlays,
@@ -21,7 +24,7 @@ import {
   type CreditHaircutImpact,
   type CreditSubstitution,
 } from "@/data/econEnhancements";
-import { fmtNum, fmtSigned, fmtInt, fmtPct, fmtUsdAbbr, pnlClass } from "@/lib/format";
+import { fmtBps, fmtNum, fmtSigned, fmtInt, fmtPct, fmtUsdAbbr, pnlClass } from "@/lib/format";
 
 const REGIME_TONE: Record<string, "up" | "down" | "amber" | "blue"> = { TIGHT: "up", NEUTRAL: "blue", WIDE: "amber", STRESS: "down" };
 
@@ -57,6 +60,10 @@ export default function CreditSpreadsPage() {
   const haircutImpacts = getCreditHaircutImpacts();
   const counterpartyOverlays = getCounterpartyCreditOverlays();
   const substitutions = getCreditSubstitutions();
+  const decomps = getSpreadDecomposition();
+  const etfDivs = getEtfDivergences();
+  const creditBetas = getCreditBetas();
+  const haircutPressure = getHaircutPressure();
   const { open } = useDrill();
 
   const drill = (r: CreditRung) => open({ id: r.fredId, label: `${r.rating} OAS`, units: "lin", unitLabel: "bps", decimals: 0 });
@@ -113,6 +120,47 @@ export default function CreditSpreadsPage() {
     { key: "savings", header: "Haircut Save", align: "right", render: (r) => <span className="text-term-up">{fmtUsdAbbr(r.haircutSavings)}</span>, sortVal: (r) => r.haircutSavings },
     { key: "elig", header: "Elig+", align: "right", render: (r) => <span className="text-term-amber">{fmtSigned(r.eligibilityGain, 0)}%</span>, sortVal: (r) => r.eligibilityGain },
     { key: "why", header: "Rationale", render: (r) => <span className="text-term-text-dim">{r.rationale}</span>, sortVal: (r) => r.rationale },
+  ];
+
+  const DECOMP_TONE: Record<SpreadDecomp["signal"], "up" | "amber" | "down" | "neutral"> = { Tight: "up", Normal: "neutral", Wide: "amber", Stress: "down" };
+  const DIV_TONE: Record<EtfDivergence["signal"], "up" | "amber" | "down" | "neutral"> = { Converging: "up", Neutral: "neutral", Diverging: "amber", Extreme: "down" };
+  const BETA_TONE: Record<CreditBeta["regime"], "up" | "amber" | "down"> = { Low: "up", Normal: "amber", High: "down" };
+  const HC_TONE: Record<HaircutPressure["signal"], "up" | "amber" | "down"> = { Stable: "up", Widening: "amber", Stress: "down" };
+
+  const decompCols: Column<SpreadDecomp>[] = [
+    { key: "pair", header: "Spread Pair", render: (r) => <span className="font-semibold text-term-text">{r.pair}</span>, sortVal: (r) => r.pair },
+    { key: "val", header: "Value", align: "right", render: (r) => <span className="text-term-amber">{fmtBps(r.valueBps, 0)}</span>, sortVal: (r) => r.valueBps },
+    { key: "z", header: "Z", align: "right", render: (r) => <span className={pnlClass(-r.zScore)}>{fmtNum(r.zScore, 2)}</span>, sortVal: (r) => r.zScore },
+    { key: "pctile", header: "%ile", align: "right", width: "80px", render: (r) => <ProgressBar value={r.pctile} color={r.pctile > 60 ? "#FF3B3B" : r.pctile < 30 ? "#2ECC71" : "#FF8C00"} showPct />, sortVal: (r) => r.pctile },
+    { key: "hist", header: "20d", align: "center", width: "80px", render: (r) => <Sparkline data={r.hist20d} width={72} height={20} stroke={r.signal === "Wide" || r.signal === "Stress" ? "#FF3B3B" : "#3B9DFF"} />, sortVal: (r) => r.valueBps },
+    { key: "sig", header: "Signal", align: "center", render: (r) => <Tag tone={DECOMP_TONE[r.signal]}>{r.signal}</Tag>, sortVal: (r) => r.signal },
+  ];
+
+  const etfDivCols: Column<EtfDivergence>[] = [
+    { key: "etf", header: "ETF", render: (r) => <span className="font-semibold text-term-text">{r.etf}</span>, sortVal: (r) => r.etf },
+    { key: "px", header: "Price", align: "right", render: (r) => <span className="text-term-text">{fmtNum(r.etfPrice, 2)}</span>, sortVal: (r) => r.etfPrice },
+    { key: "pxChg", header: "Px Δ", align: "right", render: (r) => <span className={pnlClass(r.etfChg1d)}>{fmtSigned(r.etfChg1d, 2)}</span>, sortVal: (r) => r.etfChg1d },
+    { key: "oas", header: "OAS", align: "right", render: (r) => <span className="text-term-amber">{fmtInt(r.oasBps)}</span>, sortVal: (r) => r.oasBps },
+    { key: "oasChg", header: "OAS Δ", align: "right", render: (r) => <span className={pnlClass(-r.oasChg1d)}>{fmtSigned(r.oasChg1d, 0)}</span>, sortVal: (r) => r.oasChg1d },
+    { key: "div", header: "Div Score", align: "right", render: (r) => <span className={r.divergenceScore >= 5 ? "text-term-down" : "text-term-text"}>{fmtNum(r.divergenceScore, 1)}</span>, sortVal: (r) => r.divergenceScore },
+    { key: "sig", header: "Signal", align: "center", render: (r) => <Tag tone={DIV_TONE[r.signal]}>{r.signal}</Tag>, sortVal: (r) => r.signal },
+  ];
+
+  const betaCols: Column<CreditBeta>[] = [
+    { key: "pair", header: "Pair", render: (r) => <span className="font-semibold text-term-text">{r.pair}</span>, sortVal: (r) => r.pair },
+    { key: "beta", header: "β", align: "right", render: (r) => <span className="text-term-amber">{fmtNum(r.beta, 2)}</span>, sortVal: (r) => r.beta },
+    { key: "r2", header: "R²", align: "right", render: (r) => <span className="text-term-text">{fmtNum(r.r2, 2)}</span>, sortVal: (r) => r.r2 },
+    { key: "regime", header: "Regime", align: "center", render: (r) => <Tag tone={BETA_TONE[r.regime]}>{r.regime}</Tag>, sortVal: (r) => r.regime },
+    { key: "detail", header: "Detail", render: (r) => <span className="text-term-text-dim">{r.detail}</span>, sortVal: (r) => r.detail },
+  ];
+
+  const hcPressureCols: Column<HaircutPressure>[] = [
+    { key: "asset", header: "Asset Class", render: (r) => <span className="font-semibold text-term-text">{r.assetClass}</span>, sortVal: (r) => r.assetClass },
+    { key: "curr", header: "Current", align: "right", render: (r) => <span className="text-term-text">{fmtPct(r.currentHaircut / 100, 0)}</span>, sortVal: (r) => r.currentHaircut },
+    { key: "stress", header: "Stress", align: "right", render: (r) => <span className="text-term-down">{fmtPct(r.stressHaircut / 100, 0)}</span>, sortVal: (r) => r.stressHaircut },
+    { key: "delta", header: "Δ", align: "right", render: (r) => <span className={r.haircutDelta > 0 ? "text-term-down" : "text-term-text"}>{fmtSigned(r.haircutDelta, 0)}%</span>, sortVal: (r) => r.haircutDelta },
+    { key: "margin", header: "Margin $", align: "right", render: (r) => <span className={pnlClass(r.marginImpact)}>{fmtNum(r.marginImpact, 1)}M</span>, sortVal: (r) => r.marginImpact },
+    { key: "sig", header: "Signal", align: "center", render: (r) => <Tag tone={HC_TONE[r.signal]}>{r.signal}</Tag>, sortVal: (r) => r.signal },
   ];
 
   const cv = (r: string) => curve.find((x) => x.rating === r) ?? baseCurve.find((x) => x.rating === r)!;
@@ -223,6 +271,34 @@ export default function CreditSpreadsPage() {
             <DataGrid columns={haircutCols} rows={haircutImpacts} rowKey={(r) => r.collateralType} maxHeight="230px" initialSort={{ key: "cost", dir: "desc" }} zebra />
           </Panel>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 px-2 xl:grid-cols-3">
+        <Panel title="Spread Decomposition" code="SDEC" accent className="xl:col-span-2" right={<span className="text-3xs text-term-text-mute">cross-rating spread pairs · z-score vs 1y</span>}>
+          <DataGrid columns={decompCols} rows={decomps} rowKey={(r) => r.pair} maxHeight="260px" initialSort={{ key: "val", dir: "desc" }} zebra />
+        </Panel>
+        <Panel title="Credit Beta to Equity" code="BETA" right={<Tag tone="amber">rolling 60d</Tag>}>
+          <DataGrid columns={betaCols} rows={creditBetas} rowKey={(r) => r.pair} maxHeight="260px" initialSort={{ key: "r2", dir: "desc" }} zebra />
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 px-2 xl:grid-cols-3">
+        <Panel title="ETF Price vs OAS Divergence" code="EDIV" className="xl:col-span-2" right={<span className="text-3xs text-term-text-mute">HYG · JNK · LQD · BKLN · EMB</span>}>
+          <DataGrid columns={etfDivCols} rows={etfDivs} rowKey={(r) => r.etf} maxHeight="260px" initialSort={{ key: "div", dir: "desc" }} zebra />
+          <div className="px-3 pb-2">
+            <div className="space-y-1">
+              {etfDivs.filter((d) => d.signal === "Diverging" || d.signal === "Extreme").map((d) => (
+                <div key={d.etf} className="flex items-center gap-2 text-3xs">
+                  <Tag tone={DIV_TONE[d.signal]}>{d.etf}</Tag>
+                  <span className="text-term-text-dim">{d.detail}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Panel>
+        <Panel title="Financing Haircut Pressure" code="HCPR" accent right={<Tag tone={HC_TONE[haircutPressure.some((h) => h.signal === "Stress") ? "Stress" : haircutPressure.some((h) => h.signal === "Widening") ? "Widening" : "Stable"]}>{haircutPressure.some((h) => h.signal === "Stress") ? "STRESS" : haircutPressure.some((h) => h.signal === "Widening") ? "WIDENING" : "STABLE"}</Tag>}>
+          <DataGrid columns={hcPressureCols} rows={haircutPressure} rowKey={(r) => r.assetClass} maxHeight="260px" initialSort={{ key: "delta", dir: "desc" }} zebra />
+        </Panel>
       </div>
 
       <div className="grid grid-cols-1 gap-2 px-2 pb-2 xl:grid-cols-2">

@@ -185,3 +185,144 @@ export function getCreditLinkages(): { driver: string; impact: string; effect: "
     { driver: "Credit ETF creation/redemption", impact: "Drives borrow on HYG/JNK; arb financing flows", effect: "up" },
   ];
 }
+
+// ── Spread Decomposition ────────────────────────────────────────────────────
+
+export interface SpreadDecomp {
+  pair: string;
+  valueBps: number;
+  pctile: number;
+  zScore: number;
+  hist20d: number[];
+  signal: "Tight" | "Normal" | "Wide" | "Stress";
+}
+
+export function getSpreadDecomposition(): SpreadDecomp[] {
+  const rng = new Rng("credit-decomp");
+  const c = getCreditCurve();
+  const get = (r: string) => c.find((x) => x.rating === r)?.oas ?? 0;
+
+  const defs: { pair: string; val: number; stressLevel: number }[] = [
+    { pair: "HY − IG", val: get("B") - get("A"), stressLevel: 350 },
+    { pair: "CCC − BB", val: get("CCC") - get("BB"), stressLevel: 600 },
+    { pair: "BBB − IG", val: get("BBB") - get("AAA"), stressLevel: 120 },
+    { pair: "BB − BBB", val: get("BB") - get("BBB"), stressLevel: 150 },
+    { pair: "B − BB", val: get("B") - get("BB"), stressLevel: 200 },
+  ];
+
+  return defs.map((d) => {
+    const z = rng.normal(0, 0.7);
+    const pctile = Math.max(1, Math.min(99, Math.round(50 + z * 20)));
+    const hist = Array.from({ length: 20 }, () => d.val + rng.normal(0, d.val * 0.04));
+    return {
+      pair: d.pair,
+      valueBps: Math.round(d.val),
+      pctile,
+      zScore: Math.round(z * 100) / 100,
+      hist20d: hist,
+      signal: d.val >= d.stressLevel ? "Stress" : pctile >= 70 ? "Wide" : pctile <= 30 ? "Tight" : "Normal",
+    };
+  });
+}
+
+// ── ETF Price vs OAS Divergence ─────────────────────────────────────────────
+
+export interface EtfDivergence {
+  etf: string;
+  etfPrice: number;
+  etfChg1d: number;
+  oasBps: number;
+  oasChg1d: number;
+  divergenceScore: number;
+  signal: "Converging" | "Neutral" | "Diverging" | "Extreme";
+  detail: string;
+}
+
+export function getEtfDivergences(): EtfDivergence[] {
+  const rng = new Rng("credit-etf-div");
+
+  const defs: { etf: string; px: number; oas: number; type: string }[] = [
+    { etf: "HYG", px: 77.8, oas: 388, type: "HY" },
+    { etf: "JNK", px: 95.4, oas: 395, type: "HY" },
+    { etf: "LQD", px: 108, oas: 92, type: "IG" },
+    { etf: "BKLN", px: 21.4, oas: 310, type: "Loans" },
+    { etf: "EMB", px: 88.2, oas: 340, type: "EM" },
+  ];
+
+  return defs.map((d) => {
+    const etfChg = rng.normal(0, 0.3);
+    const oasChg = rng.normal(0, 5);
+    const pxImpliedOasChg = -etfChg * 15;
+    const divergence = Math.abs(oasChg - pxImpliedOasChg);
+    const divScore = Math.round(divergence * 10) / 10;
+
+    return {
+      etf: d.etf,
+      etfPrice: d.px + etfChg,
+      etfChg1d: Math.round(etfChg * 100) / 100,
+      oasBps: Math.round(d.oas + oasChg),
+      oasChg1d: Math.round(oasChg),
+      divergenceScore: divScore,
+      signal: divScore >= 8 ? "Extreme" : divScore >= 5 ? "Diverging" : divScore >= 2 ? "Neutral" : "Converging",
+      detail:
+        etfChg > 0 && oasChg > 0
+          ? "ETF price rising but OAS widening — possible technical bid, not fundamental."
+          : etfChg < 0 && oasChg < 0
+          ? "Both tightening — fundamental improvement confirmed by price."
+          : etfChg > 0 && oasChg < 0
+          ? "Aligned — ETF rally + OAS tightening."
+          : "ETF weak but OAS stable — check liquidity and redemption flows.",
+    };
+  });
+}
+
+// ── Credit Beta to Equity ───────────────────────────────────────────────────
+
+export interface CreditBeta {
+  pair: string;
+  beta: number;
+  r2: number;
+  regime: "High" | "Normal" | "Low";
+  detail: string;
+}
+
+export function getCreditBetas(): CreditBeta[] {
+  const rng = new Rng("credit-beta");
+  const rows: CreditBeta[] = [
+    { pair: "HY OAS vs SPY", beta: -(rng.float(0.6, 1.1)), r2: rng.float(0.45, 0.72), regime: "Normal", detail: "HY behaves equity-like; drawdowns widen HY proportionally." },
+    { pair: "HY OAS vs IWM", beta: -(rng.float(0.8, 1.4)), r2: rng.float(0.38, 0.62), regime: "Normal", detail: "Small-cap beta to credit higher — more cyclical exposure." },
+    { pair: "IG OAS vs SPY", beta: -(rng.float(0.15, 0.35)), r2: rng.float(0.20, 0.45), regime: "Low", detail: "IG is rates-dominated; equity beta low outside stress." },
+    { pair: "HYG px vs HY OAS", beta: -(rng.float(0.85, 1.15)), r2: rng.float(0.82, 0.95), regime: "High", detail: "NAV-linked — ETF tracks OAS tightly when liquid." },
+    { pair: "CCC-BB vs VIX", beta: rng.float(8, 16), r2: rng.float(0.35, 0.55), regime: "Normal", detail: "Quality spread widens with vol; the pure distress signal." },
+  ];
+  return rows.map((r) => ({
+    ...r,
+    beta: Math.round(r.beta * 100) / 100,
+    r2: Math.round(r.r2 * 100) / 100,
+  }));
+}
+
+// ── Financing Haircut Pressure Proxy ────────────────────────────────────────
+
+export interface HaircutPressure {
+  assetClass: string;
+  currentHaircut: number;
+  stressHaircut: number;
+  haircutDelta: number;
+  marginImpact: number;
+  signal: "Stable" | "Widening" | "Stress";
+}
+
+export function getHaircutPressure(): HaircutPressure[] {
+  const sum = getCreditSummary();
+  const stressMult = sum.regime === "STRESS" ? 1.5 : sum.regime === "WIDE" ? 1.2 : 1.0;
+
+  return [
+    { assetClass: "UST (on-the-run)", currentHaircut: 2, stressHaircut: 2, haircutDelta: 0, marginImpact: 0, signal: "Stable" },
+    { assetClass: "Agency MBS", currentHaircut: 4, stressHaircut: Math.round(4 * stressMult), haircutDelta: Math.round(4 * (stressMult - 1)), marginImpact: -0.5, signal: stressMult > 1.1 ? "Widening" : "Stable" },
+    { assetClass: "IG Corporate", currentHaircut: 6, stressHaircut: Math.round(6 * stressMult * 1.1), haircutDelta: Math.round(6 * (stressMult * 1.1 - 1)), marginImpact: -1.2, signal: stressMult > 1.1 ? "Widening" : "Stable" },
+    { assetClass: "HY Corporate", currentHaircut: 12, stressHaircut: Math.round(12 * stressMult * 1.3), haircutDelta: Math.round(12 * (stressMult * 1.3 - 1)), marginImpact: -3.8, signal: stressMult > 1 ? "Widening" : "Stable" },
+    { assetClass: "Leveraged Loans", currentHaircut: 15, stressHaircut: Math.round(15 * stressMult * 1.4), haircutDelta: Math.round(15 * (stressMult * 1.4 - 1)), marginImpact: -5.2, signal: stressMult > 1 ? "Widening" : "Stable" },
+    { assetClass: "EM Sovereign", currentHaircut: 10, stressHaircut: Math.round(10 * stressMult * 1.2), haircutDelta: Math.round(10 * (stressMult * 1.2 - 1)), marginImpact: -2.8, signal: stressMult > 1 ? "Widening" : "Stable" },
+  ] as HaircutPressure[];
+}
