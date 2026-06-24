@@ -10,7 +10,7 @@
  * is live vs simulated.
  */
 import { Rng } from "@/lib/rng";
-import { getSocialIntel } from "./news";
+import { getSocialIntel, type SocialIntel } from "./news";
 import { getSqueezeBoard } from "./squeeze";
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
@@ -128,9 +128,10 @@ export interface SentimentIndex {
   readThrough: string;
 }
 
-/** Live overrides supplied by the page (e.g. VIX from the FRED econ layer). */
+/** Live overrides supplied by the page (e.g. VIX from FRED, social from /api/social). */
 export interface SentLiveInputs {
   vix?: { score: number; detail: string };
+  social?: { intel: SocialIntel; source: string };
 }
 
 function regimeOf(score: number): SentRegime {
@@ -147,7 +148,8 @@ function buildIndex(forWeeksAgo = 0, live?: SentLiveInputs): { score: number; co
   const naaim = getNaaimHistory();
   const a = aaii[aaii.length - 1 - forWeeksAgo];
   const nm = naaim[naaim.length - 1 - forWeeksAgo];
-  const social = getSocialIntel();
+  const social = forWeeksAgo === 0 ? live?.social?.intel ?? getSocialIntel() : getSocialIntel();
+  const socialLive = forWeeksAgo === 0 && !!live?.social && live.social.source !== "SIM";
   const netSocial = social.platforms.reduce((s, p) => s + p.sentiment, 0) / social.platforms.length;
   const avgVel = social.tickers.reduce((s, t) => s + t.velocity, 0) / Math.max(1, social.tickers.length);
 
@@ -163,8 +165,8 @@ function buildIndex(forWeeksAgo = 0, live?: SentLiveInputs): { score: number; co
   const components: SentComponent[] = [
     { label: "AAII bull–bear", score: Math.round(spreadToScore(a.spread)), weight: 0.2, detail: `spread ${a.spread >= 0 ? "+" : ""}${a.spread}`, source: "SURVEY", live: true },
     { label: "NAAIM exposure", score: Math.round(clamp(nm.exposure)), weight: 0.15, detail: `${nm.exposure}% invested`, source: "SURVEY", live: true },
-    { label: "Social net sentiment", score: Math.round(netToScore(netSocial)), weight: 0.2, detail: `${netSocial >= 0 ? "+" : ""}${netSocial.toFixed(2)}`, source: "SOCIAL", live: true },
-    { label: "Social velocity", score: Math.round(clamp(50 + avgVel * 0.4)), weight: 0.1, detail: `${avgVel >= 0 ? "+" : ""}${avgVel.toFixed(0)}% mentions`, source: "SOCIAL", live: true },
+    { label: "Social net sentiment", score: Math.round(netToScore(netSocial)), weight: 0.2, detail: `${netSocial >= 0 ? "+" : ""}${netSocial.toFixed(2)}${socialLive ? ` · ${live?.social?.source}` : ""}`, source: "SOCIAL", live: socialLive },
+    { label: "Social velocity", score: Math.round(clamp(50 + avgVel * 0.4)), weight: 0.1, detail: `${avgVel >= 0 ? "+" : ""}${avgVel.toFixed(0)}% mentions${socialLive ? ` · ${live?.social?.source}` : ""}`, source: "SOCIAL", live: socialLive },
     { label: "Put/Call (inv)", score: Math.round(putCallScore), weight: 0.1, detail: "options demand", source: "MARKET", live: false },
     { label: "Volatility (inv)", score: Math.round(vixScore), weight: 0.1, detail: vix ? vix.detail : "VIX percentile", source: "FRED", live: !!vix },
     { label: "Breadth / momentum", score: Math.round(breadthScore), weight: 0.1, detail: "advancers", source: "MARKET", live: false },
@@ -207,7 +209,7 @@ export function getSentimentSummary(live?: SentLiveInputs): SentimentSummary {
   const idx = getSentimentIndex(live);
   const aaii = getAaiiSnapshot();
   const naaim = getNaaimHistory();
-  const social = getSocialIntel();
+  const social = live?.social?.intel ?? getSocialIntel();
   const netSocial = social.platforms.reduce((s, p) => s + p.sentiment, 0) / social.platforms.length;
   return {
     index: idx.score,
@@ -294,7 +296,7 @@ export function getContrarianSignals(live?: SentLiveInputs): ContrarianSignal[] 
   const idx = getSentimentIndex(live);
   const aaii = getAaiiSnapshot();
   const behav = getBehavior();
-  const social = getSocialIntel();
+  const social = live?.social?.intel ?? getSocialIntel();
   const avgVel = social.tickers.reduce((s, t) => s + t.velocity, 0) / Math.max(1, social.tickers.length);
   const out: ContrarianSignal[] = [];
 
@@ -441,9 +443,9 @@ export interface TickerSentiment {
  * shorted are squeeze/unwind risk. Anchored on the squeeze board so the SQZ
  * cross-link data is always present; social is matched in or synthesized.
  */
-export function getTickerSentiment(limit = 16): TickerSentiment[] {
+export function getTickerSentiment(limit = 16, socialInput?: SocialIntel): TickerSentiment[] {
   const board = getSqueezeBoard();
-  const social = getSocialIntel();
+  const social = socialInput ?? getSocialIntel();
   const socialByTicker = new Map(social.tickers.map((t) => [t.label, t]));
 
   return board.slice(0, limit).map((r) => {

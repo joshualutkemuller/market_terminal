@@ -7,6 +7,7 @@ import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { LineChart } from "@/components/charts/LineChart";
 import { useLiveSeriesSet } from "@/lib/useEcon";
+import { useSocial } from "@/lib/useSocial";
 import { fmtSigned, pnlClass } from "@/lib/format";
 import {
   getSentimentIndex,
@@ -14,7 +15,6 @@ import {
   getAaiiHistory,
   getAaiiSnapshot,
   getNaaimHistory,
-  getSocialIntel,
   getBehavior,
   getContrarianSignals,
   getAnalogStudy,
@@ -91,23 +91,26 @@ const padTextR = (cx: number, r: number) => cx + r;
 
 export default function SentimentModule() {
   const [view, setView] = useState<View>("DASH");
+  const { intel: social, source: socialSource } = useSocial();
+  const socialLive = socialSource !== "SIM";
 
   // VIX (the index's volatility component) is live-capable via FRED VIXCLS —
   // fetched through the existing /api/econ/batch path and turned into a
   // greed score (low vol percentile = complacency = greed).
   const { data: vixData } = useLiveSeriesSet(["VIXCLS"], "lin", 252);
-  const live = useMemo<SentLiveInputs | undefined>(() => {
+  const live = useMemo<SentLiveInputs>(() => {
+    const next: SentLiveInputs = { social: { intel: social, source: socialSource } };
     const v = vixData["VIXCLS"];
     if (v && v.source === "FRED" && v.observations.length > 20) {
       const vals = v.observations.map((o) => o.value);
       const latest = vals[vals.length - 1];
       const pctile = vals.filter((x) => x <= latest).length / vals.length; // 0..1
       const score = Math.round(Math.max(0, Math.min(100, (1 - pctile) * 100)));
-      return { vix: { score, detail: `VIX ${latest.toFixed(1)} · ${Math.round(pctile * 100)}th pctile` } };
+      next.vix = { score, detail: `VIX ${latest.toFixed(1)} · ${Math.round(pctile * 100)}th pctile` };
     }
-    return undefined;
-  }, [vixData]);
-  const vixLive = !!live;
+    return next;
+  }, [vixData, social, socialSource]);
+  const vixLive = !!live.vix;
 
   const idx = useMemo(() => getSentimentIndex(live), [live]);
   const summary = useMemo(() => getSentimentSummary(live), [live]);
@@ -115,17 +118,27 @@ export default function SentimentModule() {
   const aaii = useMemo(() => getAaiiHistory(), []);
   const aaiiSnap = useMemo(() => getAaiiSnapshot(), []);
   const naaim = useMemo(() => getNaaimHistory(), []);
-  const social = useMemo(() => getSocialIntel(), []);
   const behav = useMemo(() => getBehavior(), []);
   const analog = useMemo(() => getAnalogStudy(), []);
   const diverge = useMemo(() => getSurveySocialDivergence(), []);
-  const tickers = useMemo(() => getTickerSentiment(), []);
+  const tickers = useMemo(() => getTickerSentiment(16, social), [social]);
   const btn = "rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide transition-colors";
   const recent = aaii.slice(-10).reverse();
+  const pageSource = vixLive ? "FRED" : socialLive ? "LIVE" : "SIM";
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="SENT" title="Investor Sentiment & Behavior" desc="Survey + social fear/greed & positioning" right={<ProvenanceBadge source={vixLive ? "FRED" : "SIM"} />} />
+      <PageHeader
+        code="SENT"
+        title="Investor Sentiment & Behavior"
+        desc="Survey + social fear/greed & positioning"
+        right={
+          <span className="flex items-center gap-2">
+            <ProvenanceBadge source={pageSource} />
+            <Tag tone={socialLive ? "up" : "amber"}>{socialLive ? socialSource : "SOCIAL SIM"}</Tag>
+          </span>
+        }
+      />
 
       <KpiStrip>
         <Stat label="Sentiment Index" value={`${summary.index}`} sub={summary.regime} tone={regimeTone(summary.regime)} />
@@ -175,7 +188,7 @@ export default function SentimentModule() {
                   ))}
                 </div>
                 <div className="border-t border-term-border px-3 py-1 text-3xs text-term-text-mute">
-                  Survey & social components are live-capable; market inputs (put/call, breadth, haven) upgrade via the market layer.
+                  Social upgrades through /api/social ({socialSource}); survey inputs remain deterministic until AAII/NAAIM connectors are wired. Market inputs (put/call, breadth, haven) upgrade via the market layer.
                 </div>
               </Panel>
             </div>
@@ -261,7 +274,7 @@ export default function SentimentModule() {
               </div>
             </div>
             <div className="col-span-12 lg:col-span-6">
-              <Panel title="Most-Discussed Tickers" code="SENT-3" accent right={<span className="text-3xs text-term-text-mute">{(social.totalPosts / 1000).toFixed(0)}k posts</span>}>
+              <Panel title="Most-Discussed Tickers" code="SENT-3" accent right={<span className="text-3xs text-term-text-mute">{socialSource} · {(social.totalPosts / 1000).toFixed(0)}k posts</span>}>
                 <table className="w-full border-collapse tnum">
                   <thead className="bg-term-panel-2"><tr>{["Ticker", "Mentions", "Velocity", "Sentiment"].map((c, i) => <th key={c} className={clsx("border-b border-term-border px-3 py-1 text-3xs font-semibold uppercase tracking-wider text-term-text-mute", i === 0 ? "text-left" : "text-right")}>{c}</th>)}</tr></thead>
                   <tbody>
@@ -450,7 +463,8 @@ export default function SentimentModule() {
       <div className="border-t border-term-border bg-term-panel px-3 py-1.5 text-3xs text-term-text-mute">
         <span className="text-term-amber">SENT</span> — investor sentiment & behavior: AAII survey + NAAIM positioning + X/Reddit/StockTwits mood, distilled into an explainable fear/greed index.
         {vixLive ? " VIX component live via FRED." : ""}
-        {" "}Phase 1 is deterministic (SIM); survey/social components upgrade to live feeds (AAII/NAAIM CSV, the NEWS social layer) without UI change.
+        {socialLive ? ` Social component live via ${socialSource}.` : " Social component is using SIM fallback."}
+        {" "}Survey inputs remain deterministic until AAII/NAAIM connectors are wired.
       </div>
     </div>
   );
