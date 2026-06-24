@@ -1,11 +1,11 @@
 # Benchmark Rate Analysis — Module Group Handoff
 
-> This document is a **build plan and prompt** for three new analytics modules that extend the existing Benchmark Rates (`BMRK`) module. Hand this to Claude Code (or any AI assistant) when you are ready to build each module. Each module reuses the same `SeriesMap` data layer and pure-function analytics pattern established by BMRK.
+> This document is a **build plan and prompt** for four new analytics modules that extend the existing Benchmark Rates (`BMRK`) module. Hand this to Claude Code (or any AI assistant) when you are ready to build each module. Each module reuses the same `SeriesMap` data layer and pure-function analytics pattern established by BMRK.
 
 **Module Group:** Benchmark Rate Analysis  
 **Parent Module:** `BMRK` — Benchmark Rates (`/economics/benchmark`)  
 **Created:** 2026-06-24  
-**Status:** Planning — all three modules pending build
+**Status:** Planning — all four modules pending build
 
 ---
 
@@ -19,7 +19,8 @@ SeriesMap (Record<string, Obs[]>)
   ├─ BMRK  — Status, trend, spread analysis (BUILT)
   ├─ YCURV — Yield curve construction & analytics
   ├─ FCOST — Blended funding cost monitor
-  └─ RVOL  — Rate volatility surface & regime detection
+  ├─ RVOL  — Rate volatility surface & regime detection
+  └─ UTIL  — Securities lending utilization & custom benchmark blends
 ```
 
 ### Shared Patterns
@@ -48,6 +49,9 @@ SeriesMap (Record<string, Obs[]>)
 | Data hook | `src/lib/useEcon.ts` | `useLiveSeriesSet(ids, units, n)` for batch FRED fetching |
 | Existing curve module | `src/data/econCurve.ts` | `CurveSnapshot`, `getCurveMetrics()` — snapshot-based, not time-series |
 | Existing curve RV | `src/data/ratesRV.ts` | `computeButterflies()`, `computeSpreadZScores()`, `computeCarryRoll()` |
+| Securities lending | `src/data/securitiesLending.ts` | `InventoryRow` (utilization, feeBps, classification), `getLoanBook()`, `getSLSummary()` |
+| Squeeze radar | `src/data/squeeze.ts` | `SqueezeRow` (utilization, heat, feeMom, shortInterest), `getSqueezeBoard()`, `getSectorHeat()` |
+| Security universe | `src/data/universe.ts` | `LENDABLE`, `BORROWERS`, `Security` (ticker, sector, assetClass, borrowFee, hardToBorrow) |
 
 ### Differentiation from Existing Modules
 
@@ -56,6 +60,8 @@ SeriesMap (Record<string, Obs[]>)
 | **CURV** (Curve Lab) | Point-in-time curve snapshots, inversion detection | **YCURV** adds daily curve *time series* — track shape metrics over months, animate curve evolution, regime transitions |
 | **FUND** (Funding) | Repo corridor, reserve balances, FX basis | **FCOST** adds *blended cost* by counterparty tier, all-in borrowing rates, desk-level funding attribution |
 | **BMRK** (Benchmark) | Per-rate trend/status/spread | **RVOL** adds *volatility as a first-class metric* — vol surface, vol regimes, vol-of-vol, term structure of vol |
+| **SLAB** (Sec Lending) | Per-name inventory, loan book, revenue | **UTIL** adds *aggregate utilization analytics* — sector/class-level utilization time series, benchmark rate overlays, custom rate blends, rate-sensitivity analysis |
+| **SQZ** (Squeeze Radar) | Per-name squeeze scoring, heat signals | **UTIL** adds *macro lens* — how benchmark rate moves drive aggregate utilization, not individual name signals |
 
 ---
 
@@ -650,6 +656,461 @@ CREATE TABLE daily_rate_volatility (
 
 ---
 
+## Module 4: UTIL — Securities Lending Utilization & Custom Benchmarks
+
+**Code:** `UTIL`  
+**Label:** Utilization Analytics  
+**Route:** `/economics/utilization`  
+**Description:** Aggregate lending utilization, benchmark rate overlays & custom rate blends
+
+### Purpose
+
+Securities lending desks track utilization at the individual name level (SLAB) and monitor squeeze risk (SQZ), but there is no macro view of *how aggregate utilization moves with benchmark rates*. When SOFR rises, do overnight GC utilization rates follow? When credit spreads widen, does HTB supply dry up? This module provides that macro lens — aggregate utilization time series by sector, asset class, and classification, overlaid with daily benchmark rates. It also lets users build custom blended benchmarks (e.g., "60% SOFR + 40% BGCR" or "SOFR + 0.5 × IG OAS") and track those blends over time against utilization.
+
+### Files to Create
+
+| File | Purpose |
+|------|---------|
+| `src/data/utilizationAnalytics.ts` | Pure analytics — utilization aggregation, time series, benchmark correlation, custom blends |
+| `src/app/economics/utilization/page.tsx` | Full analytics page — 4 tabs |
+| `src/lib/utilizationPdf.ts` | PDF export for UTIL module |
+| `src/app/api/econ/utilization/route.ts` | API route for utilization time series (optional — can be computed client-side from existing data) |
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/lib/nav.ts` | Add `{ code: "UTIL", label: "Utilization Analytics", href: "/economics/utilization", icon: Gauge, desc: "Lending utilization, benchmark overlays & custom rate blends", group: "ECONOMICS" }` |
+| `src/App.tsx` | Add import and `<Route path="utilization" element={<EconUtilization />} />` in economics group |
+
+### Data Sources
+
+This module bridges two data domains:
+
+```
+┌─────────────────────────┐     ┌──────────────────────────┐
+│  Securities Lending     │     │  Benchmark Rates         │
+│  ─────────────────      │     │  ──────────────          │
+│  InventoryRow[]         │     │  SeriesMap (33 rates)    │
+│    • utilization %      │     │    • SOFR, EFFR, BGCR    │
+│    • feeBps             │     │    • DGS2, DGS10, DGS30  │
+│    • classification     │     │    • IG OAS, HY OAS      │
+│  SqueezeRow[]           │     │    • Mortgage, Commodity  │
+│    • heat score         │     │                          │
+│    • feeHist (daily)    │     │  Custom Blends           │
+│    • sector aggregates  │     │    • User-defined combos │
+│  SLSummary              │     │    • Weighted composites  │
+│    • total utilization  │     │                          │
+└─────────────────────────┘     └──────────────────────────┘
+         │                                │
+         └────────── UTIL Module ─────────┘
+              Overlay · Correlate · Blend
+```
+
+### Analytics Engine — `utilizationAnalytics.ts`
+
+#### Types
+
+```typescript
+import type { SeriesMap, Obs, BenchmarkDef } from "@/data/benchmarkRates";
+import type { InventoryRow } from "@/data/securitiesLending";
+import type { SqueezeRow, SectorHeat } from "@/data/squeeze";
+
+// ── Utilization Time Series ──────────────────────────────────────────
+
+export type UtilGroupBy = "sector" | "assetClass" | "classification" | "source" | "all";
+
+export interface UtilizationSnapshot {
+  date: string;
+  groups: Record<string, UtilGroupMetrics>;
+  overall: UtilGroupMetrics;
+}
+
+export interface UtilGroupMetrics {
+  utilization: number;        // weighted average utilization %
+  totalOnLoan: number;        // market value on loan
+  totalAvailable: number;     // market value available
+  avgFeeBps: number;          // weighted average fee
+  nameCount: number;          // number of securities
+  htbCount: number;           // number classified HTB
+  specialCount: number;       // number classified SPECIAL
+}
+
+export interface UtilizationTimeSeries {
+  groupKey: string;           // "Technology" or "EQUITY" or "HTB" or "ALL"
+  groupBy: UtilGroupBy;
+  history: Obs[];             // date + utilization %
+  feeHistory: Obs[];          // date + avg fee bps
+  current: UtilGroupMetrics;
+  trend: TrendMetrics;        // reuse BMRK TrendMetrics on utilization time series
+}
+
+// ── Custom Benchmark Blends ──────────────────────────────────────────
+
+export interface BlendComponent {
+  seriesId: string;           // FRED series ID or custom ID
+  weight: number;             // decimal weight (e.g., 0.6 for 60%)
+  label: string;              // display label
+}
+
+export interface CustomBlend {
+  id: string;                 // unique blend ID
+  name: string;               // user-facing name, e.g. "Repo Funding Blend"
+  components: BlendComponent[];
+  spreadBps: number;          // additional fixed spread in bps (e.g., +25bps)
+  description: string;
+}
+
+export interface BlendResult {
+  blend: CustomBlend;
+  history: Obs[];             // computed daily blend values
+  current: number | null;
+  chg1d: number | null;
+  chg20d: number | null;
+  percentile: number | null;
+  zScore: number | null;
+  trend: TrendMetrics;
+}
+
+// ── Benchmark-Utilization Correlation ────────────────────────────────
+
+export interface RateUtilCorrelation {
+  rateId: string;
+  rateLabel: string;
+  utilGroup: string;          // sector or classification
+  correlation: number | null; // Pearson correlation of daily changes
+  beta: number | null;        // regression beta: 1bps rate move → X% util change
+  rSquared: number | null;
+  window: number;             // lookback days
+  interpretation: string;     // "Strong positive" / "Weak negative" / etc.
+}
+
+// ── Rate Sensitivity ─────────────────────────────────────────────────
+
+export interface RateSensitivity {
+  rateId: string;
+  rateLabel: string;
+  impact: "positive" | "negative" | "neutral";
+  magnitude: "low" | "moderate" | "high";
+  beta: number | null;
+  description: string;        // e.g., "Rising SOFR → higher GC utilization"
+}
+
+export interface UtilSummary {
+  overallUtil: number | null;
+  htbUtil: number | null;
+  gcUtil: number | null;
+  avgFeeBps: number | null;
+  utilTrend: "rising" | "falling" | "stable";
+  topSensitivity: string;     // most correlated benchmark rate
+  blendCount: number;         // number of active custom blends
+}
+
+// ── Preset Blends ────────────────────────────────────────────────────
+
+export const PRESET_BLENDS: CustomBlend[] = [
+  {
+    id: "gc-funding",
+    name: "GC Funding Rate",
+    components: [
+      { seriesId: "SOFR", weight: 0.5, label: "SOFR" },
+      { seriesId: "BGCR", weight: 0.3, label: "BGCR" },
+      { seriesId: "TGCR", weight: 0.2, label: "TGCR" },
+    ],
+    spreadBps: 0,
+    description: "Weighted average of secured overnight rates — proxy for GC repo funding cost",
+  },
+  {
+    id: "unsecured-short",
+    name: "Unsecured Short-Term",
+    components: [
+      { seriesId: "EFFR", weight: 0.6, label: "EFFR" },
+      { seriesId: "OBFR", weight: 0.4, label: "OBFR" },
+    ],
+    spreadBps: 10,
+    description: "Blended unsecured overnight rate with 10bps institutional spread",
+  },
+  {
+    id: "lending-rebate",
+    name: "Lending Rebate Benchmark",
+    components: [
+      { seriesId: "SOFR", weight: 1.0, label: "SOFR" },
+    ],
+    spreadBps: -15,
+    description: "SOFR minus 15bps — typical GC rebate rate for securities lending",
+  },
+  {
+    id: "htb-cost",
+    name: "HTB Borrowing Cost",
+    components: [
+      { seriesId: "SOFR", weight: 1.0, label: "SOFR" },
+      { seriesId: "BAMLH0A0HYM2", weight: 0.01, label: "HY OAS (scaled)" },
+    ],
+    spreadBps: 200,
+    description: "Approximated all-in cost of borrowing hard-to-borrow names",
+  },
+  {
+    id: "term-reinvest",
+    name: "Term Reinvestment Yield",
+    components: [
+      { seriesId: "DGS3MO", weight: 0.5, label: "3M T-Bill" },
+      { seriesId: "DGS1", weight: 0.3, label: "1Y Treasury" },
+      { seriesId: "DGS2", weight: 0.2, label: "2Y Treasury" },
+    ],
+    spreadBps: 0,
+    description: "Blended short-duration reinvestment benchmark for cash collateral",
+  },
+];
+```
+
+#### Functions
+
+```typescript
+// ── Utilization Aggregation ──────────────────────────────────────────
+
+// Build utilization time series by group (sector, asset class, classification, source)
+// Uses InventoryRow[] from securitiesLending.ts + SqueezeRow[] for feeHist
+export function buildUtilizationTimeSeries(
+  inventory: InventoryRow[],
+  squeezeBoard: SqueezeRow[],
+  groupBy: UtilGroupBy
+): UtilizationTimeSeries[]
+
+// Current snapshot of utilization across all groups
+export function computeUtilizationSnapshot(
+  inventory: InventoryRow[],
+  groupBy: UtilGroupBy
+): UtilizationSnapshot
+
+// Summary KPIs
+export function computeUtilSummary(
+  inventory: InventoryRow[],
+  blends: BlendResult[]
+): UtilSummary
+
+// ── Custom Benchmark Blends ──────────────────────────────────────────
+
+// Compute a custom blend's daily time series from SeriesMap
+export function computeBlend(map: SeriesMap, blend: CustomBlend): BlendResult
+
+// Compute all preset + user blends
+export function computeAllBlends(
+  map: SeriesMap,
+  presets?: CustomBlend[],
+  userBlends?: CustomBlend[]
+): BlendResult[]
+
+// Validate a blend definition (weights sum to reasonable range, all series exist)
+export function validateBlend(blend: CustomBlend, availableIds: string[]): string[]  // returns error messages
+
+// ── Rate-Utilization Correlation ─────────────────────────────────────
+
+// Correlate benchmark rate changes with utilization changes
+export function computeRateUtilCorrelation(
+  map: SeriesMap,
+  utilSeries: UtilizationTimeSeries[],
+  rateIds: string[],
+  window?: number
+): RateUtilCorrelation[]
+
+// Rate sensitivity analysis — which benchmark rates most affect utilization
+export function computeRateSensitivity(
+  map: SeriesMap,
+  utilSeries: UtilizationTimeSeries[]
+): RateSensitivity[]
+
+// ── Overlay Helpers ──────────────────────────────────────────────────
+
+// Normalize a rate series and a utilization series to [0,100] for overlay charting
+export function normalizeForOverlay(
+  rateObs: Obs[],
+  utilObs: Obs[],
+  rangeDays: number
+): { ratePct: number[]; utilPct: number[]; dates: string[] }
+```
+
+### Page Layout — 4 Tabs
+
+#### Tab 1: Utilization Dashboard
+
+| Panel | Content |
+|-------|---------|
+| **KPI Strip** | Overall Util %, HTB Util %, GC Util %, Avg Fee (bps), Util Trend, SOFR (cross-ref) |
+| **Utilization by Sector** | Horizontal bar chart — sector utilization % with HTB/SPECIAL counts |
+| **Utilization by Classification** | Donut chart — GC / WARM / SPECIAL / HTB share of on-loan MV |
+| **Utilization Heatmap** | Sector (rows) × Classification (columns) → utilization % (color intensity) |
+| **Top Utilization Names** | DataGrid — top 20 by utilization with fee, classification, sector, sparkline |
+
+#### Tab 2: Benchmark Overlay
+
+| Panel | Content |
+|-------|---------|
+| **Dual-Axis Chart** | Left axis: aggregate utilization % — Right axis: selected benchmark rate. User selects rate from dropdown. Shared time axis. |
+| **Rate Selection** | TermSelect dropdown of all 33 BMRK rates + custom blends |
+| **Time Range** | TermToggleGroup: 1M / 3M / 6M / 1Y / 2Y |
+| **Correlation Grid** | DataGrid — each benchmark rate's correlation with overall/HTB/GC utilization, beta, R², interpretation |
+| **Rate Sensitivity Panel** | Ranked list of which rates most affect utilization, with direction and magnitude badges |
+| **Scatter Plot** | Daily rate change (x) vs daily utilization change (y) for selected rate — visual correlation |
+
+#### Tab 3: Custom Blends
+
+| Panel | Content |
+|-------|---------|
+| **Preset Blends Grid** | DataGrid — blend name, current value, chg 1D/20D, percentile, z-score, description |
+| **Blend Builder** | Interactive form: add/remove components (series + weight), set fixed spread, name the blend. Preview chart updates live. |
+| **Blend Chart** | Line chart of selected blend over time, with optional utilization overlay |
+| **Blend Comparison** | Multi-line chart comparing multiple blends on same axis |
+| **Blend vs Utilization** | Dual-axis chart of selected blend vs selected utilization group |
+| **Active Blends** | Saved user blends stored in localStorage, editable and deletable |
+
+**Blend Builder UI Detail:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ BLEND BUILDER                                           [Save] │
+├─────────────────────────────────────────────────────────────────┤
+│ Name: [Custom Repo Blend_____]                                 │
+│                                                                 │
+│ Components:                                                     │
+│  ┌──────────────────┬────────┬────────┐                         │
+│  │ Series           │ Weight │        │                         │
+│  ├──────────────────┼────────┼────────┤                         │
+│  │ SOFR      [▼]    │ 60%    │ [✕]    │                         │
+│  │ BGCR      [▼]    │ 30%    │ [✕]    │                         │
+│  │ EFFR      [▼]    │ 10%    │ [✕]    │                         │
+│  └──────────────────┴────────┴────────┘                         │
+│  [+ Add Component]         Total: 100%                          │
+│                                                                 │
+│ Fixed Spread: [+25] bps                                         │
+│                                                                 │
+│ Preview: ════════════════════════════════════                    │
+│          4.82% (current)  +0.3bps (1D)  P62 (percentile)       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Tab 4: Rate Impact Analysis
+
+| Panel | Content |
+|-------|---------|
+| **Scenario Builder** | What-if: "If SOFR moves +25bps, what happens to utilization?" Uses regression betas from correlation analysis. |
+| **Impact Grid** | DataGrid — for each utilization group (sector/class), estimated change from a rate shock |
+| **Historical Parallels** | Find past episodes where the selected rate moved a similar amount, show what utilization did |
+| **Regime Cross-Reference** | Current BMRK regime → expected utilization behavior (table mapping regimes to utilization patterns) |
+| **Desk Playbook** | Per-regime lending strategy notes (e.g., "Tightening → expect GC util to rise, widen rebate spreads") |
+
+### Custom Blend Persistence
+
+User-created blends are stored in `localStorage` under key `bmrk-custom-blends`:
+
+```typescript
+// Read/write helpers
+export function loadUserBlends(): CustomBlend[] {
+  const raw = localStorage.getItem("bmrk-custom-blends");
+  return raw ? JSON.parse(raw) : [];
+}
+
+export function saveUserBlends(blends: CustomBlend[]): void {
+  localStorage.setItem("bmrk-custom-blends", JSON.stringify(blends));
+}
+
+export function deleteUserBlend(id: string): void {
+  const blends = loadUserBlends().filter((b) => b.id !== id);
+  saveUserBlends(blends);
+}
+```
+
+### PDF Export
+
+```typescript
+// src/lib/utilizationPdf.ts
+export interface UtilPdfOptions {
+  map: SeriesMap;
+  inventory: InventoryRow[];
+  squeezeBoard: SqueezeRow[];
+  blends: BlendResult[];
+  source: string;
+  tab: "dashboard" | "overlay" | "blends" | "impact";
+  groupBy: UtilGroupBy;
+  selectedRate: string;
+  selectedBlend: string;
+  timeRange: string;
+  chartRef?: HTMLElement | null;
+  overlayChartRef?: HTMLElement | null;
+  blendChartRef?: HTMLElement | null;
+}
+
+export async function generateUtilizationPdf(opts: UtilPdfOptions): Promise<void>
+```
+
+### Database Extension
+
+UTIL uses two data domains that may come from different sources:
+
+```sql
+-- Utilization history (new table — not in BMRK)
+CREATE TABLE daily_utilization (
+  observation_date DATE        NOT NULL,
+  group_type       VARCHAR(20) NOT NULL,  -- 'sector', 'assetClass', 'classification', 'all'
+  group_key        VARCHAR(50) NOT NULL,  -- 'Technology', 'EQUITY', 'HTB', 'ALL'
+  utilization_pct  DECIMAL(8,4),
+  avg_fee_bps      DECIMAL(10,4),
+  on_loan_mv       DECIMAL(18,2),
+  available_mv     DECIMAL(18,2),
+  name_count       INTEGER,
+  htb_count        INTEGER,
+  special_count    INTEGER,
+  PRIMARY KEY (observation_date, group_type, group_key)
+);
+
+-- Custom blend definitions (optional — can also live in localStorage or app config)
+CREATE TABLE custom_blend_definitions (
+  blend_id    VARCHAR(30) PRIMARY KEY,
+  name        VARCHAR(100),
+  description TEXT,
+  spread_bps  DECIMAL(10,2) DEFAULT 0,
+  created_by  VARCHAR(100),
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE custom_blend_components (
+  blend_id   VARCHAR(30) NOT NULL REFERENCES custom_blend_definitions(blend_id),
+  series_id  VARCHAR(30) NOT NULL,
+  weight     DECIMAL(5,4) NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  PRIMARY KEY (blend_id, series_id)
+);
+
+-- Benchmark rates come from the existing daily_benchmark_rates table (shared with BMRK)
+```
+
+### Provider Interface Extension
+
+```typescript
+interface UtilizationProvider {
+  // Utilization time series by group
+  getUtilizationHistory(
+    groupType: UtilGroupBy,
+    groupKey: string,
+    n: number
+  ): Promise<Obs[]>;
+
+  // All groups for a given groupType
+  getUtilizationSnapshot(
+    groupType: UtilGroupBy,
+    date?: string
+  ): Promise<UtilizationSnapshot>;
+
+  // Custom blends from DB (supplements localStorage)
+  getCustomBlends(): Promise<CustomBlend[]>;
+  saveCustomBlend(blend: CustomBlend): Promise<void>;
+  deleteCustomBlend(id: string): Promise<void>;
+
+  source: string;
+}
+```
+
+---
+
 ## Implementation Order
 
 ### Recommended Sequence
@@ -672,23 +1133,33 @@ Phase 3: FCOST (Funding Cost Monitor)
   - Depends on desk definitions that may need customization per deployment
   - Tier definitions should be configurable (DEFAULT_TIERS is just a starting point)
   - Estimated: ~450 LOC analytics, ~600 LOC page
+
+Phase 4: UTIL (Utilization Analytics)
+  - Bridges securities lending + benchmark rates — the two data domains
+  - Depends on BMRK data layer + existing securitiesLending.ts and squeeze.ts
+  - Custom blend builder is the most interactive component — needs localStorage persistence
+  - Blend engine is reusable by FCOST (custom funding cost blends)
+  - Estimated: ~550 LOC analytics, ~750 LOC page (4 tabs + blend builder UI)
 ```
 
 ### Cross-Module Integration (Post-Build)
 
-After all three are built, these optional enhancements connect them:
+After all four are built, these optional enhancements connect them:
 
 | Enhancement | What It Does |
 |-------------|-------------|
 | BMRK regime → RVOL vol regime | Combine rate level regime + vol regime into a composite "market state" |
 | YCURV curve regime → FCOST | Show how curve shape changes affect term funding costs |
 | RVOL vol → FCOST stress | Elevated vol triggers wider funding cost estimates (vol-adjusted spreads) |
-| Unified PDF | "Benchmark Rate Analysis" PDF combining highlights from all 4 modules |
-| Shared alert rules | BMRK/YCURV/RVOL/FCOST each contribute threshold rules to the Alert Center |
+| UTIL blends → FCOST tiers | Custom blends can serve as tier-specific funding benchmarks |
+| UTIL correlation → BMRK status | Flag rates whose moves most affect utilization in BMRK status board |
+| UTIL utilization → SQZ squeeze | Feed aggregate utilization trends into squeeze scoring |
+| Unified PDF | "Benchmark Rate Analysis" PDF combining highlights from all 5 modules |
+| Shared alert rules | BMRK/YCURV/RVOL/FCOST/UTIL each contribute threshold rules to the Alert Center |
 
 ### Shared Module Nav Group
 
-All four modules should appear as a visual sub-group in the sidebar. Update `src/lib/nav.ts` ordering so they cluster:
+All five modules should appear as a visual sub-group in the sidebar. Update `src/lib/nav.ts` ordering so they cluster:
 
 ```
 ECONOMICS group:
@@ -698,13 +1169,16 @@ ECONOMICS group:
   YCURV — Yield Curve Analytics
   FCOST — Funding Cost Monitor
   RVOL  — Rate Volatility
+  UTIL  — Utilization Analytics
 ```
 
 ---
 
 ## Database Handoff Notes
 
-All four modules share the same underlying data table:
+The modules share two data domains:
+
+### Benchmark Rates (shared by BMRK, YCURV, FCOST, RVOL, UTIL)
 
 ```sql
 CREATE TABLE daily_benchmark_rates (
@@ -715,7 +1189,48 @@ CREATE TABLE daily_benchmark_rates (
 );
 ```
 
-The provider interface from `docs/BENCHMARK_RATES_DB_HANDOFF.md` applies unchanged:
+### Utilization History (UTIL-specific)
+
+```sql
+CREATE TABLE daily_utilization (
+  observation_date DATE        NOT NULL,
+  group_type       VARCHAR(20) NOT NULL,
+  group_key        VARCHAR(50) NOT NULL,
+  utilization_pct  DECIMAL(8,4),
+  avg_fee_bps      DECIMAL(10,4),
+  on_loan_mv       DECIMAL(18,2),
+  available_mv     DECIMAL(18,2),
+  name_count       INTEGER,
+  htb_count        INTEGER,
+  special_count    INTEGER,
+  PRIMARY KEY (observation_date, group_type, group_key)
+);
+```
+
+### Custom Blend Definitions (UTIL — optional, can use localStorage)
+
+```sql
+CREATE TABLE custom_blend_definitions (
+  blend_id    VARCHAR(30) PRIMARY KEY,
+  name        VARCHAR(100),
+  description TEXT,
+  spread_bps  DECIMAL(10,2) DEFAULT 0,
+  created_by  VARCHAR(100),
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE custom_blend_components (
+  blend_id   VARCHAR(30) NOT NULL REFERENCES custom_blend_definitions(blend_id),
+  series_id  VARCHAR(30) NOT NULL,
+  weight     DECIMAL(5,4) NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  PRIMARY KEY (blend_id, series_id)
+);
+```
+
+### Provider Interfaces
+
+The benchmark provider from `docs/BENCHMARK_RATES_DB_HANDOFF.md` applies to BMRK/YCURV/FCOST/RVOL:
 
 ```typescript
 interface BenchmarkProvider {
@@ -725,7 +1240,20 @@ interface BenchmarkProvider {
 }
 ```
 
-Each module calls `getBatch()` with its relevant IDs. The analytics layer doesn't care where the data came from.
+UTIL adds its own provider for utilization data:
+
+```typescript
+interface UtilizationProvider {
+  getUtilizationHistory(groupType: UtilGroupBy, groupKey: string, n: number): Promise<Obs[]>;
+  getUtilizationSnapshot(groupType: UtilGroupBy, date?: string): Promise<UtilizationSnapshot>;
+  getCustomBlends(): Promise<CustomBlend[]>;
+  saveCustomBlend(blend: CustomBlend): Promise<void>;
+  deleteCustomBlend(id: string): Promise<void>;
+  source: string;
+}
+```
+
+Each module calls its provider with relevant IDs. The analytics layer doesn't care where the data came from.
 
 ---
 
@@ -742,6 +1270,16 @@ Each module calls `getBatch()` with its relevant IDs. The analytics layer doesn'
 - [ ] ProvenanceBadge shows correct source
 - [ ] No tight coupling to other modules (imports only from shared data layer and UI components)
 
+### UTIL-Specific Checks
+
+- [ ] Blend builder creates, saves, loads, and deletes blends in localStorage
+- [ ] Preset blends compute correct weighted values from SeriesMap
+- [ ] Custom blend weights validate (warn if sum ≠ 100%)
+- [ ] Dual-axis overlay chart renders both utilization and rate on correct axes
+- [ ] Correlation grid shows sensible values (not all zeros or NaN)
+- [ ] Rate sensitivity rankings update when utilization group changes
+- [ ] Scatter plot renders with correct axis labels and data alignment
+
 ---
 
 ## Modularity Requirements
@@ -753,3 +1291,4 @@ Each module must be deployable independently in another application:
 3. **PDF file** — imports only from `@/lib/pdfReport.ts` and its own data file
 4. **No cross-module page imports** — YCURV page does not import from FCOST page, etc.
 5. **Shared types live in `benchmarkRates.ts`** — `SeriesMap`, `Obs`, `BenchmarkDef`, `TrendMetrics`
+6. **UTIL analytics** may import from `securitiesLending.ts` and `squeeze.ts` for types only — the page fetches the data and passes it in as arguments (no direct function calls from the analytics layer to the SL data layer)
