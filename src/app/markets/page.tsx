@@ -105,9 +105,8 @@ export default function LiveMarkets() {
   const move = idx("MOVE");
 
   const rows = useMemo(() => {
-    const liveRows = quotesForTabFromPipeline(tab, pipelineQuotes);
-    return liveRows.length ? liveRows : quotesForTab(tab);
-  }, [pipelineQuotes, tab]);
+    return quotesForTabFromPipeline(tab, pipelineQuotes, allQuotes);
+  }, [pipelineQuotes, allQuotes, tab]);
   const candles = useMemo(() => getCandles(chartTicker, 60), [chartTicker]);
   const book = useMemo(() => getOrderBook(chartTicker), [chartTicker]);
 
@@ -440,20 +439,36 @@ function cardsToQuotes(cards: SnapshotCard[]): Quote[] {
 }
 
 function marketAssetClass(assetClass: string): AssetClass {
-  if (assetClass === "BOND") return "GOVT";
-  if (assetClass === "CREDIT") return "CORP";
-  if (assetClass === "COMMODITY") return "COMMODITY" as AssetClass;
-  if (assetClass === "CURRENCY") return "FX" as AssetClass;
-  if (assetClass === "VOLATILITY") return "ETF" as AssetClass;
+  const ac = assetClass.toUpperCase();
+  if (ac === "BOND") return "GOVT";
+  if (ac === "CREDIT") return "CORP";
+  if (ac === "COMMODITY") return "COMMODITY" as AssetClass;
+  if (ac === "CURRENCY" || ac === "FX") return "FX" as AssetClass;
+  if (ac === "VOLATILITY") return "ETF" as AssetClass;
+  if (ac === "EQUITY") return "EQUITY" as AssetClass;
+  if (ac === "CRYPTO") return "CRYPTO" as AssetClass;
+  if (ac === "FUTURE") return "FUTURE" as AssetClass;
   return "ETF" as AssetClass;
 }
 
-function quotesForTabFromPipeline(tab: TabKey, quotes: Quote[]): Quote[] {
-  if (tab === "ETF") return quotes.filter((q) => q.assetClass === "ETF");
-  if (tab === "FI") return quotes.filter((q) => q.assetClass === "GOVT" || q.assetClass === "CORP");
-  if (tab === "COMMODITY") return quotes.filter((q) => q.assetClass === "COMMODITY");
-  if (tab === "FX") return quotes.filter((q) => q.assetClass === "FX");
-  return [];
+function quotesForTabFromPipeline(tab: TabKey, pipelineQuotes: Quote[], simQuotes: Quote[]): Quote[] {
+  const pipelineForTab = (() => {
+    if (tab === "ETF") return pipelineQuotes.filter((q) => q.assetClass === "ETF");
+    if (tab === "FI") return pipelineQuotes.filter((q) => q.assetClass === "GOVT" || q.assetClass === "CORP");
+    if (tab === "COMMODITY") return pipelineQuotes.filter((q) => q.assetClass === "COMMODITY");
+    if (tab === "FX") return pipelineQuotes.filter((q) => q.assetClass === "FX");
+    if (tab === "EQUITY") return pipelineQuotes.filter((q) => q.assetClass === "EQUITY");
+    if (tab === "CRYPTO") return pipelineQuotes.filter((q) => q.assetClass === "CRYPTO");
+    if (tab === "FUTURE") return pipelineQuotes.filter((q) => q.assetClass === "FUTURE");
+    return [];
+  })();
+  if (pipelineForTab.length) {
+    const pipelineTickers = new Set(pipelineForTab.map((q) => q.ticker));
+    const simFill = simQuotes.filter((q) => !pipelineTickers.has(q.ticker));
+    const simForTab = quotesForTab(tab).filter((q) => simFill.some((s) => s.ticker === q.ticker));
+    return [...pipelineForTab, ...simForTab];
+  }
+  return quotesForTab(tab);
 }
 
 function mergeIndexQuotes(base: IndexQuote[], cards: SnapshotCard[]): IndexQuote[] {

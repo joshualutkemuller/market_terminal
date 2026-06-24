@@ -1,6 +1,6 @@
 import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
-import { getSeriesHistory, seriesById, resolveFred } from "@/data/econSeries";
+import { getSeriesHistory, getSeriesHistoryRaw, seriesById, resolveFred } from "@/data/econSeries";
 import { getSnapshotObservations, getSnapshotRawObservations } from "@/data/econSnapshot";
 import { getEtlInflationObservations } from "@/data/globalMacro";
 
@@ -39,6 +39,13 @@ export async function GET(req: Request) {
   const etl = getEtlInflationObservations(id, n);
   if (etl) {
     return json({ source: "ETL", id, label: meta?.label ?? id, units: "yoy", observations: etl });
+  }
+  const wantsRaw = reqUnits === "lin" && resolved.units !== "lin";
+  if (wantsRaw) {
+    const rawSim = getSeriesHistoryRaw(id, n);
+    if (rawSim) {
+      return json({ source: "SIM", id, label: meta?.label ?? id, units, observations: rawSim });
+    }
   }
   return json({ source: "SIM", id, label: meta?.label ?? id, units, observations: getSeriesHistory(id, n) });
 }

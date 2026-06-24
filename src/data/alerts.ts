@@ -95,3 +95,82 @@ export const CATEGORY_LABEL: Record<AlertCategory, string> = {
   MARKET: "Market",
   SENTIMENT: "Sentiment",
 };
+
+export type LiveAlertData = Record<string, { observations: { date: string; value: number }[]; source: string }>;
+
+export const ALERT_FRED_IDS = ["VIXCLS", "SOFR", "BAMLH0A0HYM2", "DGS10", "T10Y2Y"];
+
+interface LiveThreshold {
+  id: string;
+  label: string;
+  category: AlertCategory;
+  thresholds: { level: number; op: "gte" | "lte"; severity: AlertSeverity; title: string; detail: (v: number) => string }[];
+}
+
+const LIVE_THRESHOLDS: LiveThreshold[] = [
+  {
+    id: "VIXCLS", label: "VIX", category: "MARKET",
+    thresholds: [
+      { level: 30, op: "gte", severity: "CRITICAL", title: "VIX spike — extreme volatility", detail: (v) => `CBOE VIX at ${v.toFixed(1)} — extreme fear regime, cross-asset hedging warranted` },
+      { level: 22, op: "gte", severity: "HIGH", title: "VIX elevated — risk-off signal", detail: (v) => `CBOE VIX at ${v.toFixed(1)} — elevated uncertainty, tighten exposure` },
+      { level: 18, op: "gte", severity: "MEDIUM", title: "VIX rising — volatility uptick", detail: (v) => `CBOE VIX at ${v.toFixed(1)} — above calm regime` },
+    ],
+  },
+  {
+    id: "BAMLH0A0HYM2", label: "HY OAS", category: "MARKET",
+    thresholds: [
+      { level: 600, op: "gte", severity: "CRITICAL", title: "HY spreads — stress level", detail: (v) => `ICE BofA HY OAS at ${v.toFixed(0)}bps — credit stress` },
+      { level: 450, op: "gte", severity: "HIGH", title: "HY spreads widening", detail: (v) => `ICE BofA HY OAS at ${v.toFixed(0)}bps — risk premium elevated` },
+      { level: 350, op: "gte", severity: "MEDIUM", title: "HY spreads above average", detail: (v) => `ICE BofA HY OAS at ${v.toFixed(0)}bps — above long-run median` },
+    ],
+  },
+  {
+    id: "T10Y2Y", label: "10Y-2Y Spread", category: "TREASURY",
+    thresholds: [
+      { level: -80, op: "lte", severity: "HIGH", title: "Deep yield curve inversion", detail: (v) => `10Y-2Y spread at ${v.toFixed(0)}bps — deep inversion, recession signal` },
+      { level: -40, op: "lte", severity: "MEDIUM", title: "Yield curve inverted", detail: (v) => `10Y-2Y spread at ${v.toFixed(0)}bps — inverted` },
+      { level: 150, op: "gte", severity: "MEDIUM", title: "Yield curve steep", detail: (v) => `10Y-2Y spread at ${v.toFixed(0)}bps — unusually steep` },
+    ],
+  },
+  {
+    id: "DGS10", label: "US 10Y", category: "TREASURY",
+    thresholds: [
+      { level: 5.0, op: "gte", severity: "HIGH", title: "10Y yield breach — 5% handle", detail: (v) => `US 10Y at ${v.toFixed(2)}% — funding cost pressure` },
+      { level: 4.75, op: "gte", severity: "MEDIUM", title: "10Y yield elevated", detail: (v) => `US 10Y at ${v.toFixed(2)}% — above recent range` },
+    ],
+  },
+];
+
+export function evaluateLiveAlerts(liveData: LiveAlertData): Alert[] {
+  const alerts: Alert[] = [];
+  const simTitles = new Set(TEMPLATES.map((t) => t.title));
+  let seq = 5000;
+
+  for (const def of LIVE_THRESHOLDS) {
+    const series = liveData[def.id];
+    if (!series?.observations?.length) continue;
+    const latest = series.observations[series.observations.length - 1];
+    if (latest == null) continue;
+    const v = latest.value;
+
+    for (const t of def.thresholds) {
+      const triggered = t.op === "gte" ? v >= t.level : v <= t.level;
+      if (!triggered) continue;
+      const title = t.title;
+      if (simTitles.has(title)) continue;
+      alerts.push({
+        id: `ALR-LIVE-${seq++}`,
+        ts: new Date().toISOString().slice(11, 19),
+        minsAgo: 0,
+        severity: t.severity,
+        category: def.category,
+        title,
+        detail: t.detail(v),
+        metric: def.id === "VIXCLS" ? `VIX ${v.toFixed(1)}` : `${v.toFixed(1)}`,
+        acked: false,
+      });
+      break;
+    }
+  }
+  return alerts;
+}

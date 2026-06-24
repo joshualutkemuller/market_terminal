@@ -191,6 +191,18 @@ export function getSLSummary(): SLSummary {
   };
 }
 
+export type PipelinePriceMap = Map<string, number>;
+
+export function mergeLiveInventoryPrices(rows: InventoryRow[], prices: PipelinePriceMap): InventoryRow[] {
+  if (prices.size === 0) return rows;
+  return rows.map((r) => {
+    const livePx = prices.get(r.ticker);
+    if (livePx == null) return r;
+    const totalShares = r.available + r.onLoan + r.restricted;
+    return { ...r, marketValue: totalShares * livePx };
+  });
+}
+
 /** Sankey flow: beneficial owners → desk → borrowers (value = revenue). */
 export interface SankeyLink {
   source: string;

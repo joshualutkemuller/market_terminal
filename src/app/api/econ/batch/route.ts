@@ -1,6 +1,6 @@
 import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
-import { getSeriesHistory, resolveFred } from "@/data/econSeries";
+import { getSeriesHistory, getSeriesHistoryRaw, resolveFred } from "@/data/econSeries";
 import { getSnapshotObservations, getSnapshotRawObservations } from "@/data/econSnapshot";
 
 
@@ -37,7 +37,9 @@ export async function GET(req: Request) {
       }
       const snap = units === "lin" ? getSnapshotRawObservations(id, n) ?? getSnapshotObservations(id, n) : getSnapshotObservations(id, n);
       if (snap) return { id, observations: snap as { date: string; value: number }[], source: "SNAPSHOT" };
-      return { id, observations: getSeriesHistory(id, n), source: "SIM" };
+      const wantsRaw = units === "lin" && r.units !== "lin";
+      const simObs = wantsRaw ? getSeriesHistoryRaw(id, n) ?? getSeriesHistory(id, n) : getSeriesHistory(id, n);
+      return { id, observations: simObs, source: "SIM" };
     })
   );
 
