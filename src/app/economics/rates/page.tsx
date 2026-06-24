@@ -17,7 +17,7 @@ import {
   type FomcMeeting,
 } from "@/data/econRates";
 import { getPolicyTransmission, type PolicyTransmission } from "@/data/econEnhancements";
-import { fomcFromEtl, impliedPathFromEtl, hasEtlFedData, etlFedSource, etlFedAsOf } from "@/data/etlMacro";
+import { fomcFromEtl, impliedPathFromEtl, hasEtlFedData, etlFedSource, etlFedAsOf, etlFedSourceDetail, etlFedModelInputs } from "@/data/etlMacro";
 import { SourceBadge } from "@/components/econ/SourceBadge";
 import { fmtNum, fmtSigned, fmtUsdAbbr, pnlClass } from "@/lib/format";
 
@@ -56,7 +56,23 @@ export default function RateProbabilitiesPage() {
   const meetings = useEtl ? fomcFromEtl() : getFomcMeetings();
   const path = useEtl ? impliedPathFromEtl() : getImpliedPath();
   const fedSource: "ETL" | "SIM" = useEtl ? "ETL" : "SIM";
-  const fedIsLiveCme = useEtl && etlFedSource() === "cme";
+  const fedPriceSource = etlFedSource();
+  const fedIsLiveCme = useEtl && fedPriceSource === "cme";
+  const fedIsFredModel = useEtl && fedPriceSource === "fred_model";
+  const fedModelInputs = fedIsFredModel ? etlFedModelInputs() : null;
+  const fedSourceDetail = etlFedSourceDetail();
+  const currentTarget =
+    fedModelInputs?.target_low != null && fedModelInputs?.target_high != null
+      ? {
+          low: fedModelInputs.target_low,
+          high: fedModelInputs.target_high,
+          mid: (fedModelInputs.target_low + fedModelInputs.target_high) / 2,
+        }
+      : CURRENT_TARGET;
+  const displayPath =
+    fedIsFredModel && path.length
+      ? [{ ...path[0], rate: currentTarget.mid }, ...path.slice(1)]
+      : path;
   const dot = getDotPlot();
   const pathHistory = getPolicyPathHistory();
   const transmissions = getPolicyTransmission();
@@ -70,16 +86,16 @@ export default function RateProbabilitiesPage() {
   const shownPaths = pathHistory.filter((p) => selPaths.has(p.asOf));
 
   const first = meetings[0];
-  const last = path[path.length - 1];
+  const last = displayPath[displayPath.length - 1];
   const impliedRate12m = last.rate;
-  const terminalRate = Math.min(...path.map((p) => p.rate));
-  const cutsPriced = Math.round((CURRENT_TARGET.mid - impliedRate12m) / 0.25);
+  const terminalRate = Math.min(...displayPath.map((p) => p.rate));
+  const cutsPriced = Math.round((currentTarget.mid - impliedRate12m) / 0.25);
 
   const firstCutProb = first.outcomes.filter((o) => o.move < 0).reduce((a, o) => a + o.prob, 0);
   const firstHoldProb = probOf(first, 0);
   const firstHikeProb = first.outcomes.filter((o) => o.move > 0).reduce((a, o) => a + o.prob, 0);
 
-  const targetStr = `${fmtNum(CURRENT_TARGET.low, 2)}–${fmtNum(CURRENT_TARGET.high, 2)}%`;
+  const targetStr = `${fmtNum(currentTarget.low, 2)}–${fmtNum(currentTarget.high, 2)}%`;
 
   // Dot-plot rate levels (rows) sorted high→low across all years.
   const rateLevels = [...new Set(dot.dots.map((d) => d.rate))].sort((a, b) => b - a);
@@ -112,10 +128,10 @@ export default function RateProbabilitiesPage() {
       <PageHeader code="FOMC" title="Rate Probabilities" desc="Fed path & hike/cut odds" asOf={useEtl ? etlFedAsOf() : null} right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "FEDFUNDS" }, { source: "econ", id: "DGS3MO" }]} range="5Y" /><SourceBadge source={fedSource} /></span>} />
 
       <KpiStrip>
-        <Stat label="Current Target" value={targetStr} sub={`mid ${fmtNum(CURRENT_TARGET.mid, 3)}%`} tone="amber" />
+        <Stat label="Current Target" value={targetStr} sub={`mid ${fmtNum(currentTarget.mid, 3)}%`} tone="amber" />
         <Stat label="Next Meeting" value={first.label} sub={`${first.daysOut} days out`} />
         <Stat label="Most-Likely Next Move" value={<Tag tone={moveTone(first.mostLikely)}>{first.mostLikely}</Tag>} sub={`${(Math.max(firstCutProb, firstHoldProb, firstHikeProb) * 100).toFixed(0)}% priced`} />
-        <Stat label="Implied Rate 12M" value={`${fmtNum(impliedRate12m, 2)}%`} sub={`from ${fmtNum(CURRENT_TARGET.mid, 2)}%`} tone={impliedRate12m < CURRENT_TARGET.mid ? "up" : "down"} />
+        <Stat label="Implied Rate 12M" value={`${fmtNum(impliedRate12m, 2)}%`} sub={`from ${fmtNum(currentTarget.mid, 2)}%`} tone={impliedRate12m < currentTarget.mid ? "up" : "down"} />
         <Stat label="Cuts Priced 12M" value={`${cutsPriced} cuts`} sub="25bp equivalents" tone="up" />
         <Stat label="Terminal Rate" value={`${fmtNum(terminalRate, 2)}%`} sub="path minimum" tone="amber" />
       </KpiStrip>
@@ -125,10 +141,22 @@ export default function RateProbabilitiesPage() {
         {useEtl ? (
           <span className="text-sky-300">
             Computed by the macro_data_etl FedProbabilityEngine
-            {fedIsLiveCme ? " from live CME settlements." : " (deterministic fallback futures curve — run the ETL with network access for live CME data)."}
+            {fedIsLiveCme
+              ? " from live CME settlements."
+              : fedIsFredModel
+                ? " from a FRED short-rate model fallback because CME blocked automated access."
+                : " from a deterministic fallback futures curve because CME data was unavailable."}
           </span>
         ) : null}
       </div>
+
+      {fedIsFredModel ? (
+        <div className="border-y border-term-border-soft bg-term-panel-2 px-3 py-1.5 text-3xs text-term-text-mute">
+          <span className="font-semibold uppercase text-term-amber">FRED MODEL</span>{" "}
+          {fedSourceDetail || "EFFR/FEDFUNDS anchors spot policy; DGS3MO, DGS6MO, and DGS1 proxy the short-rate path."}{" "}
+          The ETL applies a <span className="tnum text-term-text-dim">{Math.round((fedModelInputs?.pass_through ?? 0.65) * 100)}%</span> pass-through from the Treasury short-rate gap to the expected effective fed funds path, day-weights that path into synthetic 30-day fed funds futures prices, then runs the same probability ladder as CME FedWatch. This is not CME market data.
+        </div>
+      ) : null}
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-3">
         {/* Left + middle: FedWatch grid + path */}

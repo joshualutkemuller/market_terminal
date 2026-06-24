@@ -28,8 +28,10 @@ export interface EtlFedProbability {
   hike_prob: number;
   implied_move_bps: number;
   outcomes_json: string;
-  price_source: "cme" | "sim";
+  price_source: "cme" | "fred_model" | "sim";
   as_of?: string;
+  source_detail?: string;
+  model_inputs_json?: string;
 }
 
 export interface EtlCountryMacro {
@@ -135,12 +137,40 @@ export function impliedPathFromEtl(): { label: string; rate: number }[] {
   return [{ label: "Now", rate: CURRENT_TARGET.mid }, ...fomcFromEtl().map((m) => ({ label: m.label, rate: m.impliedRate }))];
 }
 
-/** Price source of the ETL FedWatch snapshot ("cme" live, or "sim" fallback). */
-export function etlFedSource(): "cme" | "sim" | null {
+/** Price source of the ETL FedWatch snapshot ("cme" live, "fred_model", or "sim"). */
+export function etlFedSource(): "cme" | "fred_model" | "sim" | null {
   return etlFedProbabilities[0]?.price_source ?? null;
 }
 
 /** Futures-pricing date the FedWatch probabilities were derived from. */
 export function etlFedAsOf(): string | null {
   return etlFedProbabilities[0]?.as_of ?? null;
+}
+
+/** Human-readable derivation note emitted by macro_data_etl for FedWatch rows. */
+export function etlFedSourceDetail(): string | null {
+  return etlFedProbabilities[0]?.source_detail ?? null;
+}
+
+export interface EtlFedModelInputs {
+  method?: string;
+  generated_at?: string;
+  series_as_of?: Record<string, string>;
+  spot_effective_rate?: number;
+  target_low?: number;
+  target_high?: number;
+  short_rate_proxies?: Record<string, number | null>;
+  pass_through?: number;
+  note?: string;
+}
+
+/** Parsed model inputs when FedWatch is derived from the FRED model fallback. */
+export function etlFedModelInputs(): EtlFedModelInputs | null {
+  const raw = etlFedProbabilities[0]?.model_inputs_json;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as EtlFedModelInputs;
+  } catch {
+    return null;
+  }
 }

@@ -8,6 +8,8 @@ import polars as pl
 import pytest
 
 from macro_data_etl.src.analytics.fed_probability import FedProbabilityEngine
+from macro_data_etl.src.connectors.bis import BISConnector
+from macro_data_etl.src.orchestration.pipeline import Pipeline
 from macro_data_etl.src.connectors.world_bank import WorldBankConnector
 from macro_data_etl.src.transform.transformers import Transformer
 from macro_data_etl.src.utils.quality import QualityChecker
@@ -68,6 +70,31 @@ def test_world_bank_handles_null_values():
     wb.close()
 
 
+# --- BIS SDMX CSV parsing ----------------------------------------------------
+
+
+def test_bis_connector_uses_v2_dataflow_route_and_sdmx_csv_accept():
+    bis = BISConnector()
+    assert bis.config.base_url == "https://stats.bis.org/api/v2"
+    assert bis._build_url("M", "US", "2000-01") == (
+        "https://stats.bis.org/api/v2/data/dataflow/BIS/WS_CBPOL/1.0/M.US"
+        "?startPeriod=2000-01"
+    )
+    assert bis._client.headers["accept"] == "application/vnd.sdmx.data+csv;version=1.0.0"
+    bis.close()
+
+
+def test_bis_connector_parses_sdmx_csv_response():
+    csv_text = (
+        "DATAFLOW,FREQ,REF_AREA,TIME_PERIOD,OBS_VALUE,OBS_STATUS\n"
+        "BIS:WS_CBPOL(1.0),M,US,2026-05,3.625,A\n"
+    )
+    df = BISConnector._parse_csv(csv_text)
+    assert df["ref_area"].to_list() == ["US"]
+    assert df["time_period"].to_list() == ["2026-05"]
+    assert df["obs_value"].to_list() == [3.625]
+
+
 # --- Fed probability engine --------------------------------------------------
 
 
@@ -121,6 +148,30 @@ def test_fed_probability_chain():
         total = r.cut_prob + r.hold_prob + r.hike_prob
         assert abs(total - 1.0) < 1e-3
         assert -100 <= r.implied_move_bps <= 100
+
+
+def test_fred_model_futures_curve_uses_snapshot_inputs(monkeypatch):
+    pipe = Pipeline()
+    inputs = {
+        "EFFR": 3.63,
+        "DFEDTARL": 3.50,
+        "DFEDTARU": 3.75,
+        "DGS3MO": 3.85,
+        "DGS6MO": 3.98,
+        "DGS1": 4.04,
+    }
+    dates = {k: "2026-06-22" for k in inputs}
+    monkeypatch.setattr(pipe, "_fred_probability_inputs", lambda: (inputs, dates, "2026-06-24T00:00:00Z"))
+
+    engine = pipe._fed_probability_engine()
+    meetings = [date(2026, 7, 29), date(2026, 9, 16)]
+    prices, meta = pipe._fred_model_futures_curve(engine, meetings)
+
+    assert engine.effective_rate == 3.63
+    assert prices
+    assert all(90 < p < 100 for p in prices.values())
+    assert meta["method"] == "FRED short-rate model"
+    assert meta["pass_through"] == 0.65
 
 
 # --- Quality checks ----------------------------------------------------------

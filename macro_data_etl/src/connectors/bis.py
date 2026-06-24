@@ -10,15 +10,22 @@ from datetime import datetime, timezone
 import httpx
 import polars as pl
 from pydantic import BaseModel
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
+
+
+def _is_retryable_bis_error(exc: BaseException) -> bool:
+    """Retry transient BIS failures, but do not retry permanent 4xx responses."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+    return True
 
 
 class BISConfig(BaseModel):
     """Configuration for BIS SDMX-REST API."""
 
-    base_url: str = "https://data.bis.org/api/v2"
+    base_url: str = "https://stats.bis.org/api/v2"
     dataset: str = "WS_CBPOL"
     rate_limit_delay: float = 0.5
 
@@ -28,8 +35,8 @@ class BISConnector:
 
     Dataset: WS_CBPOL (Central Bank Policy Rates)
     Endpoint:
-        /data/BIS,WS_CBPOL,1.0/{freq}.{ref_area}
-            ?startPeriod={start}&detail=dataonly&format=csv
+        /data/dataflow/BIS/WS_CBPOL/1.0/{freq}.{ref_area}
+            ?startPeriod={start}
 
     The BIS returns CSV with columns like:
         FREQ, REF_AREA, TIME_PERIOD, OBS_VALUE, OBS_STATUS, ...
@@ -42,7 +49,7 @@ class BISConnector:
         self.config = config or BISConfig()
         self._client = httpx.Client(
             timeout=60.0,
-            headers={"Accept": "text/csv"},
+            headers={"Accept": "application/vnd.sdmx.data+csv;version=1.0.0"},
         )
 
     def close(self) -> None:
@@ -61,12 +68,16 @@ class BISConnector:
 
     def _build_url(self, freq: str, ref_area: str, start_period: str) -> str:
         return (
-            f"{self.config.base_url}/data/BIS,{self.config.dataset},1.0"
+            f"{self.config.base_url}/data/dataflow/BIS/{self.config.dataset}/1.0"
             f"/{freq}.{ref_area}"
-            f"?startPeriod={start_period}&detail=dataonly&format=csv"
+            f"?startPeriod={start_period}"
         )
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
+    @retry(
+        retry=retry_if_exception(_is_retryable_bis_error),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=1, max=10),
+    )
     def _fetch_csv(self, url: str) -> str:
         """GET the URL and return raw CSV text. Retries on transient errors."""
         logger.debug("BIS request: %s", url)
@@ -173,9 +184,9 @@ class BISConnector:
         try:
             # BIS SDMX wildcard: omit dimension to get all values
             url = (
-                f"{self.config.base_url}/data/BIS,{self.config.dataset},1.0"
+                f"{self.config.base_url}/data/dataflow/BIS/{self.config.dataset}/1.0"
                 f"/{freq}."
-                f"?startPeriod={start_period}&detail=dataonly&format=csv"
+                f"?startPeriod={start_period}"
             )
             csv_text = self._fetch_csv(url)
             if not csv_text.strip():

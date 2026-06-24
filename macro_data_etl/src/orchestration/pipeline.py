@@ -8,6 +8,7 @@ operations the CLI calls (full run, per-source, backfill, gold rebuild, CME).
 from __future__ import annotations
 
 import json
+import calendar
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -245,19 +246,29 @@ class Pipeline:
                 if label and price is not None:
                     prices[label] = float(price)
 
-        engine = FedProbabilityEngine()
+        engine = self._fed_probability_engine()
         meetings = self._upcoming_meetings()
         engine.set_fomc_calendar(meetings)
 
         prices_source = "cme"
+        source_detail = "CME 30-Day Fed Funds futures settlements"
+        model_inputs: dict[str, object] = {}
         if not prices:
-            # CME blocks non-browser clients; fall back to a deterministic
-            # futures curve so downstream tables stay populated (flagged SIM).
-            prices = self._fallback_futures_curve(engine, meetings)
-            prices_source = "sim"
+            # CME blocks non-browser clients; fall back to a FRED-informed
+            # short-rate model before using the purely deterministic curve.
+            prices, model_inputs = self._fred_model_futures_curve(engine, meetings)
+            prices_source = "fred_model" if prices else "sim"
+            source_detail = (
+                "FRED model: EFFR/FEDFUNDS spot anchor plus DGS3MO, DGS6MO, "
+                "and DGS1 short-rate proxies"
+                if prices_source == "fred_model"
+                else "deterministic fallback futures curve"
+            )
+            if not prices:
+                prices = self._fallback_futures_curve(engine, meetings)
             run.record(
                 "extract", "cme", "warning",
-                details="CME unavailable — using deterministic fallback futures curve",
+                details=f"CME unavailable — using {prices_source}",
             )
 
         results = engine.compute_meeting_probabilities(prices)
@@ -266,7 +277,9 @@ class Pipeline:
         gold_dir.mkdir(parents=True, exist_ok=True)
         if results:
             prob_df = engine.to_dataframe(results).with_columns(
-                pl.lit(prices_source).alias("price_source")
+                pl.lit(prices_source).alias("price_source"),
+                pl.lit(source_detail).alias("source_detail"),
+                pl.lit(json.dumps(model_inputs, sort_keys=True)).alias("model_inputs_json"),
             )
             prob_path = gold_dir / "fed_probabilities.parquet"
             prob_df.write_parquet(prob_path, compression="zstd")
@@ -401,6 +414,121 @@ class Pipeline:
         today = date.today()
         upcoming = [m for m in FOMC_CALENDAR_2025_2026 if m >= today]
         return upcoming or FOMC_CALENDAR_2025_2026[-4:]
+
+    @staticmethod
+    def _latest_snapshot_value(snapshot: dict, series_id: str) -> tuple[float | None, str | None]:
+        series = (snapshot.get("series") or {}).get(series_id) or {}
+        observations = series.get("observations") or []
+        for obs in reversed(observations):
+            value = obs.get("value")
+            if isinstance(value, (int, float)):
+                return float(value), obs.get("date") or series.get("asOf")
+        return None, series.get("asOf")
+
+    def _fred_probability_inputs(self) -> tuple[dict[str, float], dict[str, str], str | None]:
+        """Read committed FRED snapshot inputs used by the FedWatch model fallback."""
+        snapshot_path = _PKG_ROOT.parent / "src" / "data" / "econSnapshot.json"
+        try:
+            with open(snapshot_path) as f:
+                snapshot = json.load(f)
+        except FileNotFoundError:
+            return {}, {}, None
+
+        values: dict[str, float] = {}
+        dates: dict[str, str] = {}
+        for series_id in ("EFFR", "FEDFUNDS", "DFEDTARL", "DFEDTARU", "IORB", "DGS3MO", "DGS6MO", "DGS1"):
+            value, as_of = self._latest_snapshot_value(snapshot, series_id)
+            if value is not None:
+                values[series_id] = value
+            if as_of:
+                dates[series_id] = as_of
+
+        generated_at = snapshot.get("generatedAt")
+        return values, dates, generated_at
+
+    def _fed_probability_engine(self) -> FedProbabilityEngine:
+        """Build the Fed probability engine, anchored to FRED target range when available."""
+        values, _, _ = self._fred_probability_inputs()
+        low = values.get("DFEDTARL", 4.00)
+        high = values.get("DFEDTARU", 4.25)
+        engine = FedProbabilityEngine(low, high)
+        if "EFFR" in values:
+            engine.effective_rate = values["EFFR"]
+        elif "FEDFUNDS" in values:
+            engine.effective_rate = values["FEDFUNDS"]
+        elif "IORB" in values:
+            engine.effective_rate = values["IORB"] - 0.02
+        return engine
+
+    def _fred_model_futures_curve(
+        self, engine: FedProbabilityEngine, meetings: list[date]
+    ) -> tuple[dict[str, float], dict[str, object]]:
+        """Build a FRED-informed synthetic Fed Funds futures curve.
+
+        This is not CME FedWatch. It uses the committed FRED snapshot as a free
+        model fallback: EFFR/FEDFUNDS anchors the spot effective rate, while
+        3M/6M/1Y Treasury rates proxy the short-rate path. The Treasury-rate gap
+        is partially passed through to expected effective fed funds to avoid
+        treating bill/UST liquidity and term premia as one-for-one policy odds.
+        """
+        values, dates, generated_at = self._fred_probability_inputs()
+        spot = values.get("EFFR") or values.get("FEDFUNDS") or engine.effective_rate
+        curve_points = {
+            0.0: spot,
+            3.0: values.get("DGS3MO"),
+            6.0: values.get("DGS6MO"),
+            12.0: values.get("DGS1"),
+        }
+        usable = {m: v for m, v in curve_points.items() if isinstance(v, (int, float))}
+        if len(usable) < 3:
+            return {}, {"reason": "missing FRED spot/short-rate inputs", "available_inputs": sorted(values)}
+
+        def proxy_rate(months_out: float) -> float:
+            pts = sorted(usable.items())
+            if months_out <= pts[0][0]:
+                return pts[0][1]
+            for (m0, r0), (m1, r1) in zip(pts, pts[1:]):
+                if m0 <= months_out <= m1:
+                    w = (months_out - m0) / (m1 - m0)
+                    return r0 + (r1 - r0) * w
+            return pts[-1][1]
+
+        # Pass-through dampens Treasury bill/UST term and liquidity premia.
+        pass_through = 0.65
+        today = date.today()
+        rate_before = spot
+        month_avg_rates: dict[str, float] = {}
+
+        for mtg in sorted(meetings):
+            months_out = max(0.0, (mtg - today).days / 30.4375)
+            proxy = proxy_rate(months_out)
+            rate_after = round(spot + (proxy - spot) * pass_through, 4)
+
+            days_in_month = calendar.monthrange(mtg.year, mtg.month)[1]
+            days_after = days_in_month - mtg.day
+            current_label = mtg.strftime("%b%Y")
+            next_label = engine._next_month_label(mtg)
+            month_avg = (
+                (mtg.day * rate_before + days_after * rate_after) / days_in_month
+                if days_after > 0
+                else rate_after
+            )
+            month_avg_rates[current_label] = month_avg
+            month_avg_rates.setdefault(next_label, rate_after)
+            rate_before = rate_after
+
+        inputs = {
+            "method": "FRED short-rate model",
+            "generated_at": generated_at,
+            "series_as_of": dates,
+            "spot_effective_rate": spot,
+            "target_low": values.get("DFEDTARL"),
+            "target_high": values.get("DFEDTARU"),
+            "short_rate_proxies": {k: values.get(k) for k in ("DGS3MO", "DGS6MO", "DGS1")},
+            "pass_through": pass_through,
+            "note": "Not CME FedWatch; Treasury short-rate proxies are converted into a modeled effective-rate path.",
+        }
+        return {lbl: round(100.0 - rate, 4) for lbl, rate in month_avg_rates.items()}, inputs
 
     @staticmethod
     def _fallback_futures_curve(

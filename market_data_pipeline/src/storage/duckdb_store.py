@@ -25,6 +25,13 @@ class DuckDBStore:
     def init_schema(self) -> None:
         for ddl in DDL.values():
             self.conn.execute(ddl)
+        self._migrate_schema()
+
+    def _migrate_schema(self) -> None:
+        """Apply lightweight additive migrations for existing local DuckDB files."""
+        self.conn.execute(
+            "ALTER TABLE ingestion_manifest ADD COLUMN IF NOT EXISTS latency_ms BIGINT"
+        )
 
     # ------------------------------------------------------------------
     # Writes

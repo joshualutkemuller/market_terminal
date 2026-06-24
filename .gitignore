@@ -12,6 +12,9 @@
 
 # local provider cache
 /data/master/
+/market_data_pipeline/data/export/
+/batchers/.venv*/
+/batchers/.snapshot-backup/
 
 # production
 /build

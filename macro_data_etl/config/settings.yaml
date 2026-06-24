@@ -8,7 +8,7 @@ sources:
     retry_attempts: 3
 
   bis:
-    base_url: "https://data.bis.org/api/v2"
+    base_url: "https://stats.bis.org/api/v2"
     dataset: "WS_CBPOL"
     format: csv
     rate_limit_delay: 0.5
