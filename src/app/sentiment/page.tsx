@@ -98,19 +98,36 @@ export default function SentimentModule() {
   // VIX (the index's volatility component) is live-capable via FRED VIXCLS —
   // fetched through the existing /api/econ/batch path and turned into a
   // greed score (low vol percentile = complacency = greed).
-  const { data: vixData } = useLiveSeriesSet(["VIXCLS"], "lin", 252);
+  const { data: sentFred } = useLiveSeriesSet(["VIXCLS", "BAMLH0A0HYM2", "DGS10", "DGS2"], "lin", 252);
   const live = useMemo<SentLiveInputs>(() => {
     const next: SentLiveInputs = { social: { intel: social, source: socialSource } };
-    const v = vixData["VIXCLS"];
+    const v = sentFred["VIXCLS"];
     if (v && v.source === "FRED" && v.observations.length > 20) {
       const vals = v.observations.map((o) => o.value);
       const latest = vals[vals.length - 1];
-      const pctile = vals.filter((x) => x <= latest).length / vals.length; // 0..1
+      const pctile = vals.filter((x) => x <= latest).length / vals.length;
       const score = Math.round(Math.max(0, Math.min(100, (1 - pctile) * 100)));
       next.vix = { score, detail: `VIX ${latest.toFixed(1)} · ${Math.round(pctile * 100)}th pctile` };
     }
+    const hy = sentFred["BAMLH0A0HYM2"];
+    if (hy && hy.source === "FRED" && hy.observations.length > 20) {
+      const vals = hy.observations.map((o) => o.value);
+      const latest = vals[vals.length - 1];
+      const pctile = vals.filter((x) => x <= latest).length / vals.length;
+      const score = Math.round(Math.max(0, Math.min(100, (1 - pctile) * 100)));
+      next.junkBondDemand = { score, detail: `HY OAS ${(latest * 100).toFixed(0)}bps · ${Math.round(pctile * 100)}th pctile` };
+    }
+    const t10 = sentFred["DGS10"];
+    const t2 = sentFred["DGS2"];
+    if (t10?.source === "FRED" && t2?.source === "FRED" && t10.observations.length > 20 && t2.observations.length > 20) {
+      const spread10 = t10.observations[t10.observations.length - 1].value;
+      const spread2 = t2.observations[t2.observations.length - 1].value;
+      const curve = spread10 - spread2;
+      const score = Math.round(Math.max(0, Math.min(100, ((curve + 1) / 3) * 100)));
+      next.safeHaven = { score, detail: `2s10s ${(curve * 100).toFixed(0)}bps` };
+    }
     return next;
-  }, [vixData, social, socialSource]);
+  }, [sentFred, social, socialSource]);
   const vixLive = !!live.vix;
 
   const idx = useMemo(() => getSentimentIndex(live), [live]);

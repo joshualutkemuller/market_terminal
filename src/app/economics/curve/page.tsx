@@ -22,7 +22,9 @@ import {
 import { getTermFundingCarry, type TermFundingCarry } from "@/data/econEnhancements";
 import {
   computeButterflies,
+  computeButterfliesFromHistory,
   computeSpreadZScores,
+  computeSpreadZFromHistory,
   computeCarryRoll,
   computeRealBreakeven,
   classifyCurveMove,
@@ -454,8 +456,9 @@ export default function TreasuryCurveLab() {
 
         {/* ── Rates Relative Value ─────────────────────────────────────── */}
         {(() => {
-          const butterflies = computeButterflies(today);
-          const spreadZs = computeSpreadZScores(today);
+          const histSnaps = source === "FRED" ? snapshots.filter((s) => s.id !== "now") : [];
+          const butterflies = histSnaps.length >= 20 ? computeButterfliesFromHistory(today, histSnaps) : computeButterflies(today);
+          const spreadZs = histSnaps.length >= 20 ? computeSpreadZFromHistory(today, histSnaps) : computeSpreadZScores(today);
           const carryRoll = computeCarryRoll(today);
           const realBe = computeRealBreakeven();
           const priorSnap = snapshots.find((s) => s.id === "1m") ?? snapshots[1];

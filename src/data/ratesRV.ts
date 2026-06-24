@@ -60,6 +60,79 @@ export function computeButterflies(snap: CurveSnapshot): ButterflySpread[] {
   });
 }
 
+export function computeButterfliesFromHistory(snap: CurveSnapshot, history: CurveSnapshot[]): ButterflySpread[] {
+  if (history.length < 20) return computeButterflies(snap);
+
+  const defs: { id: string; label: string; wing1: string; belly: string; wing2: string }[] = [
+    { id: "2s5s10s", label: "2s5s10s", wing1: "2Y", belly: "5Y", wing2: "10Y" },
+    { id: "3m2y10y", label: "3m·2y·10y", wing1: "3M", belly: "2Y", wing2: "10Y" },
+    { id: "5s10s30s", label: "5s10s30s", wing1: "5Y", belly: "10Y", wing2: "30Y" },
+  ];
+
+  return defs.map((d) => {
+    const flyVal = (s: CurveSnapshot) => 2 * yieldAt(s, d.belly) * 100 - yieldAt(s, d.wing1) * 100 - yieldAt(s, d.wing2) * 100;
+    const current = flyVal(snap);
+    const hist = history.map(flyVal);
+    const mean = hist.reduce((a, v) => a + v, 0) / hist.length;
+    const std = Math.sqrt(hist.reduce((a, v) => a + (v - mean) ** 2, 0) / hist.length) || 1;
+    const z = (current - mean) / std;
+    const pctile = Math.round((hist.filter((v) => v <= current).length / hist.length) * 100);
+    const recent = hist.slice(-20);
+    recent.push(current);
+
+    return {
+      id: d.id,
+      label: d.label,
+      wings: `${d.wing1} / ${d.wing2}`,
+      belly: d.belly,
+      valueBps: Math.round(current * 10) / 10,
+      zScore: Math.round(z * 100) / 100,
+      percentile: Math.max(1, Math.min(99, pctile)),
+      signal: pctile >= 70 ? "Rich" : pctile <= 30 ? "Cheap" : "Fair",
+      hist20d: recent,
+    };
+  });
+}
+
+export function computeSpreadZFromHistory(snap: CurveSnapshot, history: CurveSnapshot[]): SpreadZRow[] {
+  if (history.length < 20) return computeSpreadZScores(snap);
+
+  const pairs: { id: string; label: string; t1: string; t2: string }[] = [
+    { id: "2s10s", label: "2s10s", t1: "2Y", t2: "10Y" },
+    { id: "2s5s", label: "2s5s", t1: "2Y", t2: "5Y" },
+    { id: "5s10s", label: "5s10s", t1: "5Y", t2: "10Y" },
+    { id: "5s30s", label: "5s30s", t1: "5Y", t2: "30Y" },
+    { id: "10s30s", label: "10s30s", t1: "10Y", t2: "30Y" },
+    { id: "3m10y", label: "3m10y", t1: "3M", t2: "10Y" },
+  ];
+
+  return pairs.map((p) => {
+    const spreadOf = (s: CurveSnapshot) => (yieldAt(s, p.t2) - yieldAt(s, p.t1)) * 100;
+    const current = spreadOf(snap);
+    const all = history.map(spreadOf);
+    const last3m = all.slice(-63);
+
+    const mean1y = all.reduce((a, v) => a + v, 0) / all.length;
+    const std1y = Math.sqrt(all.reduce((a, v) => a + (v - mean1y) ** 2, 0) / all.length) || 1;
+    const mean3m = last3m.reduce((a, v) => a + v, 0) / last3m.length;
+    const std3m = Math.sqrt(last3m.reduce((a, v) => a + (v - mean3m) ** 2, 0) / last3m.length) || 1;
+
+    const z1 = (current - mean1y) / std1y;
+    const z3 = (current - mean3m) / std3m;
+    const pctile = Math.round((all.filter((v) => v <= current).length / all.length) * 100);
+
+    return {
+      id: p.id,
+      label: p.label,
+      valueBps: Math.round(current * 10) / 10,
+      zScore3m: Math.round(z3 * 100) / 100,
+      zScore1y: Math.round(z1 * 100) / 100,
+      percentile1y: Math.max(1, Math.min(99, pctile)),
+      trend: z3 > 0.4 ? "Widening" : z3 < -0.4 ? "Tightening" : "Stable",
+    };
+  });
+}
+
 // ── Spread Z-Scores & Percentiles ───────────────────────────────────────────
 
 export interface SpreadZRow {
