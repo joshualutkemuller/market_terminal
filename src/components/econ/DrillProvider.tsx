@@ -14,6 +14,8 @@ export interface DrillTarget {
   units?: string; // FRED units transform (pc1/pch/chg/lin)
   unitLabel?: string; // display suffix, e.g. "% YoY"
   decimals?: number;
+  /** When true, fetch raw levels and derive MoM/YoY plus month-over-month deltas. */
+  growthMetrics?: boolean;
 }
 
 interface DrillCtx {
@@ -50,13 +52,15 @@ export function DrillProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!target) return;
     let alive = true;
-    const u = target.units ? `&units=${target.units}` : "";
-    fetch(`/api/econ/series?id=${encodeURIComponent(target.id)}&n=24${u}`)
+    const units = target.growthMetrics ? "lin" : target.units;
+    const n = target.growthMetrics ? 37 : 24;
+    const u = units ? `&units=${units}` : "";
+    fetch(`/api/econ/series?id=${encodeURIComponent(target.id)}&n=${n}${u}`)
       .then((r) => r.json())
       .then((j) => {
         if (!alive) return;
         setObs(j.observations ?? []);
-        setSource(j.source === "FRED" ? "FRED" : "SIM");
+        setSource(j.source === "FRED" ? "FRED" : j.source === "SNAPSHOT" ? "SNAPSHOT" : "SIM");
       })
       .catch(() => alive && setSource("SIM"));
     return () => {
@@ -69,6 +73,18 @@ export function DrillProvider({ children }: { children: ReactNode }) {
   const latest = values[values.length - 1];
   const prior = values[values.length - 2];
   const first = values[0];
+  const pctChange = (a: number | undefined, b: number | undefined): number | null =>
+    a != null && b != null && b !== 0 ? ((a - b) / Math.abs(b)) * 100 : null;
+  const metricRows = obs.map((o, i) => {
+    const mom = pctChange(o.value, obs[i - 1]?.value);
+    const yoy = pctChange(o.value, obs[i - 12]?.value);
+    const prevMom = i > 0 ? pctChange(obs[i - 1]?.value, obs[i - 2]?.value) : null;
+    const prevYoy = i > 0 ? pctChange(obs[i - 1]?.value, obs[i - 13]?.value) : null;
+    return { ...o, mom, yoy, momDelta: mom != null && prevMom != null ? mom - prevMom : null, yoyDelta: yoy != null && prevYoy != null ? yoy - prevYoy : null };
+  });
+  const latestMetrics = metricRows[metricRows.length - 1];
+  const visibleRows = target?.growthMetrics ? metricRows.slice(-24) : metricRows;
+  const chartValues = visibleRows.map((o) => o.value);
 
   return (
     <Ctx.Provider value={{ open }}>
@@ -93,15 +109,24 @@ export function DrillProvider({ children }: { children: ReactNode }) {
 
             <div className="grid grid-cols-3 divide-x divide-term-border border-b border-term-border">
               <Cell label="Latest" value={latest != null ? fmtNum(latest, dp) : "—"} sub={obs[obs.length - 1]?.date} />
-              <Cell label="Δ vs Prior" value={latest != null && prior != null ? fmtSigned(latest - prior, dp) : "—"} tone={latest != null && prior != null ? latest - prior : 0} />
-              <Cell label="Δ 24m" value={latest != null && first != null ? fmtSigned(latest - first, dp) : "—"} tone={latest != null && first != null ? latest - first : 0} />
+              {target.growthMetrics ? (
+                <>
+                  <Cell label="MoM / Δ" value={latestMetrics?.mom != null ? `${fmtSigned(latestMetrics.mom, 2)}%` : "—"} sub={latestMetrics?.momDelta != null ? `${fmtSigned(latestMetrics.momDelta, 2)} pp` : undefined} tone={latestMetrics?.mom ?? 0} />
+                  <Cell label="YoY / Δ" value={latestMetrics?.yoy != null ? `${fmtSigned(latestMetrics.yoy, 2)}%` : "—"} sub={latestMetrics?.yoyDelta != null ? `${fmtSigned(latestMetrics.yoyDelta, 2)} pp` : undefined} tone={latestMetrics?.yoy ?? 0} />
+                </>
+              ) : (
+                <>
+                  <Cell label="Δ vs Prior" value={latest != null && prior != null ? fmtSigned(latest - prior, dp) : "—"} tone={latest != null && prior != null ? latest - prior : 0} />
+                  <Cell label="Δ 24m" value={latest != null && first != null ? fmtSigned(latest - first, dp) : "—"} tone={latest != null && first != null ? latest - first : 0} />
+                </>
+              )}
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
               <div className="border-b border-term-border p-2">
                 <div className="mb-1 text-2xs uppercase tracking-wider text-term-text-mute">Rolling 24 months</div>
-                {values.length > 1 ? (
-                  <LineChart height={170} series={[{ name: target.label, data: values, color: "#FF8C00", area: true }]} labels={obs.map((o) => o.date.slice(2, 7))} yFmt={(n) => fmtNum(n, dp)} />
+                {chartValues.length > 1 ? (
+                  <LineChart height={170} series={[{ name: target.label, data: chartValues, color: "#FF8C00", area: true }]} labels={visibleRows.map((o) => o.date.slice(2, 7))} yFmt={(n) => fmtNum(n, dp)} />
                 ) : (
                   <div className="py-8 text-center text-2xs text-term-text-mute">{source === "LOADING" ? "Loading…" : "No data"}</div>
                 )}
@@ -110,19 +135,35 @@ export function DrillProvider({ children }: { children: ReactNode }) {
                 <thead className="sticky top-0 bg-term-panel-2">
                   <tr>
                     <th className="border-b border-term-border px-3 py-1 text-left text-2xs uppercase text-term-text-mute">Date</th>
-                    <th className="border-b border-term-border px-3 py-1 text-right text-2xs uppercase text-term-text-mute">Value{target.unitLabel ? ` (${target.unitLabel})` : ""}</th>
+                    <th className="border-b border-term-border px-3 py-1 text-right text-2xs uppercase text-term-text-mute">Value{target.growthMetrics ? " (level)" : target.unitLabel ? ` (${target.unitLabel})` : ""}</th>
+                    {target.growthMetrics ? (<>
+                      <th className="border-b border-term-border px-3 py-1 text-right text-2xs uppercase text-term-text-mute">MoM %</th>
+                      <th className="border-b border-term-border px-3 py-1 text-right text-2xs uppercase text-term-text-mute">ΔMoM</th>
+                      <th className="border-b border-term-border px-3 py-1 text-right text-2xs uppercase text-term-text-mute">YoY %</th>
+                      <th className="border-b border-term-border px-3 py-1 text-right text-2xs uppercase text-term-text-mute">ΔYoY</th>
+                    </>) : (
                     <th className="border-b border-term-border px-3 py-1 text-right text-2xs uppercase text-term-text-mute">Δ m/m</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {[...obs].reverse().map((o, i, arr) => {
+                  {[...visibleRows].reverse().map((o, i, arr) => {
                     const prev = arr[i + 1];
                     const d = prev ? o.value - prev.value : 0;
                     return (
                       <tr key={o.date} className="border-b border-term-border-soft hover:bg-term-panel-2">
                         <td className="px-3 py-1 text-left text-xs text-term-text-dim">{o.date}</td>
                         <td className="px-3 py-1 text-right text-xs text-term-text">{fmtNum(o.value, dp)}</td>
-                        <td className={`px-3 py-1 text-right text-xs ${prev ? pnlClass(d) : "text-term-text-mute"}`}>{prev ? fmtSigned(d, dp) : "—"}</td>
+                        {target.growthMetrics ? (
+                          <>
+                            <MetricCell value={o.mom} suffix="%" />
+                            <MetricCell value={o.momDelta} suffix=" pp" />
+                            <MetricCell value={o.yoy} suffix="%" />
+                            <MetricCell value={o.yoyDelta} suffix=" pp" />
+                          </>
+                        ) : (
+                          <td className={`px-3 py-1 text-right text-xs ${prev ? pnlClass(d) : "text-term-text-mute"}`}>{prev ? fmtSigned(d, dp) : "—"}</td>
+                        )}
                       </tr>
                     );
                   })}
@@ -130,7 +171,7 @@ export function DrillProvider({ children }: { children: ReactNode }) {
               </table>
             </div>
             <footer className="border-t border-term-border px-3 py-1.5 text-3xs text-term-text-mute">
-              {source === "FRED" ? "Live observations from FRED · api.stlouisfed.org" : "Deterministic simulation — set FRED_API_KEY for live data"} · press ESC to close
+              {source === "FRED" ? "Live observations from FRED · api.stlouisfed.org" : source === "SNAPSHOT" ? "Committed economic snapshot" : "Deterministic simulation — set FRED_API_KEY for live data"} · press ESC to close
             </footer>
           </>
         )}
@@ -147,5 +188,14 @@ function Cell({ label, value, sub, tone }: { label: string; value: string; sub?:
       <div className={`tnum text-base font-semibold ${toneClass}`}>{value}</div>
       {sub && <div className="text-3xs text-term-text-mute">{sub}</div>}
     </div>
+  );
+}
+
+
+function MetricCell({ value, suffix }: { value: number | null; suffix: string }) {
+  return (
+    <td className={`px-3 py-1 text-right text-xs ${value == null ? "text-term-text-mute" : pnlClass(value)}`}>
+      {value == null ? "—" : `${fmtSigned(value, 2)}${suffix}`}
+    </td>
   );
 }

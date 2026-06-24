@@ -12,6 +12,7 @@
 
 # production
 /build
+/.next/
 
 # misc
 .DS_Store
@@ -31,6 +32,7 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+next-env.d.ts
 
 # python backend
 backend/__pycache__/

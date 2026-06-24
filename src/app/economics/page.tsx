@@ -16,6 +16,7 @@ import {
   ECON_CATEGORY_LABEL,
   type IndicatorRow,
   type EconCategory,
+  type FredSeries,
 } from "@/data/econSeries";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
 import { econChartHref } from "@/components/charting/ChartLink";
@@ -61,6 +62,16 @@ const SELECTOR_LABEL: Record<string, string> = {
   FEDFUNDS: "EFFR",
 };
 
+
+/** Drill extra growth diagnostics where a raw level can produce meaningful MoM/YoY rates. */
+function hasGrowthDrill(r: IndicatorRow): boolean {
+  const meta = seriesById(r.id) as FredSeries | undefined;
+  if (!meta || meta.freq !== "M") return false;
+  const resolved = resolveFred(r.id);
+  if (resolved.simOnly || resolved.units === "lin") return false;
+  return r.category === "INFLATION" || r.unit.includes("y/y") || r.unit.includes("m/m");
+}
+
 const CATEGORY_ORDER: EconCategory[] = [
   "GROWTH",
   "INFLATION",
@@ -99,8 +110,17 @@ export default function MacroDashboard() {
   const byId = (id: string): IndicatorRow | undefined => indicators.find((i) => i.id === id);
 
   /** Open the 24-month drill-down for an indicator row. */
-  const drill = (r: IndicatorRow) =>
-    open({ id: r.id, label: r.label, units: resolveFred(r.id).units, unitLabel: r.unit, decimals: r.decimals });
+  const drill = (r: IndicatorRow) => {
+    const growthMetrics = hasGrowthDrill(r);
+    open({
+      id: r.id,
+      label: r.label,
+      units: resolveFred(r.id).units,
+      unitLabel: growthMetrics ? "level · derived MoM/YoY" : r.unit,
+      decimals: growthMetrics ? 2 : r.decimals,
+      growthMetrics,
+    });
+  };
 
   // Latest data date across all live indicators (the dashboard's "as of").
   const dashAsOf =
