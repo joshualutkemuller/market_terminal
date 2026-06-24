@@ -56,6 +56,44 @@ body {
 }
 
 @layer components {
+  .analytics-scroll,
+  .analytics-strip,
+  .analytics-widget-body {
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .analytics-widget {
+    min-width: 0;
+    min-height: 0;
+    contain: layout paint;
+  }
+  .analytics-widget-resizable {
+    resize: both;
+    overflow: auto;
+    min-width: min(100%, 18rem);
+    min-height: 8rem;
+    max-width: 100%;
+  }
+  .analytics-widget-canvas {
+    min-width: min(100%, 32rem);
+  }
+  .analytics-widget-body > .analytics-widget-canvas > svg,
+  .analytics-widget-body > .analytics-widget-canvas > div > svg {
+    display: block;
+  }
+  .analytics-widget-body table {
+    width: max-content;
+    min-width: 100%;
+  }
+  .analytics-widget-body [class*="grid-cols-["] {
+    width: max-content;
+    min-width: 100%;
+  }
+  @supports not (resize: both) {
+    .analytics-widget-resizable {
+      resize: none;
+    }
+  }
   .term-panel {
     @apply bg-term-panel border border-term-border;
   }

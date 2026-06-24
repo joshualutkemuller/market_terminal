@@ -11,6 +11,8 @@ import polars as pl
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from macro_data_etl.src.connectors.http import FallbackHTTPClient
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,7 +39,7 @@ class WorldBankConnector:
 
     def __init__(self, config: WorldBankConfig | None = None) -> None:
         self.config = config or WorldBankConfig()
-        self._client = httpx.Client(
+        self._client = FallbackHTTPClient(
             timeout=30.0,
             headers={"Accept": "application/json"},
         )

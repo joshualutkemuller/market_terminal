@@ -39,7 +39,7 @@ export function LineChart({ series, height = 200, labels, yFmt, grid = true, cla
   const lines = Array.from({ length: yticks + 1 }, (_, i) => min + (range * i) / yticks);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className={className} preserveAspectRatio="none" style={{ width: "100%", height }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className={className} preserveAspectRatio="none" style={{ width: "100%", minWidth: 420, height }}>
       {grid &&
         lines.map((v, i) => (
           <g key={i}>

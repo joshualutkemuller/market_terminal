@@ -48,9 +48,14 @@ export function DataGrid<T>({ columns, rows, rowKey, dense = true, maxHeight, on
     setSort((s) => (s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" }));
   };
 
+  const minWidth = Math.max(520, columns.reduce((sum, col) => {
+    const parsed = col.width ? Number.parseInt(col.width, 10) : NaN;
+    return sum + (Number.isFinite(parsed) ? parsed : 112);
+  }, 0));
+
   return (
-    <div className="min-h-0 overflow-auto" style={{ maxHeight }}>
-      <table className="w-full border-collapse">
+    <div className="analytics-scroll min-h-0 overflow-auto" style={{ maxHeight }}>
+      <table className="w-full border-collapse" style={{ minWidth }}>
         <thead className="sticky top-0 z-10">
           <tr className="bg-term-panel-2">
             {columns.map((c) => (

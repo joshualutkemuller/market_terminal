@@ -10,23 +10,33 @@ interface PanelProps {
   bodyClassName?: string;
   scroll?: boolean;
   accent?: boolean;
+  resizable?: boolean;
 }
 
 /** The standard bordered terminal panel with a title strip. */
-export function Panel({ title, code, right, children, className, bodyClassName, scroll, accent }: PanelProps) {
+export function Panel({ title, code, right, children, className, bodyClassName, scroll, accent, resizable = true }: PanelProps) {
   return (
-    <section className={clsx("flex min-h-0 flex-col border bg-term-panel", accent ? "border-term-amber/40" : "border-term-border", className)}>
+    <section
+      className={clsx(
+        "analytics-widget flex min-h-0 min-w-0 flex-col border bg-term-panel",
+        resizable && "analytics-widget-resizable",
+        accent ? "border-term-amber/40" : "border-term-border",
+        className
+      )}
+    >
       {title && (
         <header className="term-panel-head shrink-0">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             {accent && <span className="h-2 w-2 rounded-full bg-term-amber shadow-[0_0_6px_#FF8C00]" />}
-            <span className="text-term-text-dim">{title}</span>
-            {code && <span className="text-3xs text-term-text-mute">{code}</span>}
+            <span className="truncate text-term-text-dim" title={title}>{title}</span>
+            {code && <span className="shrink-0 text-3xs text-term-text-mute">{code}</span>}
           </div>
-          {right}
+          {right && <div className="ml-2 flex shrink-0 items-center gap-1">{right}</div>}
         </header>
       )}
-      <div className={clsx("min-h-0 flex-1", scroll && "overflow-auto", bodyClassName)}>{children}</div>
+      <div className={clsx("analytics-widget-body min-h-0 min-w-0 flex-1", scroll && "overflow-auto", bodyClassName)}>
+        <div className="analytics-widget-canvas">{children}</div>
+      </div>
     </section>
   );
 }
@@ -47,10 +57,10 @@ export function Stat({
   const toneClass =
     tone === "up" ? "text-term-up" : tone === "down" ? "text-term-down" : tone === "amber" ? "text-term-amber" : "text-term-text";
   return (
-    <div className={clsx("flex flex-col gap-0.5 px-3 py-2", className)}>
-      <div className="term-label">{label}</div>
-      <div className={clsx("tnum text-lg font-semibold leading-none", toneClass)}>{value}</div>
-      {sub != null && <div className="tnum text-2xs text-term-text-dim">{sub}</div>}
+    <div className={clsx("flex min-w-[10rem] flex-col gap-0.5 px-3 py-2", className)}>
+      <div className="term-label truncate" title={label}>{label}</div>
+      <div className={clsx("tnum truncate text-lg font-semibold leading-none", toneClass)} title={typeof value === "string" ? value : undefined}>{value}</div>
+      {sub != null && <div className="tnum truncate text-2xs text-term-text-dim">{sub}</div>}
     </div>
   );
 }

@@ -29,7 +29,14 @@ async function main(): Promise<void> {
   }
   await ensureProxy();
 
-  const series: Record<string, { asOf: string; observations: { date: string; value: number }[] }> = {};
+  const series: Record<
+    string,
+    {
+      asOf: string;
+      observations: { date: string; value: number }[];
+      rawObservations?: { date: string; value: number }[];
+    }
+  > = {};
   let written = 0;
   let skipped = 0;
   let failed = 0;
@@ -44,7 +51,15 @@ async function main(): Promise<void> {
       const obs = await fredSeries(s.id, { limit: LIMIT, units: r.units, scale: r.scale });
       const clean = obs.filter((o) => o.value != null) as { date: string; value: number }[];
       if (clean.length) {
-        series[s.id] = { asOf: clean[clean.length - 1].date, observations: clean };
+        const rawObs = r.units !== "lin"
+          ? await fredSeries(s.id, { limit: LIMIT, units: "lin", scale: r.scale })
+          : [];
+        const rawClean = rawObs.filter((o) => o.value != null) as { date: string; value: number }[];
+        series[s.id] = {
+          asOf: clean[clean.length - 1].date,
+          observations: clean,
+          ...(rawClean.length ? { rawObservations: rawClean } : {}),
+        };
         written++;
       } else {
         failed++;
@@ -53,6 +68,11 @@ async function main(): Promise<void> {
       console.warn(`  skip ${s.id}: ${(err as Error).message}`);
       failed++;
     }
+  }
+
+  if (written === 0) {
+    console.error("FRED snapshot refresh fetched 0 series; keeping existing econSnapshot.json unchanged.");
+    process.exit(1);
   }
 
   const payload = { generatedAt: new Date().toISOString(), series };

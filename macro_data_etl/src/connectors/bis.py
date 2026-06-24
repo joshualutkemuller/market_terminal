@@ -12,6 +12,8 @@ import polars as pl
 from pydantic import BaseModel
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
+from macro_data_etl.src.connectors.http import FallbackHTTPClient
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,7 +49,7 @@ class BISConnector:
 
     def __init__(self, config: BISConfig | None = None) -> None:
         self.config = config or BISConfig()
-        self._client = httpx.Client(
+        self._client = FallbackHTTPClient(
             timeout=60.0,
             headers={"Accept": "application/vnd.sdmx.data+csv;version=1.0.0"},
         )

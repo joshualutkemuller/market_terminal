@@ -19,7 +19,7 @@ export function BarChart({ data, height = 200, horizontal, fmt, className }: Bar
 
   if (horizontal) {
     return (
-      <div className={className}>
+      <div className={className} style={{ minWidth: 360 }}>
         {data.map((d, i) => (
           <div key={i} className="flex items-center gap-2 py-[3px]">
             <div className="w-20 shrink-0 truncate text-2xs text-term-text-dim" title={d.label}>
@@ -45,7 +45,7 @@ export function BarChart({ data, height = 200, horizontal, fmt, className }: Bar
   const bw = (W / data.length) * 0.66;
   const gap = (W / data.length) * 0.34;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className={className} preserveAspectRatio="none" style={{ width: "100%", height }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className={className} preserveAspectRatio="none" style={{ width: "100%", minWidth: 360, height }}>
       {data.map((d, i) => {
         const h = (Math.abs(d.value) / max) * (H - padT - padB);
         const x = i * (bw + gap) + gap / 2;

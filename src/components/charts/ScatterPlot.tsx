@@ -26,7 +26,7 @@ export function ScatterPlot({ points, height = 260, className, xLabel, yLabel, f
   const y = (v: number) => padT + (1 - (v - minY) / (maxY - minY || 1)) * (H - padT - padB);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className={className} preserveAspectRatio="none" style={{ width: "100%", height }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className={className} preserveAspectRatio="none" style={{ width: "100%", minWidth: 420, height }}>
       {Array.from({ length: 5 }, (_, i) => minY + ((maxY - minY) * i) / 4).map((v, i) => (
         <g key={i}>
           <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#1A1A1D" strokeWidth={1} />

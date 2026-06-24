@@ -8,6 +8,7 @@
  *
  * Get a free key: https://fred.stlouisfed.org/docs/api/api_key.html
  */
+import { fetchWithProxyFallback } from "@/lib/server/fetchProxy";
 
 // Override with FRED_BASE_URL to point at a mirror/proxy endpoint; defaults to
 // the public FRED API. FRED rejects plain HTTP, so upgrade the official host even
@@ -66,7 +67,7 @@ export async function fredProbe(): Promise<{ keyPresent: boolean; ok: boolean; d
   let result: { keyPresent: boolean; ok: boolean; detail: string };
   try {
     const url = `${BASE}/series/observations?series_id=DGS10&api_key=${encodeURIComponent(key)}&file_type=json&sort_order=desc&limit=1`;
-    const res = await fetch(url, { headers: FRED_HEADERS, signal: AbortSignal.timeout(6000) });
+    const res = await fetchWithProxyFallback(url, { headers: FRED_HEADERS, signal: AbortSignal.timeout(6000) });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       result = { keyPresent: true, ok: false, detail: `FRED HTTP ${res.status} (key ${masked}): ${body.slice(0, 160)}` };
@@ -101,7 +102,7 @@ async function fredGet<T>(path: string, params: Record<string, string>, revalida
 
   let res: Response;
   try {
-    res = await fetch(url, { headers: FRED_HEADERS });
+    res = await fetchWithProxyFallback(url, { headers: FRED_HEADERS });
   } catch (err) {
     // Network-level failure (blocked egress, DNS, proxy, TLS). The econ routes
     // swallow this and fall back to SIM, so log it loudly here — it shows up in
@@ -181,7 +182,7 @@ async function fredGraphSeries(
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.at < cached.ttlMs) return cached.data as FredObservation[];
 
-  const res = await fetch(url, { headers: FRED_HEADERS });
+  const res = await fetchWithProxyFallback(url, { headers: FRED_HEADERS });
   if (!res.ok) {
     const body = await res.text().catch(() => res.statusText);
     throw new FredHttpError(`FRED CSV ${res.status}: ${body}`, res.status, body);

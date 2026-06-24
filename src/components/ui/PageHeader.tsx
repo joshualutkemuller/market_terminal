@@ -7,13 +7,13 @@ import { Tag } from "./Panel";
 export function PageHeader({ code, title, desc, right, asOf }: { code: string; title: string; desc?: string; right?: ReactNode; asOf?: string | null }) {
   const tick = useTick(3000);
   return (
-    <div className="flex items-center justify-between border-b border-term-border bg-term-panel px-3 py-2">
-      <div className="flex items-baseline gap-2.5">
-        <span className="font-mono text-base font-bold tracking-tight text-term-amber">{code}</span>
-        <h1 className="text-sm font-semibold text-term-text">{title}</h1>
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-term-border bg-term-panel px-3 py-2">
+      <div className="flex min-w-0 items-baseline gap-2.5">
+        <span className="shrink-0 font-mono text-base font-bold tracking-tight text-term-amber">{code}</span>
+        <h1 className="truncate text-sm font-semibold text-term-text">{title}</h1>
         {desc && <span className="hidden text-2xs text-term-text-mute md:inline">{desc}</span>}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
         {asOf && (
           <span
             className="tnum rounded-sm border border-term-border bg-term-panel-2 px-1.5 py-px text-3xs font-semibold uppercase tracking-wide text-term-text-dim"
@@ -37,5 +37,11 @@ export function PageHeader({ code, title, desc, right, asOf }: { code: string; t
 
 /** A row of compact KPI stats used at the top of most modules. */
 export function KpiStrip({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 divide-x divide-term-border border-b border-term-border bg-term-panel sm:grid-cols-3 lg:grid-cols-6">{children}</div>;
+  return (
+    <div className="analytics-strip border-b border-term-border bg-term-panel">
+      <div className="grid min-w-max auto-cols-[minmax(10rem,1fr)] grid-flow-col divide-x divide-term-border lg:grid-flow-row lg:grid-cols-6">
+        {children}
+      </div>
+    </div>
+  );
 }

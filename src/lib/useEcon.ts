@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { fetchJson, peekFresh } from "@/lib/fetchCache";
 import { getSeriesHistory, type Observation } from "@/data/econSeries";
-import { getSnapshotObservations } from "@/data/econSnapshot";
+import { getSnapshotObservations, getSnapshotRawObservations } from "@/data/econSnapshot";
 import {
   getCurrentCurve,
   getCurveSnapshots,
@@ -132,13 +132,17 @@ export interface LiveIndicator {
   value: number;
   prior: number;
   change: number;
+  changePct: number | null;
   mom: number | null;
+  momDelta: number | null;
   qoq: number | null;
+  qoqDelta: number | null;
   yoy: number | null;
+  yoyDelta: number | null;
   monthlyPrint: number | null;
   asOf: string;
   history: number[];
-  source: "FRED" | "SIM";
+  source: "FRED" | "SNAPSHOT" | "SIM";
 }
 
 /** All indicators with live current value + 24m history, keyed by series id. */
@@ -174,7 +178,7 @@ export function useLiveSeriesSet(
   const seeded = Object.fromEntries(
     ids
       .map((id) => {
-        const obs = getSnapshotObservations(id, n);
+        const obs = units === "lin" ? getSnapshotRawObservations(id, n) ?? getSnapshotObservations(id, n) : getSnapshotObservations(id, n);
         return obs ? ([id, { observations: obs, source: "SNAPSHOT" as const }] as const) : null;
       })
       .filter((e): e is NonNullable<typeof e> => e !== null)

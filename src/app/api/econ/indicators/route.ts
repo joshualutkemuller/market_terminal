@@ -1,7 +1,7 @@
 import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { FRED_CATALOG, getSeriesHistory, resolveFred, type FredSeries } from "@/data/econSeries";
-import { getSnapshotObservations } from "@/data/econSnapshot";
+import { getSnapshotObservations, getSnapshotRawObservations } from "@/data/econSnapshot";
 
 type EconSource = "FRED" | "SNAPSHOT" | "SIM";
 
@@ -10,9 +10,13 @@ export interface LiveIndicator {
   value: number;
   prior: number;
   change: number;
+  changePct: number | null;
   mom: number | null;
+  momDelta: number | null;
   qoq: number | null;
+  qoqDelta: number | null;
   yoy: number | null;
+  yoyDelta: number | null;
   monthlyPrint: number | null;
   asOf: string;
   history: number[];
@@ -35,11 +39,15 @@ function buildPoint(
   const value = values[values.length - 1] ?? s.level;
   const prior = values[values.length - 2] ?? value;
   const rawValue = rawValues[rawValues.length - 1];
-  const mom = s.freq === "M" || s.freq === "Q" ? pct(rawValue, rawValues[rawValues.length - 2], 2) : null;
-  const qoq = s.freq === "M" ? pct(rawValue, rawValues[rawValues.length - 4], 2) : s.freq === "Q" ? pct(rawValue, rawValues[rawValues.length - 2], 2) : null;
+  const priorRaw = rawValues[rawValues.length - 2];
+  const qoqRaw = s.freq === "M" ? rawValues[rawValues.length - 4] : s.freq === "Q" ? priorRaw : undefined;
+  const yoyRaw = s.freq === "M" ? rawValues[rawValues.length - 13] : s.freq === "Q" ? rawValues[rawValues.length - 5] : undefined;
+  const canDerivePeriodRates = rawHist != null || (!s.unit.includes("y/y") && !s.unit.includes("m/m"));
+  const mom = canDerivePeriodRates && (s.freq === "M" || s.freq === "Q") ? pct(rawValue, priorRaw, 2) : null;
+  const qoq = canDerivePeriodRates ? s.freq === "M" ? pct(rawValue, qoqRaw, 2) : s.freq === "Q" ? pct(rawValue, qoqRaw, 2) : null : null;
   // For YoY-transformed indicators the displayed value is the YoY reading; for
   // level indicators we derive YoY from raw levels when enough history exists.
-  const yoy = s.unit.includes("y/y")
+  const yoy = s.unit.includes("y/y") && !rawHist
     ? Number(value.toFixed(s.decimals))
     : s.freq === "M" && rawValues.length >= 13
     ? pct(rawValue, rawValues[rawValues.length - 13], 1)
@@ -51,9 +59,13 @@ function buildPoint(
     value: Number(value.toFixed(s.decimals)),
     prior: Number(prior.toFixed(s.decimals)),
     change: Number((value - prior).toFixed(s.decimals)),
+    changePct: pct(value, prior, 2),
     mom,
+    momDelta: rawValue != null && priorRaw != null ? Number((rawValue - priorRaw).toFixed(s.decimals)) : null,
     qoq,
+    qoqDelta: rawValue != null && qoqRaw != null ? Number((rawValue - qoqRaw).toFixed(s.decimals)) : null,
     yoy,
+    yoyDelta: rawValue != null && yoyRaw != null ? Number((rawValue - yoyRaw).toFixed(s.decimals)) : null,
     monthlyPrint: s.category === "INFLATION" && (s.freq === "M" || s.freq === "Q") ? mom : null,
     asOf: hist[hist.length - 1]?.date ?? "",
     history: values.map((v) => Number(v.toFixed(s.decimals))),
@@ -87,7 +99,15 @@ export async function GET() {
       }
       // Real snapshot before synthetic SIM (matches the live display units).
       const snap = getSnapshotObservations(s.id, 24);
-      if (snap) return buildPoint(s, snap as { date: string; value: number }[], "SNAPSHOT");
+      if (snap) {
+        const rawSnap = getSnapshotRawObservations(s.id, 24);
+        return buildPoint(
+          s,
+          snap as { date: string; value: number }[],
+          "SNAPSHOT",
+          rawSnap ? rawSnap as { date: string; value: number }[] : undefined
+        );
+      }
       return buildPoint(s, getSeriesHistory(s.id, 24), "SIM");
     })
   );

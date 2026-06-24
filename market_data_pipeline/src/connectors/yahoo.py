@@ -235,6 +235,9 @@ class YahooConnector(MarketDataAdapter):
         for symbol in symbols:
             if yf is not None:
                 res = self._fetch_one_via_yfinance(yf, symbol, start)
+                if res.rows.is_empty() and not res.response_status.startswith("ok"):
+                    logger.warning("Yahoo yfinance path failed for %s; retrying HTTP chart endpoint", symbol)
+                    res = self._fetch_one_via_http(symbol, start)
             else:
                 res = self._fetch_one_via_http(symbol, start)
             frames.append(res.rows)

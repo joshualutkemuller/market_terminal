@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -52,6 +53,8 @@ except ImportError:  # pragma: no cover - httpx declared dependency
 
 
 logger = logging.getLogger("market_data_pipeline.connectors")
+PROXY_ENV_KEYS = ("FRED_PROXY_URL", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy")
+PROXY_FALLBACK_STATUSES = {403, 407, 429, 502, 503, 504}
 
 
 # Repo-relative data root: market_data_pipeline/data
@@ -244,6 +247,10 @@ def _is_retryable(exc: BaseException) -> bool:
     return False
 
 
+def _proxy_env_present() -> bool:
+    return any(os.environ.get(key, "").strip() for key in PROXY_ENV_KEYS)
+
+
 class ThrottledClient:
     """``httpx.Client`` wrapper with rate limiting and tenacity retry.
 
@@ -264,14 +271,37 @@ class ThrottledClient:
         self.limiter = rate_limiter or RateLimiter(rate=rate)
         self.max_attempts = max_attempts
         self.timeout = timeout
+        self._proxy_env_present = _proxy_env_present()
         self._client = client or httpx.Client(
             timeout=timeout,
             headers={"User-Agent": "market-data-pipeline/0.1 (+prototype)"},
         )
+        self._direct_client = None if client else httpx.Client(
+            timeout=timeout,
+            headers={"User-Agent": "market-data-pipeline/0.1 (+prototype)"},
+            trust_env=False,
+        )
 
     def _do_get(self, url: str, params: Optional[dict[str, Any]]) -> dict[str, Any]:
         self.limiter.acquire()
-        resp = self._client.get(url, params=params)
+        try:
+            resp = self._client.get(url, params=params)
+            if (
+                self._proxy_env_present
+                and self._direct_client is not None
+                and resp.status_code in PROXY_FALLBACK_STATUSES
+            ):
+                logger.warning(
+                    "HTTP %s via proxy-aware environment for %s; retrying direct",
+                    resp.status_code,
+                    url,
+                )
+                resp = self._direct_client.get(url, params=params)
+        except httpx.TransportError as exc:
+            if not self._proxy_env_present or self._direct_client is None:
+                raise
+            logger.warning("Transport error via proxy-aware environment for %s; retrying direct: %s", url, exc)
+            resp = self._direct_client.get(url, params=params)
         resp.raise_for_status()
         return resp.json()
 
