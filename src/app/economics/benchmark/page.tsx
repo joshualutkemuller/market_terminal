@@ -1,6 +1,7 @@
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
+import { FileDown } from "lucide-react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
@@ -16,6 +17,7 @@ import { ChartLink } from "@/components/charting/ChartLink";
 import { DataLegend } from "@/components/ui/DataLegend";
 import { isRealEconSource, useLiveSeriesSet, type DataSource } from "@/lib/useEcon";
 import { fmtNum, fmtSigned, fmtBps, pnlClass } from "@/lib/format";
+import { generateBenchmarkPdf } from "@/lib/benchmarkPdf";
 import {
   BENCHMARK_SERIES,
   BENCHMARK_FRED_IDS,
@@ -103,6 +105,30 @@ export default function BenchmarkRatesPage() {
   const [corrGroup, setCorrGroup] = useState("cross");
   const [detailId, setDetailId] = useState("DGS10");
   const [tab, setTab] = useState<"status" | "trends" | "spreads">("status");
+  const [exporting, setExporting] = useState(false);
+
+  // Refs for chart capture during PDF export
+  const trendChartRef = useRef<HTMLDivElement>(null);
+  const spreadChartRef = useRef<HTMLDivElement>(null);
+
+  const handleExportPdf = useCallback(async () => {
+    setExporting(true);
+    try {
+      await generateBenchmarkPdf({
+        map,
+        source: badgeSource,
+        tab,
+        catFilter,
+        timeRange,
+        detailId,
+        spreadId,
+        chartRef: trendChartRef.current,
+        spreadChartRef: spreadChartRef.current,
+      });
+    } finally {
+      setExporting(false);
+    }
+  }, [map, badgeSource, tab, catFilter, timeRange, detailId, spreadId]);
 
   // Derived data
   const summary = useMemo(() => computeSummary(map), [map]);
@@ -308,7 +334,19 @@ export default function BenchmarkRatesPage() {
         code="BMRK"
         title="Benchmark Rates"
         desc="Daily rates across asset classes — trend, status, comparison & regime"
-        right={<ProvenanceBadge source={badgeSource} />}
+        right={
+          <span className="flex items-center gap-2">
+            <button
+              onClick={handleExportPdf}
+              disabled={exporting}
+              className="flex items-center gap-1 rounded border border-term-border bg-term-panel px-2 py-0.5 text-2xs text-term-text-dim hover:text-term-amber disabled:opacity-40"
+            >
+              <FileDown size={12} />
+              {exporting ? "Exporting…" : "PDF"}
+            </button>
+            <ProvenanceBadge source={badgeSource} />
+          </span>
+        }
       />
 
       <KpiStrip>
@@ -421,7 +459,7 @@ export default function BenchmarkRatesPage() {
                   </span>
                 }
               >
-                <div className="p-2">
+                <div ref={trendChartRef} className="p-2">
                   <LineChart
                     series={[{ name: detailDef?.short ?? detailId, data: detailChartData, color: "#FF8C00" }]}
                     labels={detailChartDates}
@@ -541,7 +579,7 @@ export default function BenchmarkRatesPage() {
                   />
                 }
               >
-                <div className="p-2">
+                <div ref={spreadChartRef} className="p-2">
                   <LineChart
                     series={[{ name: selectedSpread?.pair.label ?? "", data: spreadSlice, color: "#3B9DFF" }]}
                     labels={spreadDates}

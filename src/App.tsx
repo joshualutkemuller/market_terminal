@@ -42,6 +42,7 @@ import EconMl from "./app/economics/ml/page";
 import EconSecFinance from "./app/economics/sec-finance/page";
 import EconFunding from "./app/economics/funding/page";
 import EconMotion from "./app/economics/motion/page";
+import EconBenchmark from "./app/economics/benchmark/page";
 
 import NotFound from "./app/not-found";
 
@@ -96,6 +97,7 @@ export function App() {
           <Route path="sec-finance" element={<EconSecFinance />} />
           <Route path="funding" element={<EconFunding />} />
           <Route path="motion" element={<EconMotion />} />
+          <Route path="benchmark" element={<EconBenchmark />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />
