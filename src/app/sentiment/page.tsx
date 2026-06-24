@@ -9,6 +9,7 @@ import { LineChart } from "@/components/charts/LineChart";
 import { useLiveSeriesSet } from "@/lib/useEcon";
 import { useSocial } from "@/lib/useSocial";
 import { fmtSigned, pnlClass } from "@/lib/format";
+import { aaiiSnapshotGeneratedAt, hasAaiiSnapshot } from "@/data/sentimentAaiiSnapshot";
 import {
   getSentimentIndex,
   getSentimentSummary,
@@ -125,6 +126,7 @@ export default function SentimentModule() {
   const btn = "rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide transition-colors";
   const recent = aaii.slice(-10).reverse();
   const pageSource = vixLive ? "FRED" : socialLive ? "LIVE" : "SIM";
+  const aaiiSource = hasAaiiSnapshot() ? "SNAPSHOT" : "SIM";
 
   return (
     <div className="flex min-h-full flex-col">
@@ -199,7 +201,17 @@ export default function SentimentModule() {
         {view === "AAII" && (
           <div className="grid grid-cols-12 gap-2">
             <div className="col-span-12 lg:col-span-4">
-              <Panel title="AAII Survey — This Week" code="SENT-2" accent right={<Tag tone={aaiiSnap.zone === "Euphoria" ? "down" : aaiiSnap.zone === "Capitulation" ? "up" : "amber"}>{aaiiSnap.zone}</Tag>}>
+              <Panel
+                title="AAII Survey — This Week"
+                code="SENT-2"
+                accent
+                right={
+                  <span className="flex items-center gap-2">
+                    <Tag tone={aaiiSnap.zone === "Euphoria" ? "down" : aaiiSnap.zone === "Capitulation" ? "up" : "amber"}>{aaiiSnap.zone}</Tag>
+                    <ProvenanceBadge source={aaiiSource} asOf={aaiiSnapshotGeneratedAt} />
+                  </span>
+                }
+              >
                 <div className="flex flex-col gap-2 p-3">
                   {([["Bullish", aaiiSnap.latest.bullish, "#2ECC71"], ["Neutral", aaiiSnap.latest.neutral, "#8A8A92"], ["Bearish", aaiiSnap.latest.bearish, "#FF3B3B"]] as const).map(([label, val, color]) => (
                     <div key={label} className="flex items-center gap-2 text-2xs">
@@ -464,7 +476,8 @@ export default function SentimentModule() {
         <span className="text-term-amber">SENT</span> — investor sentiment & behavior: AAII survey + NAAIM positioning + X/Reddit/StockTwits mood, distilled into an explainable fear/greed index.
         {vixLive ? " VIX component live via FRED." : ""}
         {socialLive ? ` Social component live via ${socialSource}.` : " Social component is using SIM fallback."}
-        {" "}Survey inputs remain deterministic until AAII/NAAIM connectors are wired.
+        {hasAaiiSnapshot() ? " AAII survey uses the committed AAII snapshot." : " AAII survey is using deterministic fallback until the AAII snapshot refresh succeeds."}
+        {" "}NAAIM remains deterministic until a connector is wired.
       </div>
     </div>
   );

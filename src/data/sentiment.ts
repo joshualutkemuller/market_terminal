@@ -12,6 +12,7 @@
 import { Rng } from "@/lib/rng";
 import { getSocialIntel, type SocialIntel } from "./news";
 import { getSqueezeBoard } from "./squeeze";
+import { getAaiiSnapshotHistory } from "./sentimentAaiiSnapshot";
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
 
@@ -38,6 +39,9 @@ export interface AaiiWeek {
 }
 
 export function getAaiiHistory(weeks = 104): AaiiWeek[] {
+  const snap = getAaiiSnapshotHistory(weeks);
+  if (snap?.length) return snap;
+
   const dates = weeklyDates(weeks);
   const rng = new Rng("sent-aaii-v1");
   // mean-revert bullish & bearish around historical norms (~37.5 / ~31)
