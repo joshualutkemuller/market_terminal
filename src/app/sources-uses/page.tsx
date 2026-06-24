@@ -1,6 +1,7 @@
 
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { NetworkGraph } from "@/components/charts/NetworkGraph";
 import { Sankey } from "@/components/charts/Sankey";
@@ -104,7 +105,7 @@ export default function SourcesUses() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="SXU" title="Sources & Uses" desc="Matching · Internalization · Funding Savings" />
+      <PageHeader code="SXU" title="Sources & Uses" desc="Matching · Internalization · Funding Savings" right={<ProvenanceBadge source="SIM" />} />
 
       <KpiStrip>
         <Stat label="Total Sources" value={fmtUsdAbbr(sum.totalSources)} sub={`${sources.length} pools`} />

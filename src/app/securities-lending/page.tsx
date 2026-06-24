@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
@@ -19,6 +20,7 @@ import {
   type BorrowRequest,
 } from "@/data/securitiesLending";
 import { fmtAbbr, fmtUsdAbbr, fmtSignedPct, fmtNum, fmtInt, pnlClass } from "@/lib/format";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 
 const CLASS_TONE: Record<InventoryRow["classification"], "up" | "down" | "amber" | "neutral" | "blue" | "violet"> = {
   GC: "neutral",
@@ -69,11 +71,13 @@ export default function SecuritiesLending() {
   const sankey = getRevenueSankey();
 
   const [source, setSource] = useState<"ALL" | InventoryRow["source"]>("ALL");
+  const [classFilter, setClassFilter] = useState<string>("ALL");
 
-  const inventoryRows = useMemo(
-    () => (source === "ALL" ? inventory : inventory.filter((r) => r.source === source)),
-    [inventory, source]
-  );
+  const inventoryRows = useMemo(() => {
+    let rows = source === "ALL" ? inventory : inventory.filter((r) => r.source === source);
+    if (classFilter !== "ALL") rows = rows.filter((r) => r.classification === classFilter);
+    return rows;
+  }, [inventory, source, classFilter]);
 
   // Revenue waterfall: leading Open total, one step per asset class, trailing Total.
   const waterfallSteps: WaterfallStep[] = useMemo(() => {
@@ -181,7 +185,7 @@ export default function SecuritiesLending() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="SLAB" title="Securities Lending" desc="Inventory · Loan Book · Borrow Demand · Revenue" />
+      <PageHeader code="SLAB" title="Securities Lending" desc="Inventory · Loan Book · Borrow Demand · Revenue" right={<ProvenanceBadge source="SIM" />} />
 
       <KpiStrip>
         <Stat label="Day Revenue" value={fmtUsdAbbr(summary.dayRevenue)} sub={<span className={pnlClass(summary.dayChgPct)}>{fmtSignedPct(summary.dayChgPct)} vs prior</span>} tone="amber" />
@@ -198,19 +202,8 @@ export default function SecuritiesLending() {
           <Panel
             title="Inventory"
             code="INVN"
-            right={
-              <div className="flex items-center gap-px">
-                {SOURCE_TABS.map((t) => (
-                  <button
-                    key={t.key}
-                    onClick={() => setSource(t.key)}
-                    className={`px-1.5 py-px text-3xs font-semibold uppercase tracking-wide ${source === t.key ? "bg-term-amber/15 text-term-amber" : "text-term-text-mute hover:text-term-text-dim"}`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            }
+            toolbar={<><TermToggleGroup label="Source" value={source} onChange={(v) => setSource(v as typeof source)} options={SOURCE_TABS.map((t) => ({ value: t.key, label: t.label }))} size="sm" /><TermToggleGroup label="Class" value={classFilter} onChange={setClassFilter} options={[{ value: "ALL", label: "All" }, { value: "GC", label: "GC" }, { value: "WARM", label: "Warm" }, { value: "SPECIAL", label: "Special" }, { value: "HTB", label: "HTB" }]} size="sm" /></>}
+            right={<span className="text-3xs text-term-text-mute">{inventoryRows.length} items</span>}
           >
             <DataGrid columns={invCols} rows={inventoryRows} rowKey={(r) => `${r.ticker}-${r.source}`} maxHeight="360px" initialSort={{ key: "mv", dir: "desc" }} zebra />
           </Panel>

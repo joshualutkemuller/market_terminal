@@ -7,6 +7,7 @@ import { ChartLink } from "@/components/charting/ChartLink";
 import { BarChart } from "@/components/charts/BarChart";
 import { useDrill } from "@/components/econ/DrillProvider";
 import { SourceBadge } from "@/components/econ/SourceBadge";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 import { useLiveSeriesSet } from "@/lib/useEcon";
 import {
   getInflationHeadlines,
@@ -298,34 +299,8 @@ export default function InflationExplorer() {
         {/* TOGGLES */}
         <Panel title="View Controls" code="VIEW">
           <div className="space-y-3 px-3 py-3">
-            <div>
-              <div className="term-label mb-1.5">Primary Metric</div>
-              <div className="flex flex-wrap gap-1">
-                {METRICS.map((m) => (
-                  <button
-                    key={m.key}
-                    onClick={() => setMetric(m.key)}
-                    className={`term-btn ${metric === m.key ? "term-btn-active" : ""}`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="term-label mb-1.5">Basket</div>
-              <div className="flex gap-1">
-                {(["CPI", "PCE"] as Basket[]).map((b) => (
-                  <button
-                    key={b}
-                    onClick={() => setBasket(b)}
-                    className={`term-btn ${basket === b ? "term-btn-active" : ""}`}
-                  >
-                    {b}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <TermToggleGroup label="Primary Metric" value={metric} onChange={setMetric} options={METRICS.map((m) => ({ value: m.key, label: m.label }))} />
+            <TermToggleGroup label="Basket" value={basket} onChange={setBasket} options={[{ value: "CPI" as Basket, label: "CPI" }, { value: "PCE" as Basket, label: "PCE" }]} />
             <div className="space-y-1 border-t border-term-border pt-2 text-3xs text-term-text-mute">
               <p>
                 <span className="text-term-amber">ΔMoM / ΔYoY</span> = change in the % print vs the prior

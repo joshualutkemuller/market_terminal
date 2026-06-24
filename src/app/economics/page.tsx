@@ -19,6 +19,8 @@ import {
   type FredSeries,
 } from "@/data/econSeries";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
+import { DataLegend } from "@/components/ui/DataLegend";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 import { econChartHref } from "@/components/charting/ChartLink";
 import Link from "@/components/Link";
 import { AreaChart } from "lucide-react";
@@ -112,6 +114,7 @@ export default function MacroDashboard() {
   const { open } = useDrill();
 
   const [selectedId, setSelectedId] = useState<string>("DGS2");
+  const [catFilter, setCatFilter] = useState<string>("ALL");
 
   const indicators = getIndicators();
   const byId = (id: string): IndicatorRow | undefined => indicators.find((i) => i.id === id);
@@ -222,10 +225,11 @@ export default function MacroDashboard() {
             title="Key Indicators by Category"
             code="ECDB"
             accent
+            toolbar={<TermToggleGroup label="Category" value={catFilter} onChange={setCatFilter} options={[{ value: "ALL", label: "All" }, ...CATEGORY_ORDER.map((c) => ({ value: c, label: ECON_CATEGORY_LABEL[c] }))]} size="sm" />}
             right={<span className="tnum text-3xs text-term-text-mute">{indicators.length} series · Δ = unit change · Δ%/MoM/QoQ/YoY = percent change</span>}
           >
             <div className="grid grid-cols-1 gap-px bg-term-border md:grid-cols-2">
-              {CATEGORY_ORDER.map((cat) => {
+              {CATEGORY_ORDER.filter((cat) => catFilter === "ALL" || cat === catFilter).map((cat) => {
                 const rows = displayRows.filter((i) => i.category === cat);
                 if (rows.length === 0) return null;
                 return (
@@ -237,8 +241,9 @@ export default function MacroDashboard() {
                       <span className="text-3xs text-term-text-mute">{rows.length}</span>
                     </div>
                     <div className="divide-y divide-term-border-soft">
-                      <div className="grid grid-cols-[minmax(4.5rem,1fr)_4.75rem_4.25rem_3.5rem_3.5rem_3.5rem_3.5rem_3.5rem_4rem_3.5rem] items-center gap-1 px-2 py-1 text-3xs uppercase tracking-wide text-term-text-mute">
+                      <div className="grid grid-cols-[minmax(4.5rem,1fr)_1.5rem_4.75rem_4.25rem_3.5rem_3.5rem_3.5rem_3.5rem_3.5rem_4rem_3.5rem] items-center gap-1 px-2 py-1 text-3xs uppercase tracking-wide text-term-text-mute">
                         <span>Series</span>
+                        <span title="Publication frequency">F</span>
                         <span className="text-right">Value</span>
                         <span className="text-right">As of</span>
                         <span className="text-right" title="Absolute change versus prior observation, in the series unit">Δ</span>
@@ -255,11 +260,14 @@ export default function MacroDashboard() {
                           <div
                             key={r.id}
                             onClick={() => drill(r)}
-                            className="grid cursor-pointer grid-cols-[minmax(4.5rem,1fr)_4.75rem_4.25rem_3.5rem_3.5rem_3.5rem_3.5rem_3.5rem_4rem_3.5rem] items-center gap-1 px-2 py-1 text-2xs transition-colors hover:bg-term-panel-2"
+                            className="grid cursor-pointer grid-cols-[minmax(4.5rem,1fr)_1.5rem_4.75rem_4.25rem_3.5rem_3.5rem_3.5rem_3.5rem_3.5rem_4rem_3.5rem] items-center gap-1 px-2 py-1 text-2xs transition-colors hover:bg-term-panel-2"
                             title={`${r.label} — click to drill 24m`}
                           >
                             <span className="truncate font-semibold text-term-text" title={r.label}>
                               {r.short}
+                            </span>
+                            <span className="text-3xs text-term-text-mute" title={`${({D:"Daily",W:"Weekly",M:"Monthly",Q:"Quarterly"} as Record<string,string>)[seriesById(r.id)?.freq ?? ""] ?? ""} frequency`}>
+                              {seriesById(r.id)?.freq ?? ""}
                             </span>
                             <span className="tnum text-right text-term-text">
                               {fmtVal(e.value, r.decimals, r.unit)}
@@ -402,6 +410,10 @@ export default function MacroDashboard() {
             </div>
           </Panel>
         </div>
+      </div>
+
+      <div className="px-2 pb-2">
+        <DataLegend />
       </div>
     </div>
   );

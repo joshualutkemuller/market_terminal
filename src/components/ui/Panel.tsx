@@ -5,6 +5,8 @@ interface PanelProps {
   title?: string;
   code?: string;
   right?: ReactNode;
+  toolbar?: ReactNode;
+  subtitle?: ReactNode;
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
@@ -14,7 +16,7 @@ interface PanelProps {
 }
 
 /** The standard bordered terminal panel with a title strip. */
-export function Panel({ title, code, right, children, className, bodyClassName, scroll, accent, resizable = true }: PanelProps) {
+export function Panel({ title, code, right, toolbar, subtitle, children, className, bodyClassName, scroll, accent, resizable = true }: PanelProps) {
   return (
     <section
       className={clsx(
@@ -30,9 +32,15 @@ export function Panel({ title, code, right, children, className, bodyClassName, 
             {accent && <span className="h-2 w-2 rounded-full bg-term-amber shadow-[0_0_6px_#FF8C00]" />}
             <span className="truncate text-term-text-dim" title={title}>{title}</span>
             {code && <span className="shrink-0 text-3xs text-term-text-mute">{code}</span>}
+            {subtitle && <span className="shrink-0 text-3xs text-term-text-mute">{subtitle}</span>}
           </div>
           {right && <div className="ml-2 flex shrink-0 items-center gap-1">{right}</div>}
         </header>
+      )}
+      {toolbar && (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-term-border bg-term-panel-2 px-2 py-1">
+          {toolbar}
+        </div>
       )}
       <div className={clsx("analytics-widget-body min-h-0 min-w-0 flex-1", scroll && "overflow-auto", bodyClassName)}>
         <div className="analytics-widget-canvas">{children}</div>

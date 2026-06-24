@@ -1,8 +1,11 @@
 
+import { useState, useMemo } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { ChartLink } from "@/components/charting/ChartLink";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 import { BarChart } from "@/components/charts/BarChart";
 import { HeatGrid } from "@/components/charts/Matrix";
 import { ProgressBar } from "@/components/charts/Radial";
@@ -64,6 +67,12 @@ export default function RegimePage() {
   const namedRegime = getNamedRegime();
   const crossPlaybooks = getCrossDeskPlaybooks();
 
+  const [deskFilter, setDeskFilter] = useState("ALL");
+  const allDesks = useMemo(() => [...new Set([...playbooks.map((p) => p.desk), ...crossPlaybooks.map((p) => p.desk)])].sort(), [playbooks, crossPlaybooks]);
+  const deskOptions = useMemo(() => [{ value: "ALL", label: "All Desks" }, ...allDesks.map((d) => ({ value: d, label: d }))], [allDesks]);
+  const filteredPlaybooks = deskFilter === "ALL" ? playbooks : playbooks.filter((p) => p.desk === deskFilter);
+  const filteredCrossPlaybooks = deskFilter === "ALL" ? crossPlaybooks : crossPlaybooks.filter((p) => p.desk === deskFilter);
+
   const factorCols: Column<RegimeFactor>[] = [
     { key: "factor", header: "Factor", render: (r) => <span className="font-semibold text-term-text">{r.factor}</span>, sortVal: (r) => r.factor },
     { key: "source", header: "Source", align: "center", render: (r) => <Tag tone={r.source === "FRED" ? "up" : r.source === "YAHOO" ? "blue" : "neutral"}>{r.source}</Tag>, sortVal: (r) => r.source },
@@ -110,7 +119,7 @@ export default function RegimePage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="REGIME" title="Macro Regime Playbook" desc="Impulse scores · named regimes · cross-desk actions" right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "UNRATE" }, { source: "econ", id: "T10Y2Y" }, { source: "econ", id: "VIXCLS" }]} range="5Y" /><Tag tone="up">FRED/YAHOO/LOCAL</Tag></span>} />
+      <PageHeader code="REGIME" title="Macro Regime Playbook" desc="Impulse scores · named regimes · cross-desk actions" right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "UNRATE" }, { source: "econ", id: "T10Y2Y" }, { source: "econ", id: "VIXCLS" }]} range="5Y" /><ProvenanceBadge source="SIM" /></span>} />
 
       <KpiStrip>
         <Stat label="Named Regime" value={namedRegime.regime} sub={`${fmtPct(namedRegime.probability, 0)} prob`} tone="amber" />
@@ -183,14 +192,15 @@ export default function RegimePage() {
           code="XPLAY"
           className="xl:col-span-3"
           accent
-          right={<span className="text-3xs text-term-text-mute">actions for {namedRegime.regime} regime · financing, repo, agency, prime, e-trading, treasury</span>}
+          toolbar={<TermToggleGroup label="Desk" value={deskFilter} onChange={setDeskFilter} options={deskOptions} size="sm" />}
+          right={<span className="text-3xs text-term-text-mute">actions for {namedRegime.regime} regime</span>}
         >
-          <DataGrid columns={crossCols} rows={crossPlaybooks} rowKey={(r) => r.desk} maxHeight="340px" initialSort={{ key: "urgency", dir: "desc" }} zebra />
+          <DataGrid columns={crossCols} rows={filteredCrossPlaybooks} rowKey={(r) => r.desk} maxHeight="340px" initialSort={{ key: "urgency", dir: "desc" }} zebra />
         </Panel>
 
         {/* Sec-Finance Desk Playbooks */}
-        <Panel title="Sec-Finance Playbooks" code="PLAY" className="xl:col-span-3" right={<Tag tone="down">{playbooks.filter((p) => p.urgency === "HIGH").length} high</Tag>}>
-          <DataGrid columns={playbookCols} rows={playbooks} rowKey={(r) => `${r.desk}-${r.action}`} maxHeight="340px" initialSort={{ key: "impact", dir: "desc" }} zebra />
+        <Panel title="Sec-Finance Playbooks" code="PLAY" className="xl:col-span-3" right={<Tag tone="down">{filteredPlaybooks.filter((p) => p.urgency === "HIGH").length} high</Tag>}>
+          <DataGrid columns={playbookCols} rows={filteredPlaybooks} rowKey={(r) => `${r.desk}-${r.action}`} maxHeight="340px" initialSort={{ key: "impact", dir: "desc" }} zebra />
         </Panel>
 
         <Panel title="Transition Risk" code="TRAN">

@@ -2,6 +2,7 @@
 import Link from "@/components/Link";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { LineChart } from "@/components/charts/LineChart";
 import { Treemap } from "@/components/charts/Treemap";
@@ -37,7 +38,7 @@ export default function CommandCenter() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="HOME" title="Command Center" desc="Cross-desk securities finance intelligence" />
+      <PageHeader code="HOME" title="Command Center" desc="Cross-desk securities finance intelligence" right={<ProvenanceBadge source="SNAPSHOT" />} />
 
       <KpiStrip>
         <Stat label="SL Revenue (Day)" value={fmtUsdAbbr(sl.dayRevenue)} sub={<span className={pnlClass(sl.dayChgPct)}>{fmtSignedPct(sl.dayChgPct)} vs prior</span>} tone="amber" />

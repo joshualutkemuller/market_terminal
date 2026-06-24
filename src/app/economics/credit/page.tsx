@@ -1,4 +1,5 @@
 
+import { useState, useMemo } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
@@ -25,6 +26,8 @@ import {
   type CreditSubstitution,
 } from "@/data/econEnhancements";
 import { fmtBps, fmtNum, fmtSigned, fmtInt, fmtPct, fmtUsdAbbr, pnlClass } from "@/lib/format";
+import { DataLegend } from "@/components/ui/DataLegend";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 
 const REGIME_TONE: Record<string, "up" | "down" | "amber" | "blue"> = { TIGHT: "up", NEUTRAL: "blue", WIDE: "amber", STRESS: "down" };
 
@@ -52,6 +55,9 @@ export default function CreditSpreadsPage() {
   const hyOas = masterOas("BAMLH0A0HYM2", sum.hyOas);
   const igChg1d = igOas - masterOas("BAMLC0A0CM", sum.igOas - sum.igChg1d, true);
   const hyChg1d = hyOas - masterOas("BAMLH0A0HYM2", sum.hyOas - sum.hyChg1d, true);
+
+  const [gradeFilter, setGradeFilter] = useState("ALL");
+  const [histRange, setHistRange] = useState("18");
 
   const hist = getSpreadHistory(18);
   const sectors = getSectorSpreads();
@@ -163,6 +169,10 @@ export default function CreditSpreadsPage() {
     { key: "sig", header: "Signal", align: "center", render: (r) => <Tag tone={HC_TONE[r.signal]}>{r.signal}</Tag>, sortVal: (r) => r.signal },
   ];
 
+  const filteredCurve = useMemo(() => gradeFilter === "ALL" ? curve : curve.filter((r) => r.grade === gradeFilter), [curve, gradeFilter]);
+  const filteredSectors = useMemo(() => gradeFilter === "ALL" ? sectors : sectors.filter((s) => s.grade === gradeFilter), [sectors, gradeFilter]);
+  const trimmedHist = useMemo(() => { const n = parseInt(histRange); return hist.slice(-n * 12); }, [hist, histRange]);
+
   const cv = (r: string) => curve.find((x) => x.rating === r) ?? baseCurve.find((x) => x.rating === r)!;
   const qualitySpread = cv("CCC").oas - cv("BB").oas;
   const bbbAaa = cv("BBB").oas - cv("AAA").oas;
@@ -188,32 +198,32 @@ export default function CreditSpreadsPage() {
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-3">
         <div className="flex flex-col gap-2 xl:col-span-2">
-          <Panel title="Credit Curve — OAS by Rating" code="OAS" accent right={<span className="text-3xs text-term-text-mute">click a row → 24m history</span>}>
-            <DataGrid columns={curveCols} rows={curve} rowKey={(r) => r.rating} onRowClick={drill} initialSort={{ key: "oas", dir: "asc" }} />
+          <Panel title="Credit Curve — OAS by Rating" code="OAS" subtitle="Daily · bps" accent toolbar={<TermToggleGroup label="Grade" value={gradeFilter} onChange={setGradeFilter} options={[{ value: "ALL", label: "All" }, { value: "IG", label: "IG" }, { value: "HY", label: "HY" }]} size="sm" />} right={<span className="text-3xs text-term-text-mute">click a row → 24m history</span>}>
+            <DataGrid columns={curveCols} rows={filteredCurve} rowKey={(r) => r.rating} onRowClick={drill} initialSort={{ key: "oas", dir: "asc" }} />
           </Panel>
 
-          <Panel title="Historical OAS — IG vs HY (18y)" code="HIST">
+          <Panel title={`Historical OAS — IG vs HY (${histRange}y)`} code="HIST" subtitle="Daily · bps" toolbar={<TermToggleGroup label="Range" value={histRange} onChange={setHistRange} options={[{ value: "5", label: "5Y" }, { value: "10", label: "10Y" }, { value: "18", label: "18Y" }]} size="sm" />}>
             <div className="p-2">
               <LineChart
                 height={210}
                 yFmt={(n) => fmtInt(n)}
-                labels={hist.map((h) => h.date)}
+                labels={trimmedHist.map((h) => h.date)}
                 series={[
-                  { name: "HY OAS", data: hist.map((h) => h.hy), color: "#FF3B3B", area: true },
-                  { name: "IG OAS", data: hist.map((h) => h.ig), color: "#FF8C00" },
+                  { name: "HY OAS", data: trimmedHist.map((h) => h.hy), color: "#FF3B3B", area: true },
+                  { name: "IG OAS", data: trimmedHist.map((h) => h.ig), color: "#FF8C00" },
                 ]}
               />
               <div className="mt-1 flex flex-wrap gap-2 px-1 text-3xs text-term-text-mute">
                 <span className="flex items-center gap-1"><span className="h-1.5 w-3 bg-term-down" /> HY OAS</span>
                 <span className="flex items-center gap-1"><span className="h-1.5 w-3 bg-term-amber" /> IG OAS</span>
-                <span className="ml-auto">Stress: {[...new Set(hist.map((h) => h.episode).filter(Boolean))].join(" · ")}</span>
+                <span className="ml-auto">Stress: {[...new Set(trimmedHist.map((h) => h.episode).filter(Boolean))].join(" · ")}</span>
               </div>
             </div>
           </Panel>
 
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
             <Panel title="Sector Spreads" code="SEC">
-              <DataGrid columns={sectorCols} rows={sectors} rowKey={(s) => s.sector} initialSort={{ key: "oas", dir: "desc" }} maxHeight="260px" />
+              <DataGrid columns={sectorCols} rows={filteredSectors} rowKey={(s) => s.sector} initialSort={{ key: "oas", dir: "desc" }} maxHeight="260px" />
             </Panel>
             <Panel title="Historical Stress Episodes" code="STRS">
               <DataGrid columns={stressCols} rows={stress} rowKey={(s) => s.name} maxHeight="260px" />
@@ -301,13 +311,17 @@ export default function CreditSpreadsPage() {
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 px-2 pb-2 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 px-2 xl:grid-cols-2">
         <Panel title="Counterparty Credit Overlay" code="CPST">
           <DataGrid columns={overlayCols} rows={counterpartyOverlays} rowKey={(r) => r.counterparty} maxHeight="260px" initialSort={{ key: "score", dir: "desc" }} zebra />
         </Panel>
         <Panel title="Credit Collateral Substitutions" code="SUBS" accent>
           <DataGrid columns={substitutionCols} rows={substitutions} rowKey={(r) => `${r.fromAsset}-${r.toAsset}`} maxHeight="260px" initialSort={{ key: "savings", dir: "desc" }} zebra />
         </Panel>
+      </div>
+
+      <div className="px-2 pb-2">
+        <DataLegend />
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { LineChart } from "@/components/charts/LineChart";
 import { Sankey } from "@/components/charts/Sankey";
@@ -114,7 +115,7 @@ export default function CashOptimizer() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="CASH" title="Cash Optimizer" desc="Treasury Funding Optimization" />
+      <PageHeader code="CASH" title="Cash Optimizer" desc="Treasury Funding Optimization" right={<ProvenanceBadge source="SIM" />} />
 
       <KpiStrip>
         <Stat label="Total Sources" value={fmtUsdAbbr(sum.totalSources)} sub={`${sources.length} facilities`} />

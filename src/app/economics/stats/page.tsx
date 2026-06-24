@@ -9,6 +9,9 @@ import { ScatterPlot } from "@/components/charts/ScatterPlot";
 import { BarChart } from "@/components/charts/BarChart";
 import { LineChart } from "@/components/charts/LineChart";
 import { SourceBadge } from "@/components/econ/SourceBadge";
+import { TermToggle } from "@/components/ui/TermToggle";
+import { TermSelect } from "@/components/ui/TermSelect";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 import { getStatStudyPacks, type StatStudyPack } from "@/data/econEnhancements";
 import { STAT_LABELS, STAT_DEFAULT_LABELS } from "@/data/statsConfig";
 import { useStatsData } from "@/lib/useStats";
@@ -28,21 +31,10 @@ const TRANSFORMS: [string, Transform][] = [["Levels", "level"], ["Δ 1m", "chg"]
 const LAGS = [1, 2, 3, 4];
 const WINDOWS = [6, 12, 24, 36];
 
-function Btn({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick} className={`border px-1.5 py-0.5 text-2xs ${on ? "border-term-amber bg-term-amber-soft text-term-amber" : "border-term-border text-term-text-mute hover:text-term-text-dim"}`}>
-      {children}
-    </button>
-  );
-}
-
-function Sel({ value, onChange, labels }: { value: string; onChange: (s: string) => void; labels: string[] }) {
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="border border-term-border bg-term-panel-3 px-1.5 py-0.5 text-2xs text-term-amber outline-none hover:border-term-amber">
-      {labels.map((l) => <option key={l} value={l} className="bg-term-panel text-term-text">{l}</option>)}
-    </select>
-  );
-}
+const Btn = TermToggle;
+const Sel = ({ value, onChange, labels }: { value: string; onChange: (s: string) => void; labels: string[] }) => (
+  <TermSelect value={value} onChange={onChange} options={labels} />
+);
 
 export default function StatisticalAnalysis() {
   const { series, source, loading, lookbackMonths, setLookbackMonths, startDate, endDate } = useStatsData();

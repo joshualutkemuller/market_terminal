@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { ChartLink } from "@/components/charting/ChartLink";
 import { BarChart } from "@/components/charts/BarChart";
@@ -113,7 +114,7 @@ export default function MLApplications() {
         code="EML"
         title="ML Applications"
         desc="Recession, nowcast & rate-path models"
-        right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "UNRATE" }, { source: "econ", id: "T10Y2Y" }]} range="5Y" /><Tag tone="up">{liveCount} LIVE</Tag></span>}
+        right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "UNRATE" }, { source: "econ", id: "T10Y2Y" }]} range="5Y" /><ProvenanceBadge source="SIM" /><Tag tone="up">{liveCount} LIVE</Tag></span>}
       />
 
       <KpiStrip>

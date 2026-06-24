@@ -8,6 +8,7 @@ import { YieldCurve, type CurveLine } from "@/components/charts/YieldCurve";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { SourceBadge } from "@/components/econ/SourceBadge";
+import { TermSelect } from "@/components/ui/TermSelect";
 import { useCurveSnapshots, useInversions } from "@/lib/useEcon";
 import {
   getCurveMetrics,
@@ -227,6 +228,7 @@ export default function TreasuryCurveLab() {
         <Panel
           title="Yield Curve — Overlay"
           code="CRV"
+          subtitle="Daily · %"
           accent
           className="xl:col-span-2"
           right={
@@ -355,22 +357,12 @@ export default function TreasuryCurveLab() {
         <Panel
           title={`${def.label} Inversion Timeline`}
           code="HIST"
+          subtitle="Daily · bps"
           right={
             <div className="flex items-center gap-2">
               <SourceBadge source={invSource} />
               <span className={`tnum text-2xs ${pnlClass(currentSpread)}`}>{fmtSigned(currentSpread, 0)}bps</span>
-              <select
-                value={spreadId}
-                onChange={(e) => setSpreadId(e.target.value)}
-                className="border border-term-border bg-term-panel-3 px-1.5 py-0.5 text-2xs text-term-amber outline-none hover:border-term-amber"
-                title="Choose curve spread to analyze"
-              >
-                {SPREAD_DEFS.map((s) => (
-                  <option key={s.id} value={s.id} className="bg-term-panel text-term-text">
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+              <TermSelect value={spreadId} onChange={setSpreadId} options={SPREAD_DEFS.map((s) => ({ value: s.id, label: s.label }))} />
             </div>
           }
         >

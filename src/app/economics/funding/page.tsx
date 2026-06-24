@@ -1,5 +1,5 @@
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
@@ -8,6 +8,8 @@ import { Sparkline } from "@/components/charts/Sparkline";
 import { ChartLink } from "@/components/charting/ChartLink";
 import { useLiveSeriesSet } from "@/lib/useEcon";
 import { fmtSigned, pnlClass } from "@/lib/format";
+import { DataLegend } from "@/components/ui/DataLegend";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 import {
   FUNDING_SERIES,
   FUNDING_FRED_IDS,
@@ -64,6 +66,8 @@ export default function FundingPulse() {
     }
     return m;
   }, [live, fallback]);
+
+  const [groupFilter, setGroupFilter] = useState<string>("ALL");
 
   const anyLive = FUNDING_FRED_IDS.some((id) => live[id]?.source === "FRED");
   const liveIds = useMemo(() => new Set(FUNDING_FRED_IDS.filter((id) => live[id]?.source === "FRED")), [live]);
@@ -178,11 +182,14 @@ export default function FundingPulse() {
         </div>
 
         {/* Series groups */}
-        {GROUPS.map((g) => {
+        <div className="col-span-12">
+          <TermToggleGroup label="Group" value={groupFilter} onChange={setGroupFilter} options={[{ value: "ALL", label: "All" }, ...GROUPS.map((g) => ({ value: g, label: g }))]} size="sm" />
+        </div>
+        {GROUPS.filter((g) => groupFilter === "ALL" || g === groupFilter).map((g) => {
           const rows = FUNDING_SERIES.filter((s) => s.group === g);
           return (
             <div key={g} className="col-span-12 md:col-span-6">
-              <Panel title={g === "FX Basis" ? "Cross-Currency Basis (3M)" : g === "Overnight" ? "Overnight Rates" : g === "Balances" ? "Liquidity Balances" : "T-Bills"} code={g === "Overnight" ? "O/N" : g === "Balances" ? "BAL" : g === "Bills" ? "BILL" : "XCCY"}>
+              <Panel title={g === "FX Basis" ? "Cross-Currency Basis (3M)" : g === "Overnight" ? "Overnight Rates" : g === "Balances" ? "Liquidity Balances" : "T-Bills"} code={g === "Overnight" ? "O/N" : g === "Balances" ? "BAL" : g === "Bills" ? "BILL" : "XCCY"} subtitle={g === "FX Basis" ? "Daily · bps" : g === "Overnight" ? "Daily · %" : g === "Balances" ? "Weekly · $B/$T" : "Daily · %"}>
                 <div className="divide-y divide-term-border-soft">
                   {rows.map((def) => {
                     const obs = map[def.id] ?? [];
@@ -213,6 +220,10 @@ export default function FundingPulse() {
       <div className="border-t border-term-border bg-term-panel px-3 py-1.5 text-3xs text-term-text-mute">
         <span className="text-term-amber">FUND</span> — the funding tape: corridor, repo, balances and the stress gauge swap traders, prime, agency lenders & treasury all watch.
         {" "}Rates/balances/bills live from FRED; cross-currency basis & FRA-OIS are research-grade (SIM) pending a BIS feed.
+      </div>
+
+      <div className="px-2 pb-2">
+        <DataLegend />
       </div>
     </div>
   );

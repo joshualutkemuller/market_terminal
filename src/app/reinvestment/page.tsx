@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { BarChart } from "@/components/charts/BarChart";
 import { LineChart } from "@/components/charts/LineChart";
@@ -112,7 +113,7 @@ export default function ReinvestmentPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="REINV" title="Cash Collateral Reinvestment" desc="Yield ladder, Fed beta, liquidity and constraints" right={<Tag tone="amber">FRED/YAHOO READY</Tag>} />
+      <PageHeader code="REINV" title="Cash Collateral Reinvestment" desc="Yield ladder, Fed beta, liquidity and constraints" right={<span className="flex items-center gap-1"><ProvenanceBadge source="SIM" /><Tag tone="amber">FRED/YAHOO READY</Tag></span>} />
 
       <KpiStrip>
         <Stat label="Cash Collateral" value={fmtUsdAbbr(summary.cashCollateral)} sub="reinvestment pool" />
