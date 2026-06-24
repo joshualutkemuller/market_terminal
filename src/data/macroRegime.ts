@@ -80,6 +80,95 @@ export function getRegimeFactors(): RegimeFactor[] {
   ];
 }
 
+export type LiveRegimeData = Record<string, { observations: { date: string; value: number }[]; source: string }>;
+
+export const REGIME_FRED_IDS = ["DGS10", "DGS2", "DGS3MO", "BAMLH0A0HYM2", "SOFR", "EFFR", "CPILFESL"] as const;
+
+export function mergeLiveRegimeFactors(factors: RegimeFactor[], fred: LiveRegimeData): RegimeFactor[] {
+  const last = (id: string) => {
+    const obs = fred[id]?.observations;
+    return obs?.length ? obs[obs.length - 1].value : null;
+  };
+  const zOf = (id: string) => {
+    const obs = fred[id]?.observations;
+    if (!obs || obs.length < 10) return null;
+    const vals = obs.map((o) => o.value);
+    const mean = vals.reduce((a, v) => a + v, 0) / vals.length;
+    const std = Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length) || 1;
+    return (vals[vals.length - 1] - mean) / std;
+  };
+
+  return factors.map((f) => {
+    if (f.factor === "2s10s curve slope") {
+      const t10 = last("DGS10");
+      const t2 = last("DGS2");
+      if (t10 != null && t2 != null) {
+        const bps = Math.round((t10 - t2) * 100);
+        const z = zOf("DGS10") ?? f.zScore;
+        return { ...f, value: bps, zScore: Math.round(z * 100) / 100, signal: Math.abs(z) > 1 ? "SUPPORTS" : Math.abs(z) > 0.5 ? "NEUTRAL" : "CONFLICTS" };
+      }
+    }
+    if (f.factor === "3m10y curve slope") {
+      const t10 = last("DGS10");
+      const t3m = last("DGS3MO");
+      if (t10 != null && t3m != null) {
+        const bps = Math.round((t10 - t3m) * 100);
+        const z = zOf("DGS3MO") ?? f.zScore;
+        return { ...f, value: bps, zScore: Math.round(z * 100) / 100, signal: bps < -50 ? "SUPPORTS" : "NEUTRAL" };
+      }
+    }
+    if (f.factor === "Core PCE momentum") {
+      const v = last("CPILFESL");
+      if (v != null) {
+        const z = zOf("CPILFESL") ?? f.zScore;
+        return { ...f, value: Math.round(v * 10) / 10, zScore: Math.round(z * 100) / 100, signal: v > 3 ? "SUPPORTS" : v > 2.5 ? "NEUTRAL" : "CONFLICTS" };
+      }
+    }
+    if (f.factor === "HY OAS level") {
+      const v = last("BAMLH0A0HYM2");
+      if (v != null) {
+        const bps = Math.round(v * 100);
+        const z = zOf("BAMLH0A0HYM2") ?? f.zScore;
+        return { ...f, value: bps, zScore: Math.round(z * 100) / 100, signal: bps > 400 ? "SUPPORTS" : bps > 300 ? "NEUTRAL" : "CONFLICTS" };
+      }
+    }
+    if (f.factor === "SOFR-EFFR spread") {
+      const sofr = last("SOFR");
+      const effr = last("EFFR");
+      if (sofr != null && effr != null) {
+        const bps = Math.round((sofr - effr) * 100);
+        return { ...f, value: bps, signal: bps > 15 ? "SUPPORTS" : bps > 5 ? "NEUTRAL" : "CONFLICTS" };
+      }
+    }
+    return f;
+  });
+}
+
+export function computeLiveRegimeSummary(factors: RegimeFactor[]): RegimeSummary {
+  const weighted = factors.reduce((a, f) => a + f.zScore * f.weight, 0) / factors.reduce((a, f) => a + f.weight, 0);
+  const easing = factors.filter((f) => f.stateLink === "EASING" && f.signal === "SUPPORTS").length;
+  const riskOff = factors.filter((f) => f.stateLink === "RISK_OFF" && f.signal === "SUPPORTS").length;
+  const recession = factors.filter((f) => f.stateLink === "RECESSION_WATCH" && f.signal === "SUPPORTS").length;
+
+  let state: RegimeState = "EASING";
+  if (recession >= 2) state = "RECESSION_WATCH";
+  else if (riskOff >= 2) state = "RISK_OFF";
+  else if (weighted > 0.8) state = "TIGHTENING";
+  else if (weighted < -0.8 && easing >= 2) state = "EASING";
+
+  const riskScore = Math.round(50 + weighted * 15);
+  return {
+    state,
+    probability: Math.round(60 + weighted * 8),
+    riskScore: Math.max(0, Math.min(100, riskScore)),
+    growthScore: Math.round(46 + (factors.find((f) => f.factor === "3m10y curve slope")?.zScore ?? 0) * 8),
+    inflationScore: Math.round(52 + (factors.find((f) => f.factor === "Core PCE momentum")?.zScore ?? 0) * 10),
+    liquidityScore: Math.round(61 + (factors.find((f) => f.factor === "SOFR-EFFR spread")?.zScore ?? 0) * 6),
+    policyBias: weighted < -0.3 ? "DOVISH" : weighted > 0.3 ? "HAWKISH" : "NEUTRAL",
+    activePlaybooks: factors.filter((f) => f.signal === "SUPPORTS").length + 2,
+  };
+}
+
 export function getDeskPlaybooks(): DeskPlaybook[] {
   return [
     {

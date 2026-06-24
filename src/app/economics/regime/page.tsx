@@ -18,6 +18,9 @@ import {
   getImpulseScores,
   getNamedRegime,
   getCrossDeskPlaybooks,
+  mergeLiveRegimeFactors,
+  computeLiveRegimeSummary,
+  REGIME_FRED_IDS,
   type DeskPlaybook,
   type RegimeExposure,
   type RegimeFactor,
@@ -25,6 +28,7 @@ import {
   type ImpulseScore,
   type CrossDeskPlaybook,
 } from "@/data/macroRegime";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import { fmtBps, fmtNum, fmtPct, fmtUsdAbbr, pnlClass } from "@/lib/format";
 
 const SIGNAL_TONE: Record<RegimeFactor["signal"], "up" | "amber" | "neutral"> = {
@@ -58,8 +62,11 @@ function factorValue(f: RegimeFactor): string {
 }
 
 export default function RegimePage() {
-  const summary = getRegimeSummary();
-  const factors = getRegimeFactors();
+  const { data: regimeFred } = useLiveSeriesSet([...REGIME_FRED_IDS], "lin", 60);
+  const anyLive = REGIME_FRED_IDS.some((id) => regimeFred[id]?.source === "FRED");
+  const simFactors = getRegimeFactors();
+  const factors = useMemo(() => mergeLiveRegimeFactors(simFactors, regimeFred), [simFactors, regimeFred]);
+  const summary = useMemo(() => anyLive ? computeLiveRegimeSummary(factors) : getRegimeSummary(), [anyLive, factors]);
   const playbooks = getDeskPlaybooks();
   const transitions = getRegimeTransitions();
   const exposures = getRegimeExposures();
@@ -119,7 +126,7 @@ export default function RegimePage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="REGIME" title="Macro Regime Playbook" desc="Impulse scores · named regimes · cross-desk actions" right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "UNRATE" }, { source: "econ", id: "T10Y2Y" }, { source: "econ", id: "VIXCLS" }]} range="5Y" /><ProvenanceBadge source="SIM" /></span>} />
+      <PageHeader code="REGIME" title="Macro Regime Playbook" desc="Impulse scores · named regimes · cross-desk actions" right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "UNRATE" }, { source: "econ", id: "T10Y2Y" }, { source: "econ", id: "VIXCLS" }]} range="5Y" /><ProvenanceBadge source={anyLive ? "FRED" : "SIM"} /></span>} />
 
       <KpiStrip>
         <Stat label="Named Regime" value={namedRegime.regime} sub={`${fmtPct(namedRegime.probability, 0)} prob`} tone="amber" />

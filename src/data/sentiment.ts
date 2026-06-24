@@ -136,6 +136,8 @@ export interface SentimentIndex {
 export interface SentLiveInputs {
   vix?: { score: number; detail: string };
   social?: { intel: SocialIntel; source: string };
+  junkBondDemand?: { score: number; detail: string };
+  safeHaven?: { score: number; detail: string };
 }
 
 function regimeOf(score: number): SentRegime {
@@ -164,7 +166,10 @@ function buildIndex(forWeeksAgo = 0, live?: SentLiveInputs): { score: number; co
   const vix = forWeeksAgo === 0 ? live?.vix : undefined;
   const vixScore = vix ? vix.score : clamp(rng.normal(62, 12));
   const breadthScore = clamp(rng.normal(60, 14));
-  const havenScore = clamp(rng.normal(55, 12));
+  const junk = forWeeksAgo === 0 ? live?.junkBondDemand : undefined;
+  const junkScore = junk ? junk.score : clamp(rng.normal(55, 12));
+  const haven = forWeeksAgo === 0 ? live?.safeHaven : undefined;
+  const havenScore = haven ? haven.score : clamp(rng.normal(55, 12));
 
   const components: SentComponent[] = [
     { label: "AAII bull–bear", score: Math.round(spreadToScore(a.spread)), weight: 0.2, detail: `spread ${a.spread >= 0 ? "+" : ""}${a.spread}`, source: "SURVEY", live: true },
@@ -173,8 +178,8 @@ function buildIndex(forWeeksAgo = 0, live?: SentLiveInputs): { score: number; co
     { label: "Social velocity", score: Math.round(clamp(50 + avgVel * 0.4)), weight: 0.1, detail: `${avgVel >= 0 ? "+" : ""}${avgVel.toFixed(0)}% mentions${socialLive ? ` · ${live?.social?.source}` : ""}`, source: "SOCIAL", live: socialLive },
     { label: "Put/Call (inv)", score: Math.round(putCallScore), weight: 0.1, detail: "options demand", source: "MARKET", live: false },
     { label: "Volatility (inv)", score: Math.round(vixScore), weight: 0.1, detail: vix ? vix.detail : "VIX percentile", source: "FRED", live: !!vix },
-    { label: "Breadth / momentum", score: Math.round(breadthScore), weight: 0.1, detail: "advancers", source: "MARKET", live: false },
-    { label: "Safe-haven demand", score: Math.round(havenScore), weight: 0.05, detail: "risk appetite", source: "MARKET", live: false },
+    { label: "Junk bond demand", score: Math.round(junkScore), weight: 0.1, detail: junk ? junk.detail : "HY OAS proxy", source: "FRED", live: !!junk },
+    { label: "Safe-haven demand", score: Math.round(havenScore), weight: 0.05, detail: haven ? haven.detail : "yield curve", source: "FRED", live: !!haven },
   ];
   const score = Math.round(clamp(components.reduce((s, c) => s + c.score * c.weight, 0)));
   return { score, components };
