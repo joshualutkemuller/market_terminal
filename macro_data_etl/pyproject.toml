@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "macro-data-etl"
@@ -26,6 +26,20 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4"]
 
 [project.scripts]
 macro-etl = "macro_data_etl.cli:app"
+
+[tool.setuptools]
+package-dir = { "macro_data_etl" = "." }
+packages = [
+    "macro_data_etl",
+    "macro_data_etl.src",
+    "macro_data_etl.src.analytics",
+    "macro_data_etl.src.connectors",
+    "macro_data_etl.src.extract",
+    "macro_data_etl.src.load",
+    "macro_data_etl.src.orchestration",
+    "macro_data_etl.src.transform",
+    "macro_data_etl.src.utils",
+]
 
 [tool.ruff]
 target-version = "py311"
