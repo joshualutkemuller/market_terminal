@@ -17,19 +17,19 @@
 | 1 | [Dashboard live indices](#build-1-dashboard-live-indices) | `/`, `/markets` | FRED + market_data_pipeline | [x] Complete |
 | 2 | [Liquidity early warning signals](#build-2-liquidity-early-warning-signals) | `/liquidity` | FRED (SOFR, EFFR, HY OAS) | [x] Complete |
 | 3 | [Fear/greed live components](#build-3-feargreed-live-components) | `/sentiment` | FRED (OAS, curve, momentum) | [x] Complete |
-| 4 | [Dashboard heatmap & movers from pipeline](#build-4-dashboard-heatmap--movers-from-pipeline) | `/` | market_data_pipeline | [ ] Not started |
+| 4 | [Dashboard heatmap & movers from pipeline](#build-4-dashboard-heatmap--movers-from-pipeline) | `/` | market_data_pipeline | [x] Complete |
 | 5 | [Cash optimizer live funding rates](#build-5-cash-optimizer-live-funding-rates) | `/cash-optimizer` | FRED (SOFR, CP, DFF) | [x] Complete |
 | 6 | [Reinvestment live yield curves](#build-6-reinvestment-live-yield-curves) | `/reinvestment` | FRED (Treasury curve) | [x] Complete |
-| 7 | [Markets quote board live overlay](#build-7-markets-quote-board-live-overlay) | `/markets` | market_data_pipeline | [ ] Not started |
+| 7 | [Markets quote board live overlay](#build-7-markets-quote-board-live-overlay) | `/markets` | market_data_pipeline | [x] Complete |
 | 8 | [Rates RV live z-scores](#build-8-rates-rv-live-z-scores) | `/economics/curve` | Curve history (already fetched) | [x] Complete |
 | 9 | [Macro regime live classification](#build-9-macro-regime-live-classification) | `/economics/regime` | FRED (8-10 series) | [x] Complete |
-| 10 | [Alert live triggers](#build-10-alert-live-triggers) | `/alerts` | FRED (5+ series) | [ ] Not started |
+| 10 | [Alert live triggers](#build-10-alert-live-triggers) | `/alerts` | FRED (5+ series) | [x] Complete |
 
 ### Tier 2 — Partial Upgrades (price overlays, rate columns)
 
 | # | Build | Page(s) | Pipeline | Status |
 |---|-------|---------|----------|--------|
-| 11 | [SecLending inventory price overlay](#build-11-seclending-inventory-price-overlay) | `/securities-lending` | market_data_pipeline | [ ] Not started |
+| 11 | [SecLending inventory price overlay](#build-11-seclending-inventory-price-overlay) | `/securities-lending` | market_data_pipeline | [x] Complete |
 | 12 | [Collateral & PF mark-to-market overlay](#build-12-collateral--pf-mark-to-market-overlay) | `/collateral`, `/prime-finance` | market_data_pipeline | [ ] Not started |
 | 13 | [Squeeze radar short interest (Yahoo)](#build-13-squeeze-radar-short-interest) | `/securities-lending/squeeze` | Yahoo Finance (new) | [ ] Not started |
 
@@ -267,3 +267,7 @@ These are documented but not actionable from public pipelines:
 | 2026-06-24 | — | Initial plan and handoff created | `7acf61c` |
 | 2026-06-24 | 1, 2, 5, 6 | Wire FRED into dashboard indices, liquidity EWS, cash rates, reinvestment yields | `91f9287` |
 | 2026-06-24 | 3, 8, 9 | Wire FRED into sentiment composite, rates RV z-scores, macro regime | `d2aa75f` |
+| 2026-06-24 | SIM raw | Add SIM raw level fallback for inflation drill-throughs (indicators, batch, series routes) | — |
+| 2026-06-24 | 7 | Markets quote board: expand pipeline overlay to all asset-class tabs | — |
+| 2026-06-24 | 10 | Alert live triggers: threshold evaluation against FRED series (VIX, HY OAS, 10Y, T10Y2Y) | — |
+| 2026-06-24 | 11 | SecLending inventory: overlay live market prices on market value column | — |

@@ -1,6 +1,6 @@
 import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
-import { FRED_CATALOG, getSeriesHistory, resolveFred, type FredSeries } from "@/data/econSeries";
+import { FRED_CATALOG, getSeriesHistory, getSeriesHistoryRaw, resolveFred, type FredSeries } from "@/data/econSeries";
 import { getSnapshotObservations, getSnapshotRawObservations } from "@/data/econSnapshot";
 
 type EconSource = "FRED" | "SNAPSHOT" | "SIM";
@@ -120,7 +120,10 @@ export async function GET() {
           rawSnap ? rawSnap as { date: string; value: number }[] : undefined
         );
       }
-      return buildPoint(s, getSeriesHistory(s.id, 24), "SIM");
+      const simHist = getSeriesHistory(s.id, 24);
+      const resolved = resolveFred(s.id);
+      const simRaw = resolved.units !== "lin" ? getSeriesHistoryRaw(s.id, 24) ?? undefined : undefined;
+      return buildPoint(s, simHist, "SIM", simRaw);
     })
   );
   const source: EconSource = out.some((o) => o.source === "FRED")

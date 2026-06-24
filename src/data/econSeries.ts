@@ -313,6 +313,53 @@ export function getSeriesHistory(id: string, n = 120): Observation[] {
   return out;
 }
 
+const RAW_LEVEL_ANCHORS: Record<string, number> = {
+  CPIAUCSL: 315.5,
+  CPILFESL: 320.2,
+  PCEPI: 124.8,
+  PCEPILFE: 126.5,
+  M2SL: 21200,
+  M1SL: 18400,
+  RSAFS: 724,
+  INDPRO: 104.2,
+  CES0500000003: 35.5,
+  REVOLSL: 1320,
+  NEWORDER: 589,
+  GDPC1: 23100,
+};
+
+/**
+ * Synthetic raw index-level history for series that normally display as growth
+ * rates (pc1/pch/pca). Uses a reasonable base level and walks it with small
+ * monthly changes consistent with the series' displayed YoY rate. This prevents
+ * the drill-through from computing "percent changes of percent changes" when
+ * the SIM fallback is active (no snapshot, no FRED key).
+ */
+export function getSeriesHistoryRaw(id: string, n = 120): Observation[] | null {
+  const s = seriesById(id);
+  if (!s) return null;
+  const anchor = RAW_LEVEL_ANCHORS[id];
+  if (anchor == null) return null;
+
+  const rng = new Rng(`econ-raw-${id}`);
+  const step = stepMs(s.freq);
+  const monthlyDrift = s.level / 1200;
+  const raw: number[] = [];
+  let x = anchor;
+  for (let i = 0; i < n; i++) {
+    x = x * (1 - monthlyDrift - rng.normal(0, 0.001));
+    raw.push(x);
+  }
+  raw.reverse();
+  const scale = anchor / raw[raw.length - 1];
+  const out: Observation[] = [];
+  for (let i = 0; i < n; i++) {
+    const date = new Date(ECON_TODAY.getTime() - (n - 1 - i) * step);
+    out.push({ date: date.toISOString().slice(0, 10), value: Number((raw[i] * scale).toFixed(2)) });
+  }
+  return out;
+}
+
 export interface IndicatorRow {
   id: string;
   label: string;

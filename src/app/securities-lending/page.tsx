@@ -15,12 +15,16 @@ import {
   getBorrowDemand,
   getSLSummary,
   getRevenueSankey,
+  mergeLiveInventoryPrices,
   type InventoryRow,
   type LoanRow,
   type BorrowRequest,
+  type PipelinePriceMap,
 } from "@/data/securitiesLending";
 import { fmtAbbr, fmtUsdAbbr, fmtSignedPct, fmtNum, fmtInt, pnlClass } from "@/lib/format";
 import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
+import { useMarketView } from "@/lib/useMarket";
+import type { SnapshotCard } from "@/data/marketPipeline";
 
 const CLASS_TONE: Record<InventoryRow["classification"], "up" | "down" | "amber" | "neutral" | "blue" | "violet"> = {
   GC: "neutral",
@@ -64,11 +68,23 @@ function utilColor(util: number): string {
 }
 
 export default function SecuritiesLending() {
-  const inventory = getInventory();
+  const rawInventory = getInventory();
   const loanBook = getLoanBook();
   const demand = getBorrowDemand();
   const summary = getSLSummary();
   const sankey = getRevenueSankey();
+
+  const { data: marketData, source: mktSource } = useMarketView<{ cards: SnapshotCard[] }>("market");
+  const priceMap: PipelinePriceMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of marketData?.cards ?? []) {
+      if (c.price != null) m.set(c.series_id, c.price);
+    }
+    return m;
+  }, [marketData]);
+  const inventory = useMemo(() => mergeLiveInventoryPrices(rawInventory, priceMap), [rawInventory, priceMap]);
+  const hasPipelinePrices = priceMap.size > 0 && mktSource !== "SNAPSHOT" && mktSource !== "LOADING";
+  const badgeSource = hasPipelinePrices ? mktSource : "SIM";
 
   const [source, setSource] = useState<"ALL" | InventoryRow["source"]>("ALL");
   const [classFilter, setClassFilter] = useState<string>("ALL");
@@ -185,7 +201,7 @@ export default function SecuritiesLending() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="SLAB" title="Securities Lending" desc="Inventory · Loan Book · Borrow Demand · Revenue" right={<ProvenanceBadge source="SIM" />} />
+      <PageHeader code="SLAB" title="Securities Lending" desc="Inventory · Loan Book · Borrow Demand · Revenue" right={<ProvenanceBadge source={badgeSource} />} />
 
       <KpiStrip>
         <Stat label="Day Revenue" value={fmtUsdAbbr(summary.dayRevenue)} sub={<span className={pnlClass(summary.dayChgPct)}>{fmtSignedPct(summary.dayChgPct)} vs prior</span>} tone="amber" />

@@ -6,8 +6,11 @@ import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { BarChart } from "@/components/charts/BarChart";
 import { ProgressBar } from "@/components/charts/Radial";
 import { useTick } from "@/lib/hooks";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import {
   getAlerts,
+  evaluateLiveAlerts,
+  ALERT_FRED_IDS,
   SEVERITY_TONE,
   CATEGORY_LABEL,
   type Alert,
@@ -44,7 +47,15 @@ const RULE_GROUPS: { category: AlertCategory; rules: string[] }[] = [
 
 export default function AlertCenter() {
   const tick = useTick(3000);
-  const all = useMemo(() => getAlerts(), []);
+  const { data: liveData, source: liveSource } = useLiveSeriesSet(ALERT_FRED_IDS, "lin", 5);
+  const simAlerts = useMemo(() => getAlerts(), []);
+  const liveAlerts = useMemo(() => evaluateLiveAlerts(liveData), [liveData]);
+  const all = useMemo(() => {
+    const merged = [...liveAlerts, ...simAlerts];
+    return merged.sort((a, b) => a.minsAgo - b.minsAgo);
+  }, [liveAlerts, simAlerts]);
+  const hasLive = liveAlerts.length > 0;
+  const alertSource = hasLive && liveSource !== "SIM" ? liveSource : "SIM";
 
   const [sevFilter, setSevFilter] = useState<AlertSeverity | "ALL">("ALL");
   const [catFilter, setCatFilter] = useState<AlertCategory | "ALL">("ALL");
@@ -77,7 +88,7 @@ export default function AlertCenter() {
         code="ALRT"
         title="Alert Center"
         desc="Streaming Risk & Operations Alerts"
-        right={<span className="flex items-center gap-1"><ProvenanceBadge source="SIM" /><Tag tone="down">{all.filter((a) => a.severity === "CRITICAL" && !isAcked(a)).length} CRIT</Tag></span>}
+        right={<span className="flex items-center gap-1"><ProvenanceBadge source={alertSource} /><Tag tone="down">{all.filter((a) => a.severity === "CRITICAL" && !isAcked(a)).length} CRIT</Tag></span>}
       />
 
       <KpiStrip>
