@@ -44,6 +44,7 @@ import EconFunding from "./app/economics/funding/page";
 import EconMotion from "./app/economics/motion/page";
 import EconBenchmark from "./app/economics/benchmark/page";
 import EconUtilization from "./app/economics/utilization/page";
+import EconYieldCurve from "./app/economics/yield-curve/page";
 
 import NotFound from "./app/not-found";
 
@@ -100,6 +101,7 @@ export function App() {
           <Route path="motion" element={<EconMotion />} />
           <Route path="benchmark" element={<EconBenchmark />} />
           <Route path="utilization" element={<EconUtilization />} />
+          <Route path="yield-curve" element={<EconYieldCurve />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />
