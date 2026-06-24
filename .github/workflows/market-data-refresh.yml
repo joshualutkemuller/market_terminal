@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       start_date:
-        description: "Optional ISO start date. Defaults to 14 days ago."
+        description: "Optional ISO start date. Defaults to a full backfill (2015-01-01)."
         required: false
         type: string
   schedule:
@@ -21,9 +21,9 @@ jobs:
       MDP_ALLOW_YAHOO: "1"
       MDP_MARKET_REFRESH_LOOKBACK_DAYS: "14"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -37,9 +37,12 @@ jobs:
 
       - name: Refresh DuckDB analytics
         run: |
+          # GitHub Actions starts with an empty DuckDB each run (the file isn't
+          # persisted), so always backfill full history — otherwise publish-views
+          # would overwrite Neon with only a short recent window.
           START_DATE="${{ inputs.start_date }}"
           if [ -z "$START_DATE" ]; then
-            START_DATE="$(date -u -d '14 days ago' +%F)"
+            START_DATE="2015-01-01"
           fi
           PYTHONPATH="$GITHUB_WORKSPACE" python -m market_data_pipeline.cli run --start "$START_DATE"
 
