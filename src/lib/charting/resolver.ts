@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchJson } from "@/lib/fetchCache";
 import { type SeriesRef, type RangePreset, rangeMonths } from "./spec";
-import { applyPointTransform, applyWindowTransform, type Transform } from "./transforms";
+import { POINT_TRANSFORMS, applyPointTransform, applyWindowTransform, type Transform } from "./transforms";
 
 export interface ResolvedSeries {
   ref: SeriesRef;
@@ -58,6 +58,7 @@ export function useChartSeries(refs: SeriesRef[], range: RangePreset, transform:
       refs.map((r) => {
         const qs = new URLSearchParams({ source: r.source, id: r.id });
         if (r.assetClass) qs.set("assetClass", r.assetClass);
+        if ((r.source === "econ" || r.source === "fred") && POINT_TRANSFORMS.includes(transform)) qs.set("units", "lin");
         return fetchJson<any>(`/api/chart/series?${qs}`)
           .then(
             (j): RawSeries => ({

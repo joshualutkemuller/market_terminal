@@ -28,6 +28,9 @@ const pct = (now: number | undefined, then: number | undefined, decimals = 1): n
   return Number((((now - then) / Math.abs(then)) * 100).toFixed(decimals));
 };
 
+const ppDelta = (now: number | null, then: number | null, decimals = 2): number | null =>
+  now != null && then != null ? Number((now - then).toFixed(decimals)) : null;
+
 function buildPoint(
   s: FredSeries,
   hist: { date: string; value: number }[],
@@ -42,9 +45,13 @@ function buildPoint(
   const priorRaw = rawValues[rawValues.length - 2];
   const qoqRaw = s.freq === "M" ? rawValues[rawValues.length - 4] : s.freq === "Q" ? priorRaw : undefined;
   const yoyRaw = s.freq === "M" ? rawValues[rawValues.length - 13] : s.freq === "Q" ? rawValues[rawValues.length - 5] : undefined;
+  const priorQoqRaw = s.freq === "M" ? rawValues[rawValues.length - 5] : s.freq === "Q" ? rawValues[rawValues.length - 3] : undefined;
+  const priorYoyRaw = s.freq === "M" ? rawValues[rawValues.length - 14] : s.freq === "Q" ? rawValues[rawValues.length - 6] : undefined;
   const canDerivePeriodRates = rawHist != null || (!s.unit.includes("y/y") && !s.unit.includes("m/m"));
   const mom = canDerivePeriodRates && (s.freq === "M" || s.freq === "Q") ? pct(rawValue, priorRaw, 2) : null;
+  const priorMom = canDerivePeriodRates && (s.freq === "M" || s.freq === "Q") ? pct(priorRaw, rawValues[rawValues.length - 3], 2) : null;
   const qoq = canDerivePeriodRates ? s.freq === "M" ? pct(rawValue, qoqRaw, 2) : s.freq === "Q" ? pct(rawValue, qoqRaw, 2) : null : null;
+  const priorQoq = canDerivePeriodRates ? s.freq === "M" ? pct(priorRaw, priorQoqRaw, 2) : s.freq === "Q" ? pct(priorRaw, priorQoqRaw, 2) : null : null;
   // For YoY-transformed indicators the displayed value is the YoY reading; for
   // level indicators we derive YoY from raw levels when enough history exists.
   const yoy = s.unit.includes("y/y") && !rawHist
@@ -54,6 +61,11 @@ function buildPoint(
     : s.freq === "Q" && rawValues.length >= 5
     ? pct(rawValue, rawValues[rawValues.length - 5], 1)
     : null;
+  const priorYoy = canDerivePeriodRates && s.freq === "M" && rawValues.length >= 14
+    ? pct(priorRaw, priorYoyRaw, 1)
+    : canDerivePeriodRates && s.freq === "Q" && rawValues.length >= 6
+    ? pct(priorRaw, priorYoyRaw, 1)
+    : null;
   return {
     id: s.id,
     value: Number(value.toFixed(s.decimals)),
@@ -61,11 +73,11 @@ function buildPoint(
     change: Number((value - prior).toFixed(s.decimals)),
     changePct: pct(value, prior, 2),
     mom,
-    momDelta: rawValue != null && priorRaw != null ? Number((rawValue - priorRaw).toFixed(s.decimals)) : null,
+    momDelta: ppDelta(mom, priorMom),
     qoq,
-    qoqDelta: rawValue != null && qoqRaw != null ? Number((rawValue - qoqRaw).toFixed(s.decimals)) : null,
+    qoqDelta: ppDelta(qoq, priorQoq),
     yoy,
-    yoyDelta: rawValue != null && yoyRaw != null ? Number((rawValue - yoyRaw).toFixed(s.decimals)) : null,
+    yoyDelta: ppDelta(yoy, priorYoy),
     monthlyPrint: s.category === "INFLATION" && (s.freq === "M" || s.freq === "Q") ? mom : null,
     asOf: hist[hist.length - 1]?.date ?? "",
     history: values.map((v) => Number(v.toFixed(s.decimals))),

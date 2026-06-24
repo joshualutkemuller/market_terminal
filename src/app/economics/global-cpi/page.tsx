@@ -53,7 +53,7 @@ export default function GlobalInflation() {
   const rows = region === "ALL" ? all : all.filter((c) => c.region === region);
 
   const drill = (row: CountryInflation) =>
-    open({ id: row.fredId, label: `${row.country} CPI`, units: "pc1", unitLabel: "% YoY", decimals: 1 });
+    open({ id: row.fredId, label: `${row.country} CPI`, units: "lin", unitLabel: "level · derived MoM/YoY", decimals: 2, growthMetrics: true });
 
   const trendTag = (t: CountryInflation["trend"]) =>
     t === "RISING" ? (

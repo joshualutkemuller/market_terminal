@@ -17,7 +17,7 @@ import {
 } from "@/data/inflation";
 import { fmtNum, fmtSigned, fmtSignedPct } from "@/lib/format";
 
-// Metric the user is viewing — drives emphasis + drill units.
+// Metric the user is viewing — drives emphasis in the table.
 type Metric = "index" | "mom" | "yoy" | "momAccel" | "yoyAccel";
 const METRICS: { key: Metric; label: string }[] = [
   { key: "index", label: "Index reading" },
@@ -28,22 +28,6 @@ const METRICS: { key: Metric; label: string }[] = [
 ];
 
 type Basket = "CPI" | "PCE";
-
-/** Drill units/label per the global metric toggle. ΔMoM/ΔYoY drill to the
- *  underlying rate series (MoM / YoY) since acceleration has no FRED transform. */
-function drillUnits(m: Metric): { units: string; unitLabel: string; decimals: number } {
-  switch (m) {
-    case "index":
-      return { units: "lin", unitLabel: "Index", decimals: 2 };
-    case "mom":
-    case "momAccel":
-      return { units: "pch", unitLabel: "% MoM", decimals: 2 };
-    case "yoy":
-    case "yoyAccel":
-    default:
-      return { units: "pc1", unitLabel: "% YoY", decimals: 2 };
-  }
-}
 
 /** Inflation sense: hotter/rising prices read red (down tone), cooling reads green (up). */
 function inflClass(n: number): string {
@@ -85,8 +69,7 @@ export default function InflationExplorer() {
   };
 
   const drillItem = (it: InflationItem) => {
-    const u = drillUnits(metric);
-    open({ id: it.id, label: it.label, units: u.units, unitLabel: u.unitLabel, decimals: u.decimals });
+    open({ id: it.id, label: it.label, units: "lin", unitLabel: "level · derived MoM/YoY", decimals: 2, growthMetrics: true });
   };
 
   // KPI tone: high/rising inflation reads down/red, cooling reads up/green.
@@ -307,8 +290,7 @@ export default function InflationExplorer() {
                 month (acceleration). Positive = hotter.
               </p>
               <p>
-                Click any item to drill to its rolling 24 months — drill units follow the selected metric (
-                <span className="text-term-amber">{drillUnits(metric).unitLabel}</span>).
+                Click any item to drill to raw index levels with derived <span className="text-term-amber">MoM / YoY / ΔMoM / ΔYoY</span>.
               </p>
             </div>
           </div>
