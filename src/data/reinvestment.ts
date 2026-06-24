@@ -86,6 +86,30 @@ export function getReinvestmentPositions(): ReinvestmentPosition[] {
   });
 }
 
+export type LiveCurveData = Record<string, { observations: { date: string; value: number }[]; source: string }>;
+
+const YIELD_MAP: Record<string, string> = {
+  "O/N Reverse Repo - UST": "SOFR",
+  "Tri-Party GC Repo": "SOFR",
+  "T-Bills 1-3M": "DGS3MO",
+  "Agency Discount Notes": "DGS3MO",
+  "A1/P1 Commercial Paper": "DCPF3M",
+  "Bank Time Deposits": "DGS6MO",
+  "Ultra-Short Credit ETF Proxy": "DGS1",
+};
+
+export function mergeLiveYields(positions: ReinvestmentPosition[], fred: LiveCurveData): ReinvestmentPosition[] {
+  return positions.map((p) => {
+    const fredId = YIELD_MAP[p.instrument];
+    if (!fredId) return p;
+    const obs = fred[fredId]?.observations;
+    if (!obs?.length) return p;
+    const liveRate = obs[obs.length - 1].value;
+    const spread = p.instrument === "A1/P1 Commercial Paper" ? 15 : p.instrument === "Ultra-Short Credit ETF Proxy" ? 28 : p.instrument === "Agency Discount Notes" ? -5 : 0;
+    return { ...p, yieldBps: liveRate * 100 + spread };
+  });
+}
+
 export function getReinvestmentSummary(): ReinvestmentSummary {
   const positions = getReinvestmentPositions();
   const cashCollateral = positions.reduce((a, p) => a + p.allocation, 0);

@@ -8,6 +8,8 @@
 import { Rng } from "@/lib/rng";
 import { type CurveSnapshot } from "./econCurve";
 
+export const DATA_SOURCE = "SIM" as const;
+
 // ── Butterfly Spreads ───────────────────────────────────────────────────────
 
 export interface ButterflySpread {

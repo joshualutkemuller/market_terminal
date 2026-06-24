@@ -1,4 +1,5 @@
 
+import { useState, useMemo } from "react";
 import clsx from "clsx";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
@@ -7,6 +8,8 @@ import { BarChart } from "@/components/charts/BarChart";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { ProgressBar } from "@/components/charts/Radial";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
+import { TermSelect } from "@/components/ui/TermSelect";
 import {
   getTraderScores,
   getExecutions,
@@ -45,6 +48,18 @@ export default function TradingDesk() {
   const execRiskRows = computeExecutionRisk(cond);
   const deskStance = computeDeskStance(cond);
   const volLiq = computeVolLiquidity(execRiskRows);
+
+  const [execView, setExecView] = useState("ALL");
+  const [traderSort, setTraderSort] = useState("revenueMtd");
+  const filteredExecRisk = useMemo(() => {
+    if (execView === "ALL") return execRiskRows;
+    if (execView === "CAUTIOUS+") return execRiskRows.filter((r) => r.riskLevel !== "Normal");
+    return execRiskRows.filter((r) => r.riskLevel === "Stress" || r.riskLevel === "Wide");
+  }, [execRiskRows, execView]);
+  const sortedTraders = useMemo(() => {
+    const key = traderSort as keyof TraderScore;
+    return [...traders].sort((a, b) => (b[key] as number) - (a[key] as number));
+  }, [traders, traderSort]);
 
   const deskRevDay = traders.reduce((a, t) => a + t.revenueDay, 0);
   const deskPnlDay = traders.reduce((a, t) => a + t.pnlDay, 0);
@@ -216,14 +231,15 @@ export default function TradingDesk() {
           title="Execution Risk by Symbol"
           code="ERISK"
           accent
-          right={<span className="text-3xs text-term-text-mute">realized vol · volume z-score · gap risk · trend regime · execution risk level</span>}
+          toolbar={<TermToggleGroup label="View" value={execView} onChange={setExecView} options={[{ value: "ALL", label: "All" }, { value: "CAUTIOUS+", label: "Cautious+" }, { value: "STRESSED", label: "Stressed" }]} size="sm" />}
+          right={<span className="text-3xs text-term-text-mute">{filteredExecRisk.length}/{execRiskRows.length} symbols</span>}
         >
-          <DataGrid columns={execRiskCols} rows={execRiskRows} rowKey={(r) => r.symbol} maxHeight="400px" initialSort={{ key: "risk", dir: "desc" }} zebra />
+          <DataGrid columns={execRiskCols} rows={filteredExecRisk} rowKey={(r) => r.symbol} maxHeight="400px" initialSort={{ key: "risk", dir: "desc" }} zebra />
         </Panel>
 
         {/* Trader scorecards */}
-        <Panel title="Trader Scorecards" code="SCORE" right={<span className="text-3xs text-term-text-mute">ranked by MTD revenue</span>}>
-          <DataGrid columns={traderCols} rows={traders} rowKey={(t) => t.id} maxHeight="360px" initialSort={{ key: "revenueMtd", dir: "desc" }} zebra />
+        <Panel title="Trader Scorecards" code="SCORE" toolbar={<TermSelect value={traderSort} onChange={setTraderSort} options={[{ value: "revenueMtd", label: "Revenue MTD" }, { value: "pnlMtd", label: "P&L MTD" }, { value: "sharpe", label: "Sharpe" }]} size="sm" />} right={<span className="text-3xs text-term-text-mute">ranked by {traderSort === "revenueMtd" ? "MTD revenue" : traderSort === "pnlMtd" ? "MTD P&L" : "Sharpe"}</span>}>
+          <DataGrid columns={traderCols} rows={sortedTraders} rowKey={(t) => t.id} maxHeight="360px" initialSort={{ key: traderSort, dir: "desc" }} zebra />
         </Panel>
 
         {/* Execution analytics */}

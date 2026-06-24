@@ -1,3 +1,5 @@
+export const DATA_SOURCE = "SIM" as const;
+
 /**
  * Electronic Trading Market Conditions Analytics.
  *

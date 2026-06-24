@@ -2,6 +2,8 @@ import { Rng } from "@/lib/rng";
 import { HEDGE_FUNDS } from "./universe";
 import { type MarketConditions } from "./marketConditions";
 
+export const DATA_SOURCE = "SIM" as const;
+
 /** Prime Finance — hedge fund financing exposure, client analytics, risk. */
 
 export interface PrimeClient {

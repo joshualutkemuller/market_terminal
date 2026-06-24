@@ -1,4 +1,5 @@
 
+import { useState, useMemo } from "react";
 import clsx from "clsx";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
@@ -7,6 +8,8 @@ import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { Donut, Gauge, ProgressBar } from "@/components/charts/Radial";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
+import { TermSelect } from "@/components/ui/TermSelect";
 import {
   getPrimeClients,
   getPrimeSummary,
@@ -50,6 +53,17 @@ export default function PrimeFinancePage() {
   const opps = getFinancingOpportunities();
 
   const totalSavings = opps.reduce((a, o) => a + o.savings, 0);
+
+  const [regionFilter, setRegionFilter] = useState("ALL");
+  const [clientSort, setClientSort] = useState("financingRevenue");
+  const allRegions = useMemo(() => [...new Set(clients.map((c) => c.region))].sort(), [clients]);
+  const regionOptions = useMemo(() => [{ value: "ALL", label: "All" }, ...allRegions.map((r) => ({ value: r, label: r }))], [allRegions]);
+  const filteredClients = useMemo(() => {
+    let rows = regionFilter === "ALL" ? clients : clients.filter((c) => c.region === regionFilter);
+    const key = clientSort as keyof PrimeClient;
+    return [...rows].sort((a, b) => (b[key] as number) - (a[key] as number));
+  }, [clients, regionFilter, clientSort]);
+
   const topRev = clients.slice(0, 8);
   const topBs = [...clients].sort((a, b) => b.balanceSheet - a.balanceSheet).slice(0, 8);
 
@@ -252,8 +266,8 @@ export default function PrimeFinancePage() {
         </Panel>
 
         {/* Top Clients */}
-        <Panel title="Top Clients" code="CLNT" className="xl:col-span-2" right={<Tag tone="neutral">{clients.length} funds</Tag>}>
-          <DataGrid columns={clientCols} rows={clients} rowKey={(c) => c.id} maxHeight="340px" initialSort={{ key: "financingRevenue", dir: "desc" }} zebra />
+        <Panel title="Top Clients" code="CLNT" className="xl:col-span-2" toolbar={<><TermToggleGroup label="Region" value={regionFilter} onChange={setRegionFilter} options={regionOptions} size="sm" /><TermSelect value={clientSort} onChange={setClientSort} options={[{ value: "financingRevenue", label: "Revenue" }, { value: "gross", label: "Gross" }, { value: "roa", label: "RoA" }]} size="sm" /></>} right={<Tag tone="neutral">{filteredClients.length} funds</Tag>}>
+          <DataGrid columns={clientCols} rows={filteredClients} rowKey={(c) => c.id} maxHeight="340px" initialSort={{ key: clientSort, dir: "desc" }} zebra />
         </Panel>
 
         {/* Hedge Fund Analytics */}

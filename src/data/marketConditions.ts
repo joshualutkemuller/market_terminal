@@ -1,3 +1,5 @@
+export const DATA_SOURCE = "SIM" as const;
+
 /**
  * Shared cross-asset market conditions snapshot.
  *

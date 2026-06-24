@@ -1,5 +1,7 @@
 import { Rng } from "@/lib/rng";
 
+export const DATA_SOURCE = "SIM" as const;
+
 /** Macro regime to desk playbook analytics. */
 
 export type RegimeState = "EASING" | "TIGHTENING" | "RISK_ON" | "RISK_OFF" | "STAGFLATION" | "RECESSION_WATCH";

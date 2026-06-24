@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { BarChart } from "@/components/charts/BarChart";
 import { ProgressBar } from "@/components/charts/Radial";
@@ -104,7 +105,7 @@ export default function OptimizationCenter() {
         code="OPT"
         title="Optimization Center"
         desc="Solver Runs · Duals · Impact Analysis"
-        right={<Tag tone="amber">{activeRuns} RUNNING</Tag>}
+        right={<span className="flex items-center gap-1"><ProvenanceBadge source="SIM" /><Tag tone="amber">{activeRuns} RUNNING</Tag></span>}
       />
 
       <KpiStrip>

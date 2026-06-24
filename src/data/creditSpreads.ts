@@ -1,5 +1,7 @@
 import { Rng } from "@/lib/rng";
 
+export const DATA_SOURCE = "SIM" as const;
+
 /**
  * Credit spreads deep-dive — ICE BofA OAS by rating bucket, IG/HY aggregates,
  * quality & compression spreads, historical percentiles and stress episodes.

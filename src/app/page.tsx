@@ -1,7 +1,9 @@
 
+import { useMemo } from "react";
 import Link from "@/components/Link";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { LineChart } from "@/components/charts/LineChart";
 import { Treemap } from "@/components/charts/Treemap";
@@ -13,6 +15,8 @@ import { getCashSummary } from "@/data/cash";
 import { getOptimizationRuns } from "@/data/optimization";
 import { getIndices, getHeatmap, getMovers } from "@/data/markets";
 import { getActiveAlerts, SEVERITY_TONE, CATEGORY_LABEL, type Alert } from "@/data/alerts";
+import { INDEX_FRED_IDS, mergeLiveIndices } from "@/data/markets";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import { fmtUsdAbbr, fmtSignedPct, fmtNum, pnlClass, fmtAbbr } from "@/lib/format";
 import { NAV } from "@/lib/nav";
 
@@ -22,10 +26,14 @@ export default function CommandCenter() {
   const coll = getCollateralSummary();
   const cash = getCashSummary();
   const runs = getOptimizationRuns();
-  const indices = getIndices();
+  const simIndices = getIndices();
   const heat = getHeatmap();
   const movers = getMovers();
   const alerts = getActiveAlerts().slice(0, 7);
+
+  const { data: indexFred } = useLiveSeriesSet(INDEX_FRED_IDS, "lin", 30);
+  const anyIndexLive = INDEX_FRED_IDS.some((id) => indexFred[id]?.source === "FRED");
+  const indices = useMemo(() => mergeLiveIndices(simIndices, indexFred), [simIndices, indexFred]);
 
   const alertCols: Column<Alert>[] = [
     { key: "sev", header: "", width: "8px", render: (a) => <span className={`inline-block h-2 w-2 rounded-full ${a.severity === "CRITICAL" ? "bg-term-down" : a.severity === "HIGH" ? "bg-term-amber" : "bg-term-blue"}`} /> },
@@ -37,7 +45,7 @@ export default function CommandCenter() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="HOME" title="Command Center" desc="Cross-desk securities finance intelligence" />
+      <PageHeader code="HOME" title="Command Center" desc="Cross-desk securities finance intelligence" right={<ProvenanceBadge source={anyIndexLive ? "FRED" : "SNAPSHOT"} />} />
 
       <KpiStrip>
         <Stat label="SL Revenue (Day)" value={fmtUsdAbbr(sl.dayRevenue)} sub={<span className={pnlClass(sl.dayChgPct)}>{fmtSignedPct(sl.dayChgPct)} vs prior</span>} tone="amber" />

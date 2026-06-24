@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
 import { BarChart } from "@/components/charts/BarChart";
 import { ProgressBar } from "@/components/charts/Radial";
@@ -121,7 +122,7 @@ export default function CollateralPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="COLL" title="Collateral Management" desc="Margin · Optimization · Constraints · What-If" />
+      <PageHeader code="COLL" title="Collateral Management" desc="Margin · Optimization · Constraints · What-If" right={<ProvenanceBadge source="SIM" />} />
 
       <KpiStrip>
         <Stat label="Total IM" value={fmtUsdAbbr(summary.totalIM)} sub="initial margin" />

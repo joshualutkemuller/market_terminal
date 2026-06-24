@@ -135,6 +135,38 @@ export function getEarlyWarningSignals(): EarlyWarningSignal[] {
   ];
 }
 
+export type LiveEWSData = Record<string, { observations: { date: string; value: number }[]; source: string }>;
+
+export function mergeLiveEWS(signals: EarlyWarningSignal[], fred: LiveEWSData): EarlyWarningSignal[] {
+  const last = (id: string) => {
+    const obs = fred[id]?.observations;
+    return obs?.length ? obs[obs.length - 1].value : null;
+  };
+  const lastN = (id: string, n: number) => {
+    const obs = fred[id]?.observations;
+    return obs && obs.length >= n ? obs.slice(-n).map((o) => o.value) : null;
+  };
+
+  return signals.map((s) => {
+    if (s.signal === "SOFR - EFFR spread") {
+      const sofr = last("SOFR");
+      const effr = last("EFFR");
+      if (sofr != null && effr != null) {
+        const spread = (sofr - effr) * 100;
+        return { ...s, latest: Math.round(spread * 10) / 10, status: Math.abs(spread) >= s.threshold ? "RISK" : Math.abs(spread) >= s.threshold * 0.7 ? "WATCH" : "OK" };
+      }
+    }
+    if (s.signal === "HY OAS 5d move") {
+      const hist = lastN("BAMLH0A0HYM2", 6);
+      if (hist) {
+        const move = (hist[hist.length - 1] - hist[0]) * 100;
+        return { ...s, latest: Math.round(move * 10) / 10, status: Math.abs(move) >= s.threshold ? "RISK" : Math.abs(move) >= s.threshold * 0.7 ? "WATCH" : "OK" };
+      }
+    }
+    return s;
+  });
+}
+
 export function getLiquiditySummary(): LiquiditySummary {
   const buckets = getLiquidityBuckets();
   const facilities = getFundingFacilities();

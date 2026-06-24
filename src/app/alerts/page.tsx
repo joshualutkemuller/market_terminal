@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { BarChart } from "@/components/charts/BarChart";
 import { ProgressBar } from "@/components/charts/Radial";
 import { useTick } from "@/lib/hooks";
@@ -76,7 +77,7 @@ export default function AlertCenter() {
         code="ALRT"
         title="Alert Center"
         desc="Streaming Risk & Operations Alerts"
-        right={<Tag tone="down">{all.filter((a) => a.severity === "CRITICAL" && !isAcked(a)).length} CRIT</Tag>}
+        right={<span className="flex items-center gap-1"><ProvenanceBadge source="SIM" /><Tag tone="down">{all.filter((a) => a.severity === "CRITICAL" && !isAcked(a)).length} CRIT</Tag></span>}
       />
 
       <KpiStrip>
