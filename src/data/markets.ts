@@ -59,6 +59,8 @@ export interface IndexQuote {
   chg: number;
   chgPct: number;
   spark: number[];
+  asOf?: string;
+  source?: "FRED" | "PIPELINE" | "SIM";
 }
 
 export function getIndices(): IndexQuote[] {
@@ -108,7 +110,36 @@ export function mergeLiveIndices(sim: IndexQuote[], fred: LiveFredData): IndexQu
     const chg = latest - prior;
     const chgPct = prior !== 0 ? (chg / prior) * 100 : 0;
     const spark = obs.slice(-30).map((o) => o.value);
-    return { ...q, last: latest, chg, chgPct, spark };
+    const asOf = obs[obs.length - 1].date;
+    return { ...q, last: latest, chg, chgPct, spark, asOf, source: "FRED" as const };
+  });
+}
+
+export function latestFredAsOf(fred: LiveFredData): string | null {
+  let latest: string | null = null;
+  for (const id of Object.keys(fred)) {
+    const obs = fred[id]?.observations;
+    if (!obs?.length) continue;
+    const d = obs[obs.length - 1].date;
+    if (!latest || d > latest) latest = d;
+  }
+  return latest;
+}
+
+export function mergeSnapshotIndices(sim: IndexQuote[], cards: PipelineCard[], asOf: string | null): IndexQuote[] {
+  const cardMap = new Map(cards.map((c) => [c.series_id, c]));
+  const SNAP_MAP: Record<string, string> = {
+    SPX: "SPY", NDX: "QQQ", INDU: "DIA", RUT: "IWM", BTC: "IBIT",
+  };
+  return sim.map((q) => {
+    const snapId = SNAP_MAP[q.symbol];
+    if (!snapId) return q;
+    const card = cardMap.get(snapId);
+    if (!card?.price || card.ret_1d == null) return q;
+    const chgPct = card.ret_1d * 100;
+    const prior = card.price / (1 + card.ret_1d);
+    const chg = card.price - prior;
+    return { ...q, last: card.price, chg, chgPct, source: "PIPELINE" as const, asOf: asOf ?? undefined };
   });
 }
 

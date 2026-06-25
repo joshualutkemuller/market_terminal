@@ -40,6 +40,7 @@ import {
 } from "@/data/fundingCost";
 import {
   computeUtilizationSnapshot,
+  type UtilGroupMetrics,
 } from "@/data/utilizationAnalytics";
 import { getInventory } from "@/data/securitiesLending";
 
@@ -116,7 +117,10 @@ export default function RateAnalysisDashboard() {
 
   // ── UTIL ──────────────────────────────────────────────────────────
   const inventory = useMemo(() => getInventory(), []);
-  const utilSnapshot = useMemo(() => computeUtilizationSnapshot(inventory, "all"), [inventory]);
+  const utilSnapshot = useMemo(() => {
+    const snap = computeUtilizationSnapshot(inventory, "all");
+    return snap["ALL"] ?? { utilization: 0, totalOnLoan: 0, totalAvailable: 0, avgFeeBps: 0, nameCount: 0, htbCount: 0, specialCount: 0 };
+  }, [inventory]);
 
   // ── Sparkline data ────────────────────────────────────────────────
   const sofrHist = useMemo(() => (map["SOFR"] ?? []).slice(-60).map((o) => o.value), [map]);
@@ -153,7 +157,7 @@ export default function RateAnalysisDashboard() {
         <Stat label="Curve Regime" value={curveSummary.regime} tone={CURVE_REGIME_TONE[curveSummary.regime]} />
         <Stat label="Vol Regime" value={volSummary.regime} tone={VOL_REGIME_TONE[volSummary.regime]} />
         <Stat label="Funding" value={fundingRegime.regime} tone={FUND_REGIME_TONE[fundingRegime.regime]} />
-        <Stat label="Utilization" value={`${utilSnapshot.overall.utilization.toFixed(1)}%`} tone={utilSnapshot.overall.utilization > 85 ? "amber" : "neutral"} />
+        <Stat label="Utilization" value={`${utilSnapshot.utilization.toFixed(1)}%`} tone={utilSnapshot.utilization > 85 ? "amber" : "neutral"} />
       </KpiStrip>
 
       <div className="mt-1 grid grid-cols-12 gap-1 px-1 pb-4">
@@ -221,7 +225,7 @@ export default function RateAnalysisDashboard() {
               <RateCard label="HY OAS" value={bmrkSummary.hyOas} chgBps={null} hist={(map["BAMLH0A0HYM2"] ?? []).slice(-60).map((o) => o.value)} unit="bps" />
               <RateCard label="30Y Mortgage" value={bmrkSummary.mtg30} chgBps={null} hist={(map["MORTGAGE30US"] ?? []).slice(-60).map((o) => o.value)} unit="%" />
               <RateCard label="Secured (AA)" value={fundingSummary.aaAllIn} chgBps={null} hist={costs.find((c) => c.tier.id === "AA")?.history.slice(-60) ?? []} unit="%" />
-              <RateCard label="Utilization" value={utilSnapshot.overall.utilization} chgBps={null} hist={[]} unit="%" />
+              <RateCard label="Utilization" value={utilSnapshot.utilization} chgBps={null} hist={[]} unit="%" />
             </div>
           </Panel>
         </div>
@@ -326,7 +330,7 @@ function ModuleCardPanel({ mod, map, bmrkSummary, curveSummary, volSummary, fund
   volSummary: ReturnType<typeof computeVolSummary>;
   fundingSummary: ReturnType<typeof computeFundingCostSummary>;
   fundingRegime: { regime: FundingRegime; score: number };
-  utilSnapshot: ReturnType<typeof computeUtilizationSnapshot>;
+  utilSnapshot: UtilGroupMetrics;
 }) {
   const Icon = mod.icon;
   const metrics = getModuleMetrics(mod.code, bmrkSummary, curveSummary, volSummary, fundingSummary, fundingRegime, utilSnapshot);
@@ -362,7 +366,7 @@ function getModuleMetrics(
   vol: ReturnType<typeof computeVolSummary>,
   funding: ReturnType<typeof computeFundingCostSummary>,
   fundingRegime: { regime: FundingRegime; score: number },
-  util: ReturnType<typeof computeUtilizationSnapshot>,
+  util: UtilGroupMetrics,
 ): { label: string; value: string; tone?: "up" | "down" | "amber" | "neutral" }[] {
   switch (code) {
     case "BMRK": return [
@@ -390,10 +394,10 @@ function getModuleMetrics(
       { label: "IG-HY Δ", value: funding.spreadCompression != null ? `${fmtSigned(funding.spreadCompression, 0)}` : "—" },
     ];
     case "UTIL": return [
-      { label: "Overall", value: `${util.overall.utilization.toFixed(1)}%` },
-      { label: "Avg Fee", value: `${util.overall.avgFeeBps.toFixed(0)}bps` },
-      { label: "HTB Count", value: String(util.overall.htbCount), tone: util.overall.htbCount > 20 ? "amber" : "neutral" },
-      { label: "Names", value: String(util.overall.nameCount) },
+      { label: "Overall", value: `${util.utilization.toFixed(1)}%` },
+      { label: "Avg Fee", value: `${util.avgFeeBps.toFixed(0)}bps` },
+      { label: "HTB Count", value: String(util.htbCount), tone: util.htbCount > 20 ? "amber" : "neutral" },
+      { label: "Names", value: String(util.nameCount) },
     ];
     default: return [];
   }

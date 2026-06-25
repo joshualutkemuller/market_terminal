@@ -13,7 +13,7 @@ import { getPrimeSummary } from "@/data/primeFinance";
 import { getCollateralSummary } from "@/data/collateral";
 import { getCashSummary } from "@/data/cash";
 import { getOptimizationRuns } from "@/data/optimization";
-import { getIndices, getHeatmap, getMovers, INDEX_FRED_IDS, mergeLiveIndices, heatmapFromCards, moversFromCards, type PipelineCard } from "@/data/markets";
+import { getIndices, getHeatmap, getMovers, INDEX_FRED_IDS, mergeLiveIndices, mergeSnapshotIndices, latestFredAsOf, heatmapFromCards, moversFromCards, type PipelineCard } from "@/data/markets";
 import { getActiveAlerts, SEVERITY_TONE, CATEGORY_LABEL, type Alert } from "@/data/alerts";
 import { useLiveSeriesSet } from "@/lib/useEcon";
 import { useMarketView } from "@/lib/useMarket";
@@ -33,15 +33,34 @@ export default function CommandCenter() {
 
   const { data: indexFred } = useLiveSeriesSet(INDEX_FRED_IDS, "lin", 30);
   const anyIndexLive = INDEX_FRED_IDS.some((id) => indexFred[id]?.source === "FRED");
-  const indices = useMemo(() => mergeLiveIndices(simIndices, indexFred), [simIndices, indexFred]);
+  const fredAsOf = useMemo(() => latestFredAsOf(indexFred), [indexFred]);
 
   const { data: marketData, source: mktSource } = useMarketView<{ cards: PipelineCard[] }>("market");
   const pipelineLive = mktSource !== "SNAPSHOT" && mktSource !== "LOADING" && !!marketData?.cards?.length;
+  const pipelineAsOf = useMemo(() => {
+    if (!marketData?.cards?.length) return null;
+    return marketData.cards.reduce((best: string | null, c) => {
+      const d = (c as any).asof ?? null;
+      return d && (!best || d > best) ? d : best;
+    }, null);
+  }, [marketData]);
+
+  const indices = useMemo(() => {
+    let idx = simIndices;
+    if (pipelineLive && marketData?.cards) idx = mergeSnapshotIndices(idx, marketData.cards, pipelineAsOf);
+    if (anyIndexLive) idx = mergeLiveIndices(idx, indexFred);
+    return idx;
+  }, [simIndices, indexFred, anyIndexLive, marketData, pipelineLive, pipelineAsOf]);
+
   const heat = useMemo(() => pipelineLive ? heatmapFromCards(marketData!.cards) : simHeat, [pipelineLive, marketData, simHeat]);
   const movers = useMemo(() => {
     if (pipelineLive) { const m = moversFromCards(marketData!.cards); return { ...simMovers, gainers: m.gainers, losers: m.losers }; }
     return simMovers;
   }, [pipelineLive, marketData, simMovers]);
+
+  const marketAsOf = fredAsOf ?? pipelineAsOf;
+  const overallSource = anyIndexLive ? "FRED" : pipelineLive ? "SNAPSHOT" : "SIM";
+  const badgeSource = anyIndexLive ? "FRED" as const : pipelineLive ? "SNAPSHOT" as const : "SIM" as const;
 
   const alertCols: Column<Alert>[] = [
     { key: "sev", header: "", width: "8px", render: (a) => <span className={`inline-block h-2 w-2 rounded-full ${a.severity === "CRITICAL" ? "bg-term-down" : a.severity === "HIGH" ? "bg-term-amber" : "bg-term-blue"}`} /> },
@@ -53,7 +72,12 @@ export default function CommandCenter() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="HOME" title="Command Center" desc="Cross-desk securities finance intelligence" right={<ProvenanceBadge source={anyIndexLive ? "FRED" : "SNAPSHOT"} />} />
+      <PageHeader code="HOME" title="Command Center" desc="Cross-desk securities finance intelligence" right={
+        <span className="flex items-center gap-2">
+          {marketAsOf && <span className="text-3xs text-term-text-mute">Data as of {marketAsOf}</span>}
+          <ProvenanceBadge source={badgeSource} />
+        </span>
+      } />
 
       <KpiStrip>
         <Stat label="SL Revenue (Day)" value={fmtUsdAbbr(sl.dayRevenue)} sub={<span className={pnlClass(sl.dayChgPct)}>{fmtSignedPct(sl.dayChgPct)} vs prior</span>} tone="amber" />
@@ -104,12 +128,20 @@ export default function CommandCenter() {
 
         {/* Middle column: markets */}
         <div className="flex flex-col gap-2">
-          <Panel title="Global Markets" code="WEI">
+          <Panel title="Global Markets" code="WEI" right={
+            <span className="flex items-center gap-1.5 text-3xs text-term-text-mute">
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${overallSource === "SIM" ? "bg-term-amber" : "bg-term-up"}`} />
+              {overallSource}{marketAsOf ? ` ${marketAsOf}` : ""}
+            </span>
+          }>
             <div className="grid grid-cols-2 gap-px bg-term-border">
               {indices.slice(0, 8).map((q) => (
                 <div key={q.symbol} className="flex items-center justify-between bg-term-panel px-2.5 py-1.5">
                   <div>
-                    <div className="text-2xs font-semibold text-term-text-dim">{q.symbol}</div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-2xs font-semibold text-term-text-dim">{q.symbol}</span>
+                      {q.source && q.source !== "SIM" && <span className={`inline-block h-1 w-1 rounded-full ${q.source === "FRED" ? "bg-term-up" : "bg-term-blue"}`} title={`${q.source}${q.asOf ? ` ${q.asOf}` : ""}`} />}
+                    </div>
                     <div className="tnum text-xs text-term-text">{fmtNum(q.last, q.last > 1000 ? 0 : 2)}</div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -121,7 +153,12 @@ export default function CommandCenter() {
             </div>
           </Panel>
 
-          <Panel title="Equity Heat Map" code="HEAT">
+          <Panel title="Equity Heat Map" code="HEAT" right={
+            <span className="flex items-center gap-1.5 text-3xs text-term-text-mute">
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${pipelineLive ? "bg-term-up" : "bg-term-amber"}`} />
+              {pipelineLive ? "PIPELINE" : "SIM"}{pipelineLive && pipelineAsOf ? ` ${pipelineAsOf}` : ""}
+            </span>
+          }>
             <div className="p-1">
               <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct }))} height={200} />
             </div>
@@ -135,7 +172,7 @@ export default function CommandCenter() {
           </Panel>
 
           <div className="grid grid-cols-2 gap-2">
-            <Panel title="Top Gainers" code="MOV+">
+            <Panel title="Top Gainers" code="MOV+" right={<span className={`text-3xs ${pipelineLive ? "text-term-up" : "text-term-text-mute"}`}>{pipelineLive ? "LIVE" : "SIM"}</span>}>
               <div className="divide-y divide-term-border-soft">
                 {movers.gainers.slice(0, 6).map((m) => (
                   <div key={m.ticker} className="flex items-center justify-between px-2 py-1 text-2xs">
@@ -145,7 +182,7 @@ export default function CommandCenter() {
                 ))}
               </div>
             </Panel>
-            <Panel title="Top Losers" code="MOV-">
+            <Panel title="Top Losers" code="MOV-" right={<span className={`text-3xs ${pipelineLive ? "text-term-up" : "text-term-text-mute"}`}>{pipelineLive ? "LIVE" : "SIM"}</span>}>
               <div className="divide-y divide-term-border-soft">
                 {movers.losers.slice(0, 6).map((m) => (
                   <div key={m.ticker} className="flex items-center justify-between px-2 py-1 text-2xs">

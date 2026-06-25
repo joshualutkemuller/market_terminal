@@ -1,11 +1,43 @@
 
-import { getIndices } from "@/data/markets";
+import { useMemo } from "react";
+import { getIndices, mergeLiveIndices, mergeSnapshotIndices, latestFredAsOf, INDEX_FRED_IDS, type PipelineCard } from "@/data/markets";
+import { useLiveSeriesSet } from "@/lib/useEcon";
+import { useMarketView } from "@/lib/useMarket";
 import { fmtNum, fmtSignedPct } from "@/lib/format";
 
-/** Scrolling top marquee of headline indices/rates. */
+/** Scrolling top marquee of headline indices/rates with live/snapshot data. */
 export function Ticker() {
-  const idx = getIndices();
-  const items = [...idx, ...idx]; // duplicate for seamless loop
+  const sim = getIndices();
+
+  const { data: indexFred } = useLiveSeriesSet(INDEX_FRED_IDS, "lin", 30);
+  const fredAsOf = useMemo(() => latestFredAsOf(indexFred), [indexFred]);
+  const anyFredLive = INDEX_FRED_IDS.some((id) => indexFred[id]?.source === "FRED");
+
+  const { data: marketData, source: mktSource } = useMarketView<{ cards: PipelineCard[] }>("market");
+  const pipelineLive = mktSource !== "SNAPSHOT" && mktSource !== "LOADING" && !!marketData?.cards?.length;
+  const pipelineAsOf = useMemo(() => {
+    if (!marketData?.cards?.length) return null;
+    return marketData.cards.reduce((best: string | null, c) => {
+      const d = (c as any).asof ?? null;
+      return d && (!best || d > best) ? d : best;
+    }, null);
+  }, [marketData]);
+
+  const merged = useMemo(() => {
+    let idx = sim;
+    if (pipelineLive && marketData?.cards) {
+      idx = mergeSnapshotIndices(idx, marketData.cards, pipelineAsOf);
+    }
+    if (anyFredLive) {
+      idx = mergeLiveIndices(idx, indexFred);
+    }
+    return idx;
+  }, [sim, indexFred, anyFredLive, marketData, pipelineLive, pipelineAsOf]);
+
+  const displayAsOf = fredAsOf ?? pipelineAsOf;
+  const sourceLabel = anyFredLive ? "FRED" : pipelineLive ? "PIPELINE" : "SIM";
+
+  const items = [...merged, ...merged];
   return (
     <div className="relative h-6 overflow-hidden border-b border-term-border bg-term-panel">
       <div className="ticker-track flex h-full items-center whitespace-nowrap">
@@ -21,6 +53,10 @@ export function Ticker() {
             </span>
           );
         })}
+        <span className="mx-4 inline-flex items-center gap-1.5 text-3xs text-term-text-mute">
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${sourceLabel === "SIM" ? "bg-term-amber" : "bg-term-up"}`} />
+          {sourceLabel}{displayAsOf ? ` as of ${displayAsOf}` : ""}
+        </span>
       </div>
       <style>{`
         .ticker-track { animation: ticker 60s linear infinite; }
