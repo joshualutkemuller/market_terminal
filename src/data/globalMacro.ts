@@ -242,15 +242,17 @@ export function etlCountryCPI(base: CountryInflation): CountryInflation {
  */
 export function liveCountryCPI(base: CountryInflation, obs: { date: string; value: number }[]): CountryInflation {
   const v = obs.map((o) => o.value);
-  if (v.length < 14) return base;
+  const isQuarterly = base.fredId.includes("QINMEI") || base.fredId.includes("QOQ");
+  const yoyLag = isQuarterly ? 4 : 12;
+  if (v.length < yoyLag + 2) return base;
   const pct = (a: number, b: number, dp = 1) => (b ? Number(((a / b - 1) * 100).toFixed(dp)) : 0);
   const yoyArr: number[] = [];
-  for (let i = 12; i < v.length; i++) yoyArr.push(pct(v[i], v[i - 12]));
+  for (let i = yoyLag; i < v.length; i++) yoyArr.push(pct(v[i], v[i - yoyLag]));
   if (yoyArr.length < 2) return base;
   const yoy = yoyArr[yoyArr.length - 1];
   const priorYoy = yoyArr[yoyArr.length - 2];
-  const mom = pct(v[v.length - 1], v[v.length - 2], 2);
-  const priorMom = v.length >= 3 ? pct(v[v.length - 2], v[v.length - 3], 2) : null;
+  const mom = isQuarterly ? null : pct(v[v.length - 1], v[v.length - 2], 2);
+  const priorMom = isQuarterly ? null : (v.length >= 3 ? pct(v[v.length - 2], v[v.length - 3], 2) : null);
   const trend = trendOf(yoy, priorYoy);
   let streak = 1;
   for (let i = yoyArr.length - 1; i > 0; i--) {
@@ -262,7 +264,7 @@ export function liveCountryCPI(base: CountryInflation, obs: { date: string; valu
     ...base,
     yoy, priorYoy,
     mom,
-    momDelta: priorMom == null ? null : Number((mom - priorMom).toFixed(2)),
+    momDelta: mom == null || priorMom == null ? null : Number((mom - priorMom).toFixed(2)),
     yoyDelta: Number((yoy - priorYoy).toFixed(2)),
     trend,
     streak: trend === "FLAT" ? 0 : streak,

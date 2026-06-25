@@ -124,7 +124,8 @@ function normImportances<T extends { name: string; importance: number }>(feats: 
 
 export function getMLModels(): MLModel[] {
   const recessionProbHist = getSeriesHistory("T10Y2Y", 48).map((o) => {
-    const z = -o.value / 60; // more inverted → higher prob
+    const bps = o.value * 100;
+    const z = -bps / 60;
     return Number((1 / (1 + Math.exp(-(z * 2 - 1.2))) * 100).toFixed(1));
   });
   // Financial-conditions index history from the Chicago Fed NFCI (looser < 0).
@@ -133,7 +134,7 @@ export function getMLModels(): MLModel[] {
   const claims = getSeriesHistory("ICSA", 48).map((o) => o.value);
   const claimMean = claims.reduce((a, b) => a + b, 0) / claims.length;
   const claimSd = Math.sqrt(claims.reduce((a, b) => a + (b - claimMean) ** 2, 0) / claims.length) || 1;
-  const laborHist = claims.map((c) => Number((-(c - claimMean) / claimSd).toFixed(2)));
+  const laborHist = claims.map((c) => Number(((c - claimMean) / claimSd).toFixed(2)));
 
   return [
     {

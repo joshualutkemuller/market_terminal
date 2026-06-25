@@ -133,7 +133,7 @@ export function latestFredAsOf(fred: LiveFredData): string | null {
 export function mergeSnapshotIndices(sim: IndexQuote[], cards: PipelineCard[], asOf: string | null): IndexQuote[] {
   const cardMap = new Map(cards.map((c) => [c.series_id, c]));
   const SNAP_MAP: Record<string, string> = {
-    SPX: "SPY", NDX: "QQQ", INDU: "DIA", RUT: "IWM", BTC: "IBIT",
+    SPX: "SPY", NDX: "QQQ", INDU: "DIA", RUT: "IWM",
   };
   return sim.map((q) => {
     const snapId = SNAP_MAP[q.symbol];
@@ -192,17 +192,38 @@ export interface PipelineCard {
   ret_1d: number | null;
 }
 
+const ETF_SECTOR: Record<string, string> = {
+  XLK: "Technology", XLC: "Comms", XLY: "Consumer", XLP: "Consumer",
+  XLF: "Financials", XLE: "Energy", XLV: "Healthcare", XLI: "Industrials",
+  XLB: "Materials", XLU: "Utilities", XLRE: "Real Estate",
+  SPY: "Broad Market", QQQ: "Technology", DIA: "Broad Market", IWM: "Broad Market",
+  VTI: "Broad Market", RSP: "Broad Market", VUG: "Growth", VTV: "Value",
+  MTUM: "Momentum", VNQ: "Real Estate", ACWI: "Global", EFA: "Intl Developed",
+  EEM: "Emerging Mkts", VGK: "Europe", EWJ: "Japan", FXI: "China",
+  EWU: "UK", EWZ: "Brazil", EWC: "Canada", INDA: "India",
+};
+
+const ETF_WEIGHT: Record<string, number> = {
+  SPY: 0.14, QQQ: 0.10, VTI: 0.06, IWM: 0.04, DIA: 0.04,
+  XLK: 0.08, XLF: 0.05, XLV: 0.04, XLY: 0.03, XLC: 0.03,
+  XLE: 0.03, XLI: 0.03, XLP: 0.02, XLU: 0.02, XLB: 0.02,
+  XLRE: 0.02, RSP: 0.02, VUG: 0.02, VTV: 0.02, MTUM: 0.02,
+  VNQ: 0.02, ACWI: 0.03, EFA: 0.03, EEM: 0.02, VGK: 0.02,
+  EWJ: 0.01, FXI: 0.01, EWU: 0.01, EWZ: 0.01, EWC: 0.01, INDA: 0.01,
+};
+
 export function heatmapFromCards(cards: PipelineCard[]): HeatCell[] {
   const eq = cards.filter((c) => c.asset_class.toUpperCase() === "EQUITY" && c.ret_1d != null);
   if (!eq.length) return getHeatmap();
-  const total = eq.length;
+  const totalWeight = eq.reduce((a, c) => a + (ETF_WEIGHT[c.series_id] ?? 1 / eq.length), 0);
   return eq.map((c) => {
     const sec = EQUITIES.find((s) => s.ticker === c.series_id);
+    const w = ETF_WEIGHT[c.series_id] ?? 1 / eq.length;
     return {
       ticker: c.series_id,
-      sector: sec?.sector ?? "Other",
+      sector: sec?.sector ?? ETF_SECTOR[c.series_id] ?? "Other",
       chgPct: (c.ret_1d ?? 0) * 100,
-      weight: sec ? sec.marketCap / EQUITIES.reduce((a, s) => a + s.marketCap, 0) : 1 / total,
+      weight: w / totalWeight,
     };
   });
 }

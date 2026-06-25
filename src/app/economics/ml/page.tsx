@@ -22,7 +22,8 @@ function statusOf(models: MLModel[], id: string): MLModel | undefined {
   return models.find((m) => m.id === id);
 }
 
-function recessionProbFromSpread(bps: number): number {
+function recessionProbFromSpread(pctPts: number): number {
+  const bps = pctPts * 100;
   const z = -bps / 60;
   return Number((1 / (1 + Math.exp(-(z * 2 - 1.2))) * 100).toFixed(1));
 }
@@ -30,7 +31,7 @@ function recessionProbFromSpread(bps: number): number {
 function zHistory(values: number[]): number[] {
   const mean = values.reduce((a, b) => a + b, 0) / Math.max(1, values.length);
   const sd = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, values.length)) || 1;
-  return values.map((v) => Number((-(v - mean) / sd).toFixed(2)));
+  return values.map((v) => Number(((v - mean) / sd).toFixed(2)));
 }
 
 function latestMomPct(obs: { date: string; value: number }[]): number | null {

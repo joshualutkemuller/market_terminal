@@ -14,6 +14,7 @@ import {
   getReinvestmentScenarios,
   getReinvestmentSummary,
   mergeLiveYields,
+  computeReinvestmentKpis,
   type ReinvestmentConstraint,
   type ReinvestmentPosition,
   type ReinvestmentRecommendation,
@@ -68,6 +69,7 @@ export default function ReinvestmentPage() {
   const { data: reinvFred } = useLiveSeriesSet([...REINV_FRED_IDS], "lin", 5);
   const anyLive = REINV_FRED_IDS.some((id) => reinvFred[id]?.source === "FRED");
   const positions = useMemo(() => mergeLiveYields(simPositions, reinvFred), [simPositions, reinvFred]);
+  const liveKpis = useMemo(() => computeReinvestmentKpis(positions), [positions]);
   const [shockBps, setShockBps] = useState(-25);
 
   const weightedFedBeta = useMemo(
@@ -125,11 +127,11 @@ export default function ReinvestmentPage() {
 
       <KpiStrip>
         <Stat label="Cash Collateral" value={fmtUsdAbbr(summary.cashCollateral)} sub="reinvestment pool" />
-        <Stat label="Reinvest Yield" value={fmtBps(summary.reinvestYieldBps, 0)} sub="asset weighted" tone="amber" />
+        <Stat label="Reinvest Yield" value={fmtBps(liveKpis.reinvestYieldBps, 0)} sub="asset weighted" tone="amber" />
         <Stat label="Rebate Cost" value={fmtBps(summary.rebateCostBps, 0)} sub="client payable" />
-        <Stat label="Net Spread" value={fmtBps(summary.netSpreadBps, 0)} sub="yield minus rebate" tone="up" />
-        <Stat label="WAM" value={`${fmtNum(summary.wamDays, 0)}d`} sub="weighted avg maturity" />
-        <Stat label="T+0 Liquidity" value={fmtUsdAbbr(summary.t0Liquidity)} sub={fmtPct((summary.t0Liquidity / summary.cashCollateral) * 100, 1)} tone="up" />
+        <Stat label="Net Spread" value={fmtBps(liveKpis.netSpreadBps, 0)} sub="yield minus rebate" tone="up" />
+        <Stat label="WAM" value={`${fmtNum(liveKpis.wamDays, 0)}d`} sub="weighted avg maturity" />
+        <Stat label="T+0 Liquidity" value={fmtUsdAbbr(liveKpis.t0Liquidity)} sub={fmtPct((liveKpis.t0Liquidity / summary.cashCollateral) * 100, 1)} tone="up" />
       </KpiStrip>
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-3">
