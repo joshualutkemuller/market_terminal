@@ -1,9 +1,9 @@
 # Feature Addition — Desk Pulse: Funding & Liquidity (`FUND`) + Borrow-Demand / Squeeze Radar (`SQZ`)
 
 Date: 2026-06-21
-Status: Plan / proposal
+Status: Completed — funding and squeeze workflows are integrated
 Module codes: **`FUND`** — Funding & Liquidity Pulse · **`SQZ`** — Borrow-Demand / Squeeze Radar
-Related: `docs/MARKET_TERMINAL_ROADMAP.md`, `docs/features/Feature Addition - Charting Studios (Macro & Market).md`, `economics/sec-finance` (`SFE`), `securities-lending` (`SLAB`)
+Related: `docs/MARKET_TERMINAL_ROADMAP.md`, `docs/features/completed/Feature Addition - Charting Studios (Macro & Market).md`, `economics/sec-finance` (`SFE`), `securities-lending` (`SLAB`)
 
 ---
 

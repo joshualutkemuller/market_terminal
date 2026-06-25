@@ -4,7 +4,7 @@
  * The terminal ships with no live news feed, so this module synthesizes a
  * realistic, *stable* intelligence layer from a fixed seed (SSR/hydration-safe),
  * mirroring the medallion/gold tables the plan describes
- * (docs/features/Feature Addition - NEWS Terminal Module …). When live keys are
+ * (docs/features/completed/Feature Addition - NEWS Terminal Module …). When live keys are
  * configured (Alpha Vantage / Marketaux / Reddit) the same shapes can be served
  * from the pipeline; until then everything is clearly badged SIM.
  *

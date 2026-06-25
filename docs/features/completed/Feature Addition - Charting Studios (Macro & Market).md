@@ -1,10 +1,10 @@
 # Feature Addition — Charting Studios (Macro & Market)
 
 Date: 2026-06-20
-Status: Plan / proposal
+Status: Completed — `MGC` and `MKC` are integrated
 Module codes: **`MGC`** — Economic & Macro Chart Studio · **`MKC`** — Market Chart Studio
 Shared layer: **Charting Engine** (`src/lib/charting` + `src/components/charting`)
-Related: `docs/MARKET_TERMINAL_ROADMAP.md`, `docs/features/Feature Addition - Market Lens Studio.md`
+Related: `docs/MARKET_TERMINAL_ROADMAP.md`, `docs/features/completed/Feature Addition - Market Lens Studio.md`
 
 ---
 
