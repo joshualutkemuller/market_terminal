@@ -133,7 +133,7 @@ export function latestFredAsOf(fred: LiveFredData): string | null {
 export function mergeSnapshotIndices(sim: IndexQuote[], cards: PipelineCard[], asOf: string | null): IndexQuote[] {
   const cardMap = new Map(cards.map((c) => [c.series_id, c]));
   const SNAP_MAP: Record<string, string> = {
-    SPX: "SPY", NDX: "QQQ", INDU: "DIA", RUT: "IWM", BTC: "IBIT",
+    SPX: "SPY", NDX: "QQQ", INDU: "DIA", RUT: "IWM",
   };
   return sim.map((q) => {
     const snapId = SNAP_MAP[q.symbol];

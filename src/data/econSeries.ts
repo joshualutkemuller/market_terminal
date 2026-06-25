@@ -190,6 +190,52 @@ export const FRED_CATALOG: FredSeries[] = [
   { id: "DEXCAUS", label: "CAD / USD", short: "USD/CAD", unit: "C$", category: "FX", freq: "D", decimals: 4, level: 1.36, vol: 0.004, bullish: null },
   { id: "DEXCHUS", label: "CNY / USD", short: "USD/CNY", unit: "¥", category: "FX", freq: "D", decimals: 4, level: 7.18, vol: 0.01, bullish: null },
   { id: "DEXMXUS", label: "MXN / USD", short: "USD/MXN", unit: "MX$", category: "FX", freq: "D", decimals: 3, level: 17.1, vol: 0.08, bullish: null },
+
+  // ── CPI component series (INFL module) ──
+  { id: "CUSR0000SAH1", label: "CPI: Shelter", short: "Shelter", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 341, vol: 0.5, bullish: false },
+  { id: "CUSR0000SEHC", label: "CPI: Owners' Equiv. Rent", short: "OER", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 340, vol: 0.4, bullish: false },
+  { id: "CUSR0000SEHA", label: "CPI: Rent of Primary Residence", short: "Rent", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 410, vol: 0.5, bullish: false },
+  { id: "CPIUFDSL", label: "CPI: Food", short: "Food", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 330, vol: 0.3, bullish: false },
+  { id: "CUSR0000SAF11", label: "CPI: Food at Home", short: "Food@Home", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 310, vol: 0.3, bullish: false },
+  { id: "CUSR0000SEFV", label: "CPI: Food Away from Home", short: "Food Out", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 390, vol: 0.4, bullish: false },
+  { id: "CPIENGSL", label: "CPI: Energy", short: "Energy", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 265, vol: 2.5, bullish: false },
+  { id: "CUSR0000SETB01", label: "CPI: Gasoline", short: "Gas", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 290, vol: 4.0, bullish: false },
+  { id: "CUSR0000SEHF01", label: "CPI: Electricity", short: "Electric", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 320, vol: 1.0, bullish: false },
+  { id: "CPIMEDSL", label: "CPI: Medical Care", short: "Medical", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 580, vol: 0.4, bullish: false },
+  { id: "CUSR0000SETA01", label: "CPI: New Vehicles", short: "New Cars", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 173, vol: 0.2, bullish: false },
+  { id: "CUSR0000SETA02", label: "CPI: Used Cars & Trucks", short: "Used Cars", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 193, vol: 1.5, bullish: false },
+  { id: "CPIAPPSL", label: "CPI: Apparel", short: "Apparel", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 127, vol: 0.5, bullish: false },
+  { id: "CPITRNSL", label: "CPI: Transportation Services", short: "Transport Svc", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 410, vol: 1.0, bullish: false },
+  { id: "CUSR0000SEMD", label: "CPI: Hospital Services", short: "Hospital", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 480, vol: 0.4, bullish: false },
+  { id: "CUSR0000SAS367", label: "CPI: Airline Fares", short: "Airfares", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 295, vol: 3.0, bullish: false },
+  { id: "CPIRECSL", label: "CPI: Recreation", short: "Recreation", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 132, vol: 0.2, bullish: false },
+  { id: "CUSR0000SAE1", label: "CPI: Education & Communication", short: "Edu/Comm", unit: "index", category: "INFLATION", freq: "M", decimals: 1, level: 160, vol: 0.2, bullish: false },
+
+  // ── PCE component series (INFL module) ──
+  { id: "DGDSRG3M086SBEA", label: "PCE: Goods", short: "PCE Goods", unit: "% m/m", category: "INFLATION", freq: "M", decimals: 1, level: 0.1, vol: 0.3, bullish: false },
+  { id: "DSERRG3M086SBEA", label: "PCE: Services", short: "PCE Svcs", unit: "% m/m", category: "INFLATION", freq: "M", decimals: 1, level: 0.3, vol: 0.1, bullish: false },
+  { id: "DNRGRG3M086SBEA", label: "PCE: Energy Goods & Svc", short: "PCE Energy", unit: "% m/m", category: "INFLATION", freq: "M", decimals: 1, level: -0.5, vol: 2.0, bullish: false },
+  { id: "DFXARG3M086SBEA", label: "PCE: Food", short: "PCE Food", unit: "% m/m", category: "INFLATION", freq: "M", decimals: 1, level: 0.2, vol: 0.2, bullish: false },
+  { id: "DHUTRC1M027SBEA", label: "PCE: Housing & Utilities", short: "PCE Housing", unit: "% m/m", category: "INFLATION", freq: "M", decimals: 1, level: 0.4, vol: 0.1, bullish: false },
+  { id: "DHLCRG3M086SBEA", label: "PCE: Health Care", short: "PCE Health", unit: "% m/m", category: "INFLATION", freq: "M", decimals: 1, level: 0.3, vol: 0.1, bullish: false },
+  { id: "DTRSRC1M027SBEA", label: "PCE: Transportation", short: "PCE Transport", unit: "% m/m", category: "INFLATION", freq: "M", decimals: 1, level: 0.1, vol: 0.5, bullish: false },
+  { id: "DRCARC1M027SBEA", label: "PCE: Recreation", short: "PCE Rec", unit: "% m/m", category: "INFLATION", freq: "M", decimals: 1, level: 0.2, vol: 0.2, bullish: false },
+
+  // ── Global policy rate series (GPOL module) ──
+  { id: "IRSTCB01USM156N", label: "US Federal Reserve Rate", short: "Fed Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 4.33, vol: 0.08, bullish: false },
+  { id: "ECBDFR", label: "ECB Deposit Facility Rate", short: "ECB DFR", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 2.75, vol: 0.08, bullish: false },
+  { id: "IRSTCB01GBM156N", label: "Bank of England Rate", short: "BoE Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 4.50, vol: 0.08, bullish: false },
+  { id: "IRSTCB01JPM156N", label: "Bank of Japan Rate", short: "BoJ Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 0.50, vol: 0.04, bullish: false },
+  { id: "IRSTCB01CAM156N", label: "Bank of Canada Rate", short: "BoC Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 2.75, vol: 0.08, bullish: false },
+  { id: "IRSTCB01AUM156N", label: "RBA Cash Rate", short: "RBA Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 4.10, vol: 0.08, bullish: false },
+  { id: "IRSTCB01CHM156N", label: "Swiss National Bank Rate", short: "SNB Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 0.25, vol: 0.08, bullish: false },
+  { id: "IRSTCB01BRM156N", label: "Banco Central do Brasil Rate", short: "BCB Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 14.25, vol: 0.25, bullish: false },
+  { id: "IRSTCB01MXM156N", label: "Banco de Mexico Rate", short: "Banxico Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 9.00, vol: 0.15, bullish: false },
+  { id: "IRSTCB01KRM156N", label: "Bank of Korea Rate", short: "BoK Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 2.75, vol: 0.08, bullish: false },
+  { id: "IRSTCB01SEM156N", label: "Riksbank Rate", short: "Riksbank", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 2.25, vol: 0.08, bullish: false },
+  { id: "IRSTCB01NOM156N", label: "Norges Bank Rate", short: "Norges Bank", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 4.50, vol: 0.08, bullish: false },
+  { id: "IRSTCB01NZM156N", label: "RBNZ Rate", short: "RBNZ Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 3.50, vol: 0.08, bullish: false },
+  { id: "IRSTCB01TRM156N", label: "CBRT Rate (Turkey)", short: "CBRT Rate", unit: "%", category: "RATES", freq: "M", decimals: 2, level: 42.50, vol: 1.0, bullish: false },
 ];
 
 export function seriesById(id: string): FredSeries | undefined {

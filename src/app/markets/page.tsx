@@ -17,10 +17,16 @@ import {
   getMovers,
   getCandles,
   getOrderBook,
+  mergeLiveIndices,
+  heatmapFromCards,
+  moversFromCards,
+  INDEX_FRED_IDS,
   type Quote,
   type Mover,
   type IndexQuote,
+  type PipelineCard,
 } from "@/data/markets";
+import { useLiveSeriesSet } from "@/lib/useEcon";
 import { bySymbol, type AssetClass } from "@/data/universe";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
@@ -89,10 +95,22 @@ export default function LiveMarkets() {
   const { data: marketData, source, earliestAsOf } = useMarketView<{ cards: SnapshotCard[] }>("market", basis, asof);
   const pipelineQuotes = useMemo(() => cardsToQuotes(marketData?.cards ?? []), [marketData]);
   const dataAsOf = marketData?.cards?.[0]?.asof ?? null;
+  const hasCards = !!marketData?.cards?.length;
 
-  const indices = useMemo(() => mergeIndexQuotes(getIndices(), marketData?.cards ?? []), [marketData]);
-  const heat = useMemo(() => getHeatmap(), []);
-  const movers = useMemo(() => getMovers(), []);
+  const { data: indexFred } = useLiveSeriesSet([...INDEX_FRED_IDS], "lin", 30);
+  const anyFredLive = INDEX_FRED_IDS.some((id) => indexFred[id]?.source === "FRED");
+
+  const indices = useMemo(() => {
+    let idx = mergeIndexQuotes(getIndices(), marketData?.cards ?? []);
+    if (anyFredLive) idx = mergeLiveIndices(idx, indexFred);
+    return idx;
+  }, [marketData, indexFred, anyFredLive]);
+  const heat = useMemo(() => hasCards ? heatmapFromCards(marketData!.cards as PipelineCard[]) : getHeatmap(), [hasCards, marketData]);
+  const simMovers = useMemo(() => getMovers(), []);
+  const movers = useMemo(() => {
+    if (hasCards) { const m = moversFromCards(marketData!.cards as PipelineCard[]); return { ...simMovers, gainers: m.gainers, losers: m.losers }; }
+    return simMovers;
+  }, [hasCards, marketData, simMovers]);
   const allQuotes = useMemo(() => getQuotes(), []);
 
   const idx = (sym: string): IndexQuote | undefined => indices.find((i) => i.symbol === sym);
@@ -473,7 +491,7 @@ function quotesForTabFromPipeline(tab: TabKey, pipelineQuotes: Quote[], simQuote
 
 function mergeIndexQuotes(base: IndexQuote[], cards: SnapshotCard[]): IndexQuote[] {
   const bySeries = new Map(cards.map((c) => [c.series_id, c]));
-  const map: Record<string, string> = { SPX: "SPY", NDX: "QQQ", RUT: "IWM", INDU: "DIA", VIX: "VIXY", DXY: "UUP", GC: "GLD" };
+  const map: Record<string, string> = { SPX: "SPY", NDX: "QQQ", RUT: "IWM", INDU: "DIA", DXY: "UUP", GC: "GLD" };
   return base.map((idx) => {
     const card = bySeries.get(map[idx.symbol]);
     if (!card || card.price === null) return idx;
