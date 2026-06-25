@@ -89,6 +89,9 @@ export function getIndices(): IndexQuote[] {
 export type LiveFredData = Record<string, { observations: { date: string; value: number }[]; source: string }>;
 
 const INDEX_FRED: Record<string, string> = {
+  SPX: "SP500",
+  NDX: "NASDAQCOM",
+  INDU: "DJIA",
   VIX: "VIXCLS",
   DXY: "DTWEXBGS",
   UST10Y: "DGS10",
@@ -135,13 +138,18 @@ export function mergeSnapshotIndices(sim: IndexQuote[], cards: PipelineCard[], a
     const snapId = SNAP_MAP[q.symbol];
     if (!snapId) return q;
     const card = cardMap.get(snapId);
-    if (!card?.price || card.ret_1d == null) return q;
+    if (card?.ret_1d == null) return q;
     const chgPct = card.ret_1d * 100;
-    const prior = card.price / (1 + card.ret_1d);
-    const chg = card.price - prior;
-    return { ...q, last: card.price, chg, chgPct, source: "PIPELINE" as const, asOf: asOf ?? undefined };
+    const base = SIM_INDEX_BASE[q.symbol] ?? q.last;
+    const last = base * (1 + card.ret_1d);
+    const chg = last - base;
+    return { ...q, last, chg, chgPct, source: "PIPELINE" as const, asOf: asOf ?? undefined };
   });
 }
+
+const SIM_INDEX_BASE: Record<string, number> = {
+  SPX: 5974.5, NDX: 21345.8, INDU: 43210.4, RUT: 2412.7, BTC: 104250,
+};
 
 export interface HeatCell {
   ticker: string;
