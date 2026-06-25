@@ -1,6 +1,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import { Panel, Tag } from "@/components/ui/Panel";
 import { BarChart } from "@/components/charts/BarChart";
 import { LineChart } from "@/components/charts/LineChart";
@@ -336,7 +337,7 @@ export default function AICopilot() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="AI" title="AI Copilot" desc="Natural-language Securities Finance Intelligence" />
+      <PageHeader code="AI" title="AI Copilot" desc="Natural-language Securities Finance Intelligence" right={<ProvenanceBadge source="SIM" />} />
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-[1fr_320px]">
         {/* LEFT — chat thread + input */}

@@ -65,6 +65,7 @@ export default function IndexReturnAnalyticsPage() {
   const [asof, setAsOf] = useState("");
   const { data: liveData, source, earliestAsOf } = useMarketView<IndexReturnsView>("index-returns", basis, asof);
   const indexes = liveData?.indices?.length ? liveData.indices : FALLBACK_INDEXES;
+  const matrixIsLive = !!liveData?.matrices?.[symbol];
   const matrix = useMemo(() => liveData?.matrices?.[symbol] ?? getIndexReturnMatrix(symbol), [liveData, symbol]);
   const columns = [...matrix.years, matrix.ytdYear];
   const bestYear = matrix.summaries.filter((s) => !s.isYtd).sort((a, b) => (b.annualReturn ?? -999) - (a.annualReturn ?? -999))[0];
@@ -77,7 +78,7 @@ export default function IndexReturnAnalyticsPage() {
         title="Index Return Analytics"
         desc="Monthly return matrix, annual totals and intra-year drawdowns"
         asOf={asof || liveData?.asof || null}
-        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={liveData?.asof} earliestAsOf={earliestAsOf} /><PipelineTag source={source} asOf={liveData?.asof} /></span>}
+        right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={liveData?.asof} earliestAsOf={earliestAsOf} /><PipelineTag source={matrixIsLive ? source : "SIM"} asOf={matrixIsLive ? liveData?.asof : undefined} /></span>}
       />
 
       <KpiStrip>
@@ -159,6 +160,6 @@ export default function IndexReturnAnalyticsPage() {
   );
 }
 
-function PipelineTag({ source, asOf }: { source: MarketSource; asOf?: string | null }) {
+function PipelineTag({ source, asOf }: { source: MarketSource | "SIM"; asOf?: string | null }) {
   return <ProvenanceBadge source={source} asOf={asOf} />;
 }
