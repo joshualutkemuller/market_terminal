@@ -193,7 +193,7 @@ export interface PipelineCard {
 }
 
 export function heatmapFromCards(cards: PipelineCard[]): HeatCell[] {
-  const eq = cards.filter((c) => c.asset_class === "equity" && c.ret_1d != null);
+  const eq = cards.filter((c) => c.asset_class.toUpperCase() === "EQUITY" && c.ret_1d != null);
   if (!eq.length) return getHeatmap();
   const total = eq.length;
   return eq.map((c) => {
@@ -209,7 +209,7 @@ export function heatmapFromCards(cards: PipelineCard[]): HeatCell[] {
 
 export function moversFromCards(cards: PipelineCard[]): { gainers: Mover[]; losers: Mover[] } {
   const eq = cards
-    .filter((c) => c.asset_class === "equity" && c.ret_1d != null && c.price != null)
+    .filter((c) => c.asset_class.toUpperCase() === "EQUITY" && c.ret_1d != null && c.price != null)
     .map((c) => ({ ticker: c.series_id, name: c.display_name, chgPct: (c.ret_1d ?? 0) * 100, last: c.price ?? 0, vol: 0 }));
   if (!eq.length) { const m = getMovers(); return { gainers: m.gainers, losers: m.losers }; }
   const gainers = [...eq].sort((a, b) => b.chgPct - a.chgPct).slice(0, 8);
