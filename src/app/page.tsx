@@ -37,6 +37,7 @@ export default function CommandCenter() {
 
   const { data: marketData, source: mktSource } = useMarketView<{ cards: PipelineCard[] }>("market");
   const pipelineLive = mktSource !== "SNAPSHOT" && mktSource !== "LOADING" && !!marketData?.cards?.length;
+  const hasCards = !!marketData?.cards?.length;
   const pipelineAsOf = useMemo(() => {
     if (!marketData?.cards?.length) return null;
     return marketData.cards.reduce((best: string | null, c) => {
@@ -47,20 +48,20 @@ export default function CommandCenter() {
 
   const indices = useMemo(() => {
     let idx = simIndices;
-    if (pipelineLive && marketData?.cards) idx = mergeSnapshotIndices(idx, marketData.cards, pipelineAsOf);
+    if (hasCards && marketData?.cards) idx = mergeSnapshotIndices(idx, marketData.cards, pipelineAsOf);
     if (anyIndexLive) idx = mergeLiveIndices(idx, indexFred);
     return idx;
-  }, [simIndices, indexFred, anyIndexLive, marketData, pipelineLive, pipelineAsOf]);
+  }, [simIndices, indexFred, anyIndexLive, marketData, hasCards, pipelineAsOf]);
 
-  const heat = useMemo(() => pipelineLive ? heatmapFromCards(marketData!.cards) : simHeat, [pipelineLive, marketData, simHeat]);
+  const heat = useMemo(() => hasCards ? heatmapFromCards(marketData!.cards) : simHeat, [hasCards, marketData, simHeat]);
   const movers = useMemo(() => {
-    if (pipelineLive) { const m = moversFromCards(marketData!.cards); return { ...simMovers, gainers: m.gainers, losers: m.losers }; }
+    if (hasCards) { const m = moversFromCards(marketData!.cards); return { ...simMovers, gainers: m.gainers, losers: m.losers }; }
     return simMovers;
-  }, [pipelineLive, marketData, simMovers]);
+  }, [hasCards, marketData, simMovers]);
 
   const marketAsOf = fredAsOf ?? pipelineAsOf;
-  const overallSource = anyIndexLive ? "FRED" : pipelineLive ? "SNAPSHOT" : "SIM";
-  const badgeSource = anyIndexLive ? "FRED" as const : pipelineLive ? "SNAPSHOT" as const : "SIM" as const;
+  const overallSource = anyIndexLive ? "FRED" : hasCards ? "SNAPSHOT" : "SIM";
+  const badgeSource = anyIndexLive ? "FRED" as const : hasCards ? "SNAPSHOT" as const : "SIM" as const;
 
   const alertCols: Column<Alert>[] = [
     { key: "sev", header: "", width: "8px", render: (a) => <span className={`inline-block h-2 w-2 rounded-full ${a.severity === "CRITICAL" ? "bg-term-down" : a.severity === "HIGH" ? "bg-term-amber" : "bg-term-blue"}`} /> },
@@ -155,8 +156,8 @@ export default function CommandCenter() {
 
           <Panel title="Equity Heat Map" code="HEAT" right={
             <span className="flex items-center gap-1.5 text-3xs text-term-text-mute">
-              <span className={`inline-block h-1.5 w-1.5 rounded-full ${pipelineLive ? "bg-term-up" : "bg-term-amber"}`} />
-              {pipelineLive ? "PIPELINE" : "SIM"}{pipelineLive && pipelineAsOf ? ` ${pipelineAsOf}` : ""}
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${hasCards ? "bg-term-up" : "bg-term-amber"}`} />
+              {pipelineLive ? "PIPELINE" : hasCards ? "SNAPSHOT" : "SIM"}{hasCards && pipelineAsOf ? ` ${pipelineAsOf}` : ""}
             </span>
           }>
             <div className="p-1">
@@ -172,7 +173,7 @@ export default function CommandCenter() {
           </Panel>
 
           <div className="grid grid-cols-2 gap-2">
-            <Panel title="Top Gainers" code="MOV+" right={<span className={`text-3xs ${pipelineLive ? "text-term-up" : "text-term-text-mute"}`}>{pipelineLive ? "LIVE" : "SIM"}</span>}>
+            <Panel title="Top Gainers" code="MOV+" right={<span className={`text-3xs ${hasCards ? "text-term-up" : "text-term-text-mute"}`}>{pipelineLive ? "LIVE" : hasCards ? "SNAPSHOT" : "SIM"}</span>}>
               <div className="divide-y divide-term-border-soft">
                 {movers.gainers.slice(0, 6).map((m) => (
                   <div key={m.ticker} className="flex items-center justify-between px-2 py-1 text-2xs">
@@ -182,7 +183,7 @@ export default function CommandCenter() {
                 ))}
               </div>
             </Panel>
-            <Panel title="Top Losers" code="MOV-" right={<span className={`text-3xs ${pipelineLive ? "text-term-up" : "text-term-text-mute"}`}>{pipelineLive ? "LIVE" : "SIM"}</span>}>
+            <Panel title="Top Losers" code="MOV-" right={<span className={`text-3xs ${hasCards ? "text-term-up" : "text-term-text-mute"}`}>{pipelineLive ? "LIVE" : hasCards ? "SNAPSHOT" : "SIM"}</span>}>
               <div className="divide-y divide-term-border-soft">
                 {movers.losers.slice(0, 6).map((m) => (
                   <div key={m.ticker} className="flex items-center justify-between px-2 py-1 text-2xs">

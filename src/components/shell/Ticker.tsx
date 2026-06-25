@@ -15,6 +15,7 @@ export function Ticker() {
 
   const { data: marketData, source: mktSource } = useMarketView<{ cards: PipelineCard[] }>("market");
   const pipelineLive = mktSource !== "SNAPSHOT" && mktSource !== "LOADING" && !!marketData?.cards?.length;
+  const hasCards = !!marketData?.cards?.length;
   const pipelineAsOf = useMemo(() => {
     if (!marketData?.cards?.length) return null;
     return marketData.cards.reduce((best: string | null, c) => {
@@ -25,17 +26,17 @@ export function Ticker() {
 
   const merged = useMemo(() => {
     let idx = sim;
-    if (pipelineLive && marketData?.cards) {
+    if (hasCards && marketData?.cards) {
       idx = mergeSnapshotIndices(idx, marketData.cards, pipelineAsOf);
     }
     if (anyFredLive) {
       idx = mergeLiveIndices(idx, indexFred);
     }
     return idx;
-  }, [sim, indexFred, anyFredLive, marketData, pipelineLive, pipelineAsOf]);
+  }, [sim, indexFred, anyFredLive, marketData, hasCards, pipelineAsOf]);
 
   const displayAsOf = fredAsOf ?? pipelineAsOf;
-  const sourceLabel = anyFredLive ? "FRED" : pipelineLive ? "PIPELINE" : "SIM";
+  const sourceLabel = anyFredLive ? "FRED" : hasCards ? "SNAPSHOT" : "SIM";
 
   const items = [...merged, ...merged];
   return (
