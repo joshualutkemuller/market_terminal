@@ -161,7 +161,7 @@ export default function CommandCenter() {
             </span>
           }>
             <div className="p-1">
-              <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct }))} height={200} />
+              <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct, group: h.sector }))} height={200} />
             </div>
           </Panel>
         </div>
