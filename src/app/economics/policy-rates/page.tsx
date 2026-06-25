@@ -9,8 +9,8 @@ import { Sparkline } from "@/components/charts/Sparkline";
 import { Donut } from "@/components/charts/Radial";
 import { useDrill } from "@/components/econ/DrillProvider";
 import { SourceBadge } from "@/components/econ/SourceBadge";
-import { isRealEconSource, useLiveSeriesSet } from "@/lib/useEcon";
-import { getGlobalPolicyRates, getGlobalSummary, livePolicyRate, type PolicyRate, type Region } from "@/data/globalMacro";
+import { isRealEconSource, useLiveSeriesSet, type DataSource } from "@/lib/useEcon";
+import { etlPolicyRate, getGlobalPolicyRates, getGlobalSummary, livePolicyRate, type PolicyRate, type Region } from "@/data/globalMacro";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
 
 const REGIONS: ("All" | Region)[] = ["All", "AMER", "EMEA", "APAC"];
@@ -27,14 +27,24 @@ export default function GlobalPolicyRates() {
   const { open } = useDrill();
   const [region, setRegion] = useState<"All" | Region>("All");
 
-  const baseAll = getGlobalPolicyRates();
+  // Source order: live FRED/OECD snapshots -> committed macro ETL gold snapshot -> deterministic SIM.
+  const baseAll = getGlobalPolicyRates().map(etlPolicyRate);
   const base = getGlobalSummary();
   // Live FRED for central banks with an OECD / ECB rate series.
   const { data: liveMap, source } = useLiveSeriesSet(baseAll.map((r) => r.fredId).filter(Boolean) as string[], "lin", 36);
   const all = baseAll.map((r) => {
     const L = r.fredId ? liveMap[r.fredId] : undefined;
-    return L && isRealEconSource(L.source) && L.observations.length ? livePolicyRate(r, L.observations) : r;
+    return L && isRealEconSource(L.source) && L.observations.length ? { ...livePolicyRate(r, L.observations), source: L.source } : r;
   }).sort((a, b) => b.rate - a.rate);
+  const pageSource: DataSource = all.some((r) => r.source === "FRED")
+    ? "FRED"
+    : all.some((r) => r.source === "SNAPSHOT")
+    ? "SNAPSHOT"
+    : all.some((r) => r.source === "ETL")
+    ? "ETL"
+    : source === "LOADING"
+    ? "LOADING"
+    : "SIM";
   const summary = {
     ...base,
     avgPolicyRate: Number((all.reduce((a, r) => a + r.rate, 0) / all.length).toFixed(2)),
@@ -49,7 +59,13 @@ export default function GlobalPolicyRates() {
   const total = summary.cuttingCount + summary.hikingCount + summary.holdCount;
 
   const drill = (r: PolicyRate) =>
-    open({ id: r.fredId ?? r.country, label: `${r.country} Policy Rate`, units: "lin", unitLabel: "%", decimals: 2 });
+    open({
+      id: r.fredId ?? r.country,
+      label: `${r.country} Policy Rate`,
+      units: "lin",
+      unitLabel: r.source === "ETL" ? "% · ETL policy snapshot" : r.source === "SIM" ? "simulation" : "%",
+      decimals: 2,
+    });
 
   const columns: Column<PolicyRate>[] = [
     {
@@ -122,6 +138,14 @@ export default function GlobalPolicyRates() {
       sortVal: (r) => r.nextMeeting,
       render: (r) => <span className="text-term-text-mute">{r.nextMeeting}</span>,
     },
+
+    {
+      key: "source",
+      header: "Src",
+      align: "center",
+      sortVal: (r) => r.source,
+      render: (r) => <Tag tone={r.source === "FRED" ? "up" : r.source === "SNAPSHOT" ? "blue" : r.source === "ETL" ? "amber" : "neutral"}>{r.source}</Tag>,
+    },
     {
       key: "history",
       header: "Path",
@@ -164,7 +188,7 @@ export default function GlobalPolicyRates() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="GPOL" title="Global Policy Rates" desc="Central-bank rates, cycles & streaks" right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "FEDFUNDS" }, { source: "econ", id: "DGS2" }]} range="5Y" /><SourceBadge source={source} /></span>} />
+      <PageHeader code="GPOL" title="Global Policy Rates" desc="Central-bank rates, cycles & streaks" right={<span className="flex items-center gap-2"><ChartLink refs={[{ source: "econ", id: "FEDFUNDS" }, { source: "econ", id: "DGS2" }]} range="5Y" /><SourceBadge source={pageSource} /></span>} />
 
       <KpiStrip>
         <Stat label="Global Avg Policy Rate" value={`${fmtNum(summary.avgPolicyRate, 2)}%`} sub={`${total} central banks`} tone="amber" />
@@ -251,7 +275,7 @@ export default function GlobalPolicyRates() {
       </div>
 
       <div className="border-t border-term-border bg-term-panel px-3 py-1.5 text-3xs text-term-text-mute">
-        Cycle &amp; streak = consecutive central-bank meetings in the same action (cut / hike / hold). Real rate = policy rate − CPI YoY;
+        Source order: live FRED/OECD snapshots, then committed macro ETL policy snapshots, then deterministic SIM fallback. Cycle &amp; streak = consecutive central-bank meetings in the same action (cut / hike / hold). Real rate = policy rate − CPI YoY;
         positive = restrictive, negative = accommodative. Click any bank to drill into its rolling 24-month rate path.
       </div>
     </div>
