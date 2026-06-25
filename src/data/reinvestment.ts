@@ -134,6 +134,16 @@ export function getReinvestmentSummary(): ReinvestmentSummary {
   };
 }
 
+export function computeReinvestmentKpis(positions: ReinvestmentPosition[]): Pick<ReinvestmentSummary, "reinvestYieldBps" | "netSpreadBps" | "wamDays" | "t0Liquidity" | "monthlyIncome"> {
+  const cashCollateral = positions.reduce((a, p) => a + p.allocation, 0);
+  const reinvestYieldBps = positions.reduce((a, p) => a + p.allocation * p.yieldBps, 0) / cashCollateral;
+  const rebateCostBps = 388;
+  const netSpreadBps = reinvestYieldBps - rebateCostBps;
+  const wamDays = positions.reduce((a, p) => a + p.allocation * p.wamDays, 0) / cashCollateral;
+  const t0Liquidity = positions.filter((p) => p.bucket === "T+0").reduce((a, p) => a + p.allocation, 0);
+  return { reinvestYieldBps, netSpreadBps, wamDays, t0Liquidity, monthlyIncome: (cashCollateral * netSpreadBps) / 10000 / 12 };
+}
+
 export function getReinvestmentScenarios(): ReinvestmentScenario[] {
   const summary = getReinvestmentSummary();
   const defs: [string, number, number, string][] = [

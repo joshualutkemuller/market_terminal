@@ -13,6 +13,7 @@ import {
   getCashSummary,
   getFundingPath,
   mergeLiveFundingRates,
+  computeCashKpis,
   type FundingSource,
   type FundingUse,
   type FundingPath,
@@ -50,6 +51,7 @@ export default function CashOptimizer() {
   const { data: cashFred } = useLiveSeriesSet([...CASH_FRED_IDS], "lin", 5);
   const anyLive = CASH_FRED_IDS.some((id) => cashFred[id]?.source === "FRED");
   const sources = useMemo(() => mergeLiveFundingRates(simSources, cashFred), [simSources, cashFred]);
+  const liveKpis = useMemo(() => computeCashKpis(sources, uses), [sources, uses]);
 
   const srcCols: Column<FundingSource>[] = [
     { key: "source", header: "Source", render: (r) => <span className="text-term-text">{r.source}</span> },
@@ -116,7 +118,7 @@ export default function CashOptimizer() {
     { text: `Shift incremental funding to ${cheapest.source} (${fmtNum(cheapest.rateBps, 0)} bps) away from ${dearest.source} (${fmtNum(dearest.rateBps, 0)} bps).`, tone: "up", tag: `${fmtNum(dearest.rateBps - cheapest.rateBps, 0)} bps` },
     { text: `Cover ${highUses.length} HIGH-priority uses first (${fmtUsdAbbr(highTotal)}) — margin & client financing due intraday.`, tone: "down", tag: `${highUses.length} HIGH` },
     { text: `Execute cheapest funding path across ${path.length} legs to realize blended-rate savings.`, tone: "amber", tag: fmtUsdAbbr(totalSaved) },
-    { text: sum.fundingGap >= 0 ? `Surplus of ${fmtUsdAbbr(sum.fundingGap)} — deploy excess into Money Market / Reverse Repo.` : `Deficit of ${fmtUsdAbbr(Math.abs(sum.fundingGap))} — raise term repo to close gap.`, tone: sum.fundingGap >= 0 ? "up" : "down", tag: fmtUsdAbbr(Math.abs(sum.fundingGap)) },
+    { text: liveKpis.fundingGap >= 0 ? `Surplus of ${fmtUsdAbbr(liveKpis.fundingGap)} — deploy excess into Money Market / Reverse Repo.` : `Deficit of ${fmtUsdAbbr(Math.abs(liveKpis.fundingGap))} — raise term repo to close gap.`, tone: liveKpis.fundingGap >= 0 ? "up" : "down", tag: fmtUsdAbbr(Math.abs(liveKpis.fundingGap)) },
     { text: `Maintain liquidity buffer of ${fmtUsdAbbr(sum.liquidityBuffer)} vs intraday peak ${fmtUsdAbbr(sum.intradayPeak)}.`, tone: "blue", tag: `LCR ${fmtNum(sum.lcr, 0)}` },
   ];
 
@@ -129,10 +131,10 @@ export default function CashOptimizer() {
       <KpiStrip>
         <Stat label="Total Sources" value={fmtUsdAbbr(sum.totalSources)} sub={`${sources.length} facilities`} />
         <Stat label="Total Uses" value={fmtUsdAbbr(sum.totalUses)} sub={`${uses.length} obligations`} />
-        <Stat label="Funding Gap" value={fmtUsdAbbr(sum.fundingGap)} sub={sum.fundingGap >= 0 ? "surplus" : "deficit"} tone={sum.fundingGap >= 0 ? "up" : "down"} />
-        <Stat label="Blended Rate" value={`${fmtNum(sum.blendedRateBps, 1)} bps`} sub="current cost of funds" />
-        <Stat label="Optimized Rate" value={`${fmtNum(sum.optimizedRateBps, 1)} bps`} sub={<span className="text-term-up">-{fmtNum(sum.savingsBps, 1)} bps</span>} tone="up" />
-        <Stat label="Savings" value={fmtUsdAbbr(sum.savingsUsd)} sub={`${fmtNum(sum.savingsBps, 1)} bps captured`} tone="amber" />
+        <Stat label="Funding Gap" value={fmtUsdAbbr(liveKpis.fundingGap)} sub={liveKpis.fundingGap >= 0 ? "surplus" : "deficit"} tone={liveKpis.fundingGap >= 0 ? "up" : "down"} />
+        <Stat label="Blended Rate" value={`${fmtNum(liveKpis.blendedRateBps, 1)} bps`} sub="current cost of funds" />
+        <Stat label="Optimized Rate" value={`${fmtNum(liveKpis.optimizedRateBps, 1)} bps`} sub={<span className="text-term-up">-{fmtNum(liveKpis.savingsBps, 1)} bps</span>} tone="up" />
+        <Stat label="Savings" value={fmtUsdAbbr(liveKpis.savingsUsd)} sub={`${fmtNum(liveKpis.savingsBps, 1)} bps captured`} tone="amber" />
       </KpiStrip>
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-3">

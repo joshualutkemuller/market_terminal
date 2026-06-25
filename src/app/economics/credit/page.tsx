@@ -9,7 +9,7 @@ import { BarChart } from "@/components/charts/BarChart";
 import { ProgressBar } from "@/components/charts/Radial";
 import { useDrill } from "@/components/econ/DrillProvider";
 import { SourceBadge } from "@/components/econ/SourceBadge";
-import { useLiveSeriesSet } from "@/lib/useEcon";
+import { isRealEconSource, useLiveSeriesSet } from "@/lib/useEcon";
 import { Sparkline } from "@/components/charts/Sparkline";
 import {
   getCreditCurve, getCreditSummary, getSpreadHistory, getSectorSpreads, getStressEpisodes, getCreditLinkages, liveRung,
@@ -41,11 +41,11 @@ export default function CreditSpreadsPage() {
   const { data: liveMap, source } = useLiveSeriesSet([...baseCurve.map((r) => r.fredId), ...MASTER_IDS], undefined, 24);
   const curve = baseCurve.map((r) => {
     const L = liveMap[r.fredId];
-    return L && L.source === "FRED" && L.observations.length ? liveRung(r, L.observations) : r;
+    return L && isRealEconSource(L.source) && L.observations.length ? liveRung(r, L.observations) : r;
   });
   const masterOas = (id: string, fallback: number, prior = false) => {
     const L = liveMap[id];
-    if (L && L.source === "FRED" && L.observations.length) {
+    if (L && isRealEconSource(L.source) && L.observations.length) {
       const v = L.observations.map((o) => o.value);
       return Math.round(prior ? v[v.length - 2] ?? v[v.length - 1] : v[v.length - 1]);
     }
