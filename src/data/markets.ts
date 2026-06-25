@@ -66,18 +66,18 @@ export interface IndexQuote {
 export function getIndices(): IndexQuote[] {
   const rng = new Rng(8002);
   const seed: [string, string, number][] = [
-    ["SPX", "S&P 500", 5974.5],
-    ["NDX", "Nasdaq 100", 21345.8],
-    ["INDU", "Dow Jones", 43210.4],
-    ["RUT", "Russell 2000", 2412.7],
-    ["VIX", "CBOE VIX", 14.2],
-    ["MOVE", "MOVE Index", 92.4],
-    ["DXY", "Dollar Index", 106.8],
-    ["UST10Y", "US 10Y Yield", 4.42],
-    ["SOFR", "SOFR", 4.58],
-    ["GC", "Gold Spot", 2648.1],
-    ["CL", "WTI Crude", 71.4],
-    ["BTC", "Bitcoin", 104250],
+    ["SPX", "S&P 500", 7357],
+    ["NDX", "Nasdaq 100", 22750],
+    ["INDU", "Dow Jones", 45200],
+    ["RUT", "Russell 2000", 2520],
+    ["VIX", "CBOE VIX", 15.8],
+    ["MOVE", "MOVE Index", 98.5],
+    ["DXY", "Dollar Index", 99.4],
+    ["UST10Y", "US 10Y Yield", 4.26],
+    ["SOFR", "SOFR", 4.30],
+    ["GC", "Gold Spot", 3350],
+    ["CL", "WTI Crude", 68.7],
+    ["BTC", "Bitcoin", 108500],
   ];
   return seed.map(([symbol, name, base]) => {
     const chgPct = rng.normal(0, 1) * (symbol === "VIX" || symbol === "BTC" ? 2.4 : 0.6);
@@ -148,7 +148,7 @@ export function mergeSnapshotIndices(sim: IndexQuote[], cards: PipelineCard[], a
 }
 
 const SIM_INDEX_BASE: Record<string, number> = {
-  SPX: 5974.5, NDX: 21345.8, INDU: 43210.4, RUT: 2412.7, BTC: 104250,
+  SPX: 7357, NDX: 22750, INDU: 45200, RUT: 2520, BTC: 108500,
 };
 
 export interface HeatCell {
