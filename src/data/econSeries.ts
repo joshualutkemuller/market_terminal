@@ -136,7 +136,12 @@ export const FRED_CATALOG: FredSeries[] = [
   { id: "DTWEXBGS", label: "Trade-Weighted USD (Broad)", short: "USD Broad", unit: "index", category: "FX", freq: "D", decimals: 2, level: 121.4, vol: 0.4, bullish: null },
   { id: "DEXUSEU", label: "USD / EUR", short: "EUR/USD", unit: "$", category: "FX", freq: "D", decimals: 4, level: 1.051, vol: 0.005, bullish: null },
   { id: "DEXJPUS", label: "JPY / USD", short: "USD/JPY", unit: "¥", category: "FX", freq: "D", decimals: 2, level: 156.3, vol: 0.5, bullish: null },
-  { id: "VIXCLS", label: "CBOE VIX", short: "VIX", unit: "index", category: "MONEY", freq: "D", decimals: 1, level: 14.2, vol: 1.5, bullish: false },
+  { id: "VIXCLS", label: "CBOE VIX", short: "VIX", unit: "index", category: "MONEY", freq: "D", decimals: 1, level: 15.8, vol: 1.5, bullish: false },
+  { id: "SP500", label: "S&P 500", short: "S&P 500", unit: "index", category: "MONEY", freq: "D", decimals: 0, level: 7357, vol: 30, bullish: true },
+  { id: "NASDAQCOM", label: "Nasdaq Composite", short: "Nasdaq", unit: "index", category: "MONEY", freq: "D", decimals: 0, level: 22750, vol: 100, bullish: true },
+  { id: "DJIA", label: "Dow Jones Industrial Average", short: "DJIA", unit: "index", category: "MONEY", freq: "D", decimals: 0, level: 45200, vol: 150, bullish: true },
+  { id: "GOLDPMGBD228NLBM", label: "Gold Fixing Price (London PM)", short: "Gold", unit: "$/oz", category: "MONEY", freq: "D", decimals: 1, level: 3350, vol: 15, bullish: null },
+  { id: "DCOILWTICO", label: "WTI Crude Oil", short: "WTI", unit: "$/bbl", category: "MONEY", freq: "D", decimals: 2, level: 68.7, vol: 1.0, bullish: null },
 
   // ── Funding & money markets (overnight rates, the corridor, the plumbing) ──
   { id: "EFFR", label: "Effective Fed Funds Rate (daily)", short: "EFFR (d)", unit: "%", category: "RATES", freq: "D", decimals: 2, level: 4.08, vol: 0.01, bullish: null },
