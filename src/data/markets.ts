@@ -61,6 +61,7 @@ export interface IndexQuote {
   spark: number[];
   asOf?: string;
   source?: "FRED" | "PIPELINE" | "SIM";
+  seriesId?: string;
 }
 
 export function getIndices(): IndexQuote[] {
@@ -114,7 +115,7 @@ export function mergeLiveIndices(sim: IndexQuote[], fred: LiveFredData): IndexQu
     const chgPct = prior !== 0 ? (chg / prior) * 100 : 0;
     const spark = obs.slice(-30).map((o) => o.value);
     const asOf = obs[obs.length - 1].date;
-    return { ...q, last: latest, chg, chgPct, spark, asOf, source: "FRED" as const };
+    return { ...q, last: latest, chg, chgPct, spark, asOf, source: "FRED" as const, seriesId: fredId };
   });
 }
 
@@ -143,7 +144,7 @@ export function mergeSnapshotIndices(sim: IndexQuote[], cards: PipelineCard[], a
     const base = SIM_INDEX_BASE[q.symbol] ?? q.last;
     const last = base * (1 + card.ret_1d);
     const chg = last - base;
-    return { ...q, last, chg, chgPct, source: "PIPELINE" as const, asOf: asOf ?? undefined };
+    return { ...q, last, chg, chgPct, source: "PIPELINE" as const, asOf: asOf ?? undefined, seriesId: snapId };
   });
 }
 

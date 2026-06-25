@@ -141,7 +141,7 @@ export default function CommandCenter() {
                   <div>
                     <div className="flex items-center gap-1">
                       <span className="text-2xs font-semibold text-term-text-dim">{q.symbol}</span>
-                      {q.source && q.source !== "SIM" && <span className={`inline-block h-1 w-1 rounded-full ${q.source === "FRED" ? "bg-term-up" : "bg-term-blue"}`} title={`${q.source}${q.asOf ? ` ${q.asOf}` : ""}`} />}
+                      {q.seriesId && <span className="text-3xs text-term-text-mute font-mono" title={`${q.source ?? "SIM"}${q.asOf ? ` ${q.asOf}` : ""}`}>{q.seriesId}</span>}
                     </div>
                     <div className="tnum text-xs text-term-text">{fmtNum(q.last, q.last > 1000 ? 0 : 2)}</div>
                   </div>
