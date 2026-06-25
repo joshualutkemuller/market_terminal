@@ -47,6 +47,7 @@ import EconUtilization from "./app/economics/utilization/page";
 import EconYieldCurve from "./app/economics/yield-curve/page";
 import EconRateVol from "./app/economics/rate-vol/page";
 import EconFundingCost from "./app/economics/funding-cost/page";
+import EconRateAnalysis from "./app/economics/rate-analysis/page";
 
 import NotFound from "./app/not-found";
 
@@ -106,6 +107,7 @@ export function App() {
           <Route path="yield-curve" element={<EconYieldCurve />} />
           <Route path="rate-vol" element={<EconRateVol />} />
           <Route path="funding-cost" element={<EconFundingCost />} />
+          <Route path="rate-analysis" element={<EconRateAnalysis />} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

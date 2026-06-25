@@ -73,6 +73,7 @@ export const NAV: NavItem[] = [
   { code: "SFE", label: "Sec-Finance Economics", href: "/economics/sec-finance", icon: Banknote, desc: "Rates → repo, funding & lending", group: "ECONOMICS" },
   { code: "FUND", label: "Funding & Liquidity", href: "/economics/funding", icon: Droplets, desc: "Repo, corridor, balances & funding stress", group: "ECONOMICS" },
   { code: "BMRK", label: "Benchmark Rates", href: "/economics/benchmark", icon: Activity, desc: "Daily rates — trend, status, comparison & regime", group: "ECONOMICS" },
+  { code: "BRA", label: "Rate Analysis Hub", href: "/economics/rate-analysis", icon: Activity, desc: "Unified dashboard across all benchmark rate modules", group: "ECONOMICS" },
   { code: "UTIL", label: "Utilization Analytics", href: "/economics/utilization", icon: Gauge, desc: "Lending utilization, benchmark overlays & custom rate blends", group: "ECONOMICS" },
   { code: "YCURV", label: "Yield Curve Analytics", href: "/economics/yield-curve", icon: Spline, desc: "Daily curve shape, slope history & regime shifts", group: "ECONOMICS" },
   { code: "RVOL", label: "Rate Volatility", href: "/economics/rate-vol", icon: Activity, desc: "Realized vol surface, vol regimes & vol-of-vol", group: "ECONOMICS" },
