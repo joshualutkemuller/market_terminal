@@ -5,7 +5,7 @@
 **Module Group:** Benchmark Rate Analysis  
 **Parent Module:** `BMRK` — Benchmark Rates (`/economics/benchmark`)  
 **Created:** 2026-06-24  
-**Status:** Planning — all four modules pending build
+**Status:** Completed — BMRK/BRA/YCURV/RVOL/FCOST/UTIL are integrated
 
 ---
 

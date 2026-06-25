@@ -1,5 +1,7 @@
 Prompt: Build Market Lens Studio — A Customizable Charlie Bilello–Inspired Market Analytics Module
 
+Status: Completed — `LENS` is integrated
+
 You are an expert Python market-data engineer, quant researcher, financial dashboard designer, and backend architect.
 
 I am building a Bloomberg-like market terminal with a Java frontend and Python backend. I want to build a modular analytics capability inspired by the recurring public market-chart style of Charlie Bilello: clean, historical, evidence-based, myth-busting, cross-asset, and easy for traders, portfolio managers, analysts, and clients to understand.

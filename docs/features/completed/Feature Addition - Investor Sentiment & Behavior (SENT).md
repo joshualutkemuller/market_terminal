@@ -1,9 +1,9 @@
 # Feature Addition — Investor Sentiment & Behavior (`SENT`)
 
 Date: 2026-06-21
-Status: Plan / proposal
+Status: Completed — `SENT` is integrated with live-capable providers
 Module code: **`SENT`** — Investor Sentiment & Behavior
-Related: `docs/features/Feature Addition - NEWS Terminal Module (Market News & Signal Intelligence).md`, `docs/features/Feature Addition - Desk Pulse (Funding & Squeeze Radar).md`, `docs/features/Feature Addition - Intelligence Layer (SEC Edgar, Stocktwits, X, and News).md`
+Related: `docs/features/completed/Feature Addition - NEWS Terminal Module (Market News & Signal Intelligence).md`, `docs/features/completed/Feature Addition - Desk Pulse (Funding & Squeeze Radar).md`, `docs/features/Feature Addition - Intelligence Layer (SEC Edgar, Stocktwits, X, and News).md`
 
 ---
 

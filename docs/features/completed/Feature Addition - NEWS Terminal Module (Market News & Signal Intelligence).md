@@ -1,7 +1,7 @@
 # Build Prompt: NEWS Terminal Module (Market News, Social Intelligence & Signal Engine)
 
 Date: 2026-06-20
-Status: **Implemented (frontend, deterministic engine)** — live ingestion pending
+Status: Completed — terminal module implemented; live ingestion remains provider-dependent
 Module code: **`NEWS`** — Market News & Signal Intelligence
 
 > **Implementation status (2026-06-21).** The terminal-side module is shipped:

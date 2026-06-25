@@ -3,8 +3,9 @@
 > Track builds that wire deterministic simulation widgets to live market/economic pipelines.
 
 **Created:** 2026-06-24
-**Plan:** [`docs/SIM_TO_LIVE_UPGRADE_PLAN.md`](./SIM_TO_LIVE_UPGRADE_PLAN.md)
+**Plan:** [`docs/SIM_TO_LIVE_UPGRADE_PLAN.md`](../SIM_TO_LIVE_UPGRADE_PLAN.md)
 **Branch:** `claude/bold-noether-h3mc2l`
+**Status:** Completed — archived from active handoffs
 
 ---
 

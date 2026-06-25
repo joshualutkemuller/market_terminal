@@ -5,7 +5,7 @@ A **Bloomberg-style operating system** for the securities finance business — u
 Cash Collateral Reinvestment, Liquidity & Funding Stress, Sources & Uses Matching,
 Treasury & Funding Analytics, Borrow-Demand / Squeeze Radar, Macro Regime Playbooks,
 Market News, Investor Sentiment, DataOps/Lineage, and AI-driven decision support**
-into a single dense, keyboard-driven, multi-monitor terminal — **37 modules** in all.
+into a single dense, keyboard-driven, multi-monitor terminal — **43 modules** in all.
 
 Built to look and feel like the software that runs a multi-trillion-dollar book at
 State Street, Goldman Sachs, Morgan Stanley, J.P. Morgan, BNY Mellon, Citi, UBS, or
@@ -152,6 +152,12 @@ analytics/model modules are computed layers. Honest per-module status:
 | Macro Regime Playbook | 🟡 Partial live/sim | — | FRED/Yahoo/local factor playbook; deterministic factors until pipeline-backed |
 | Sec-Finance Economics | 🟡 Partial live | 🟢 Live | SOFR/EFFR/IORB/RRP + Fed-funds backdrop live; GC/specials/sensitivities, P&L bridge, and scenario library curated |
 | Funding & Liquidity | 🟢 Live (12/16 FRED) | 🟢 Live | corridor/balances/bills live via `/api/econ/batch` (incl. WRESBAL $B→$T scaling); FX-basis & FRA-OIS are SIM pending a BIS feed; stress gauge derived |
+| Benchmark Rates | 🟢 Live/real fallback | 🟢 Live or snapshot | 33-rate status board, trends, spreads, correlations, and regime classification over FRED → master JSON → committed snapshot → deterministic SIM |
+| Rate Analysis Hub | 🟡 Composite analytics | — | BRA aggregates Benchmark Rates, Yield Curve Analytics, Rate Volatility, Funding Cost, and Utilization Analytics into one economics workflow |
+| Yield Curve Analytics | 🟢 Live/real fallback | 🟢 Live or snapshot | Daily curve construction, slope/curvature/butterfly history, curve regimes, and PDF export reusing the benchmark-rate series map |
+| Rate Volatility | 🟢 Live/real fallback | 🟢 Live or snapshot | Realized-vol surface, vol regimes, vol-of-vol, term-structure analytics, and PDF export over Treasury/rate histories |
+| Funding Cost Monitor | 🟡 Derived from live/sim rates | — | Blended borrowing-cost monitor by counterparty tier and desk attribution; live benchmark inputs with modeled/internal-book overlays |
+| Utilization Analytics | 🟡 Internal-book model + rate overlays | — | Aggregate securities-lending utilization analytics, benchmark-rate overlays, custom rate blends, sensitivity, and PDF export |
 | Squeeze Radar | 🔴 Sim (lending spine) | — | utilization/fee from the lending book + synthesized SI/DTC/fee-momentum/skew; needs a securities-finance / short-interest vendor feed |
 | News & Signal Intel | 🟡 Provider chain | — | tape, narratives, attention (4 dims) and signals recompute from the live headlines (Alpha Vantage→Marketaux→Finnhub→NewsAPI); **event clusters use FinBERT transformer clusters** via `news_nlp` when wired (keyword clustering otherwise). Market Impact stays a labelled historical model |
 | Investor Sentiment | 🟡 Partial live | — | VIX live (FRED `VIXCLS`); social chain wired; AAII/NAAIM survey ingest needed |
@@ -173,7 +179,18 @@ The **FRED units correction** (`resolveFred`) maps each series to the right tran
 > FRED does not send CORS headers, so it is only ever called server-side from the route
 > handlers — the key is never exposed to the browser.
 
-### Roadmap implementation update
+### Ongoing integration log
+
+Use this section as the running handoff log whenever a feature moves from planning into the integrated terminal. Keep each entry dated, list the module codes affected, and update the module count / provenance table above at the same time.
+
+#### 2026-06-25 — Benchmark-rate analysis suite integrated
+
+- Added the **Benchmark Rates (`BMRK`)** page with 33 rate series, trend metrics, spread analysis, correlations, status board, regime classification, and PDF export.
+- Added the **Rate Analysis Hub (`BRA`)** as a unified workflow over the benchmark-rate family.
+- Added **Yield Curve Analytics (`YCURV`)**, **Rate Volatility (`RVOL`)**, **Funding Cost Monitor (`FCOST`)**, and **Utilization Analytics (`UTIL`)**; these reuse the benchmark-rate data contract and the FRED → master JSON → snapshot → SIM fallback model.
+- Moved completed feature/handoff docs into `docs/completed/` and `docs/features/completed/`; active planning docs remain in place.
+
+#### Earlier roadmap implementation update
 
 The `roadmap_feature_implementation` branch expanded the terminal from 22 to 26
 modules and added the first collateral-adjacent macro workflow layer:
@@ -195,10 +212,10 @@ fixtures today, can use free **FRED** and **Yahoo Finance/yfinance** style input
 can later scale to licensed feeds, internal books, optimizer outputs, and the
 `market_data_pipeline` quality/lineage tables without changing the terminal UX.
 
-**Since then** the terminal has grown to **37 modules**, adding the charting studios
+**Since then** the terminal has grown to **43 modules**, adding the charting studios
 (`MGC`/`MOTN`/`LENS`/`MKC`), **Funding & Liquidity (`FUND`)** and **Squeeze Radar
 (`SQZ`)**, and the **News (`NEWS`)** + **Investor Sentiment (`SENT`)** intelligence
-layer — backed by an expanded **104-series FRED catalog**, a news provider chain
+layer, plus the benchmark-rate analysis suite (`BMRK`/`BRA`/`YCURV`/`RVOL`/`FCOST`/`UTIL`) — backed by an expanded **104-series FRED catalog**, a news provider chain
 (Alpha Vantage / Marketaux / Finnhub / NewsAPI), Reddit/StockTwits social, and the
 **`news_nlp`** FinBERT NLP stage. See `docs/PLATFORM_DATA_CONNECTIVITY.md` for the
 full live-vs-simulated map.
@@ -379,7 +396,7 @@ NEWS_NLP_URL=http://localhost:8088 npm run dev   # → /api/news re-scores with 
 The `news_nlp` package installs/imports on a lexicon fallback without the model
 stack and surfaces in **DATAOPS** under the `NEWS_NLP` provider. See
 `news_nlp/README.md` and `docs/PLATFORM_DATA_CONNECTIVITY.md` for the full
-data-connectivity map across all 37 modules.
+data-connectivity map across all 43 modules.
 
 ---
 
@@ -397,7 +414,7 @@ data-connectivity map across all 37 modules.
 ## Tech stack
 
 **This build** is a **Vite + React single-page app** over **deterministic, seeded data
-generators**, so all 37 modules run with **zero configuration** — no database, no required
+generators**, so all 43 modules run with **zero configuration** — no database, no required
 keys. The `/api/*` endpoints are standard Web `Request → Response` handlers in `src/app/api/**`,
 served from **one shared route registry** (`src/server/registry.ts`) in every environment (see
 "How `/api/*` is served"). Optional live integrations include FRED for economics (104-series
@@ -453,6 +470,8 @@ no second source of truth:
 | `npm run build:vercel` | Client + the Vite-built handler bundle (`dist-vercel/handler.js`) the Vercel function imports |
 | `npm start` | Run the standalone production server (`dist-server/index.js`) |
 | `npm run export:econ-snapshot` | Capture real FRED series into `src/data/econSnapshot.json` (needs `FRED_API_KEY` + egress) |
+| `npm run refresh:fred-master` | Incrementally refresh local `data/master/fred/*.json` real-data cache files (needs `FRED_API_KEY` + egress) |
+| `npm run refresh:aaii-sentiment` | Refresh the AAII sentiment snapshot used by `SENT` when network access is available |
 | `npm run typecheck` / `npm run test` | `tsc --noEmit` / Vitest |
 
 ### Diagnostics
@@ -468,7 +487,7 @@ no second source of truth:
 ## Run locally
 
 The terminal is a **Vite + React** SPA — **zero config, no database, no keys**.
-All 37 modules (including Rate Probabilities, which renders the committed ETL
+All 43 modules (including Rate Probabilities, which renders the committed ETL
 FedWatch snapshot, and the news/sentiment modules backed by deterministic local
 fixtures) work fully offline.
 
@@ -579,7 +598,7 @@ src/
 │   │    market-snapshot, market-lens, market-chart, macro-chart, news, sentiment,
 │   │    dataops, copilot, alerts)
 │   ├── economics/           # ECON + curve, inflation, global-cpi, policy-rates, credit,
-│   │                         #   rates, calendar, stats, regime, ml, sec-finance, funding, motion
+│   │                         #   rates, calendar, stats, regime, ml, sec-finance, funding, benchmark, rate-analysis, utilization, yield-curve, rate-vol, funding-cost, motion
 │   └── api/                 # Web Request→Response handlers (served by the registry, see below)
 │       ├── econ/            # series, batch, indicators, curve, curve-history, calendar, stats, inversions
 │       ├── market/[view]/   # committed snapshot or live DB/file/FastAPI market-data view
@@ -603,14 +622,14 @@ src/
 │                            #   Sankey, NetworkGraph, Waterfall, Matrix, Radial, YieldCurve, ScatterPlot)
 ├── data/                    # deterministic domain generators + committed snapshots
 │                            #   (markets, securitiesLending, primeFinance, collateral, cash, …,
-│                            #   econSeries [104-series FRED catalog], econSnapshot.json, etl/, market/)
+│                            #   econSeries [104-series FRED catalog], benchmarkRates, yieldCurveAnalytics, rateVolatility, fundingCost, utilizationAnalytics, masterJson, econSnapshot.json, etl/, market/)
 └── lib/                     # rng, format, hooks, nav, provenance (badge + freshness),
                              #   useEcon, useMarket, useNews, useSocial, charting/,
                              #   server/fred.ts, server/fetchProxy.ts (proxy support),
                              #   server/newsProviders.ts, server/socialProviders.ts, server/sentimentNlp.ts
 
 news_nlp/                    # Python FinBERT NLP stage (sentiment · NER · event clustering)
-docs/LIVE_DATA_READINESS_ASSESSMENT.md   # full live-vs-snapshot-vs-sim audit of all 37 modules
+docs/LIVE_DATA_READINESS_ASSESSMENT.md   # full live-vs-snapshot-vs-sim audit of all 43 modules
 ```
 
 ---

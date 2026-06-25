@@ -3,7 +3,7 @@
 Date: 2026-06-20
 Status: Plan / proposal
 Owner module code: **`EDGR`** (parent), with sub-views `RADAR`, `TONE`, `RISK`, `REGIME`, `EXPO`, `COHORT`, `CO`
-Related docs: `docs/MARKET_TERMINAL_ROADMAP.md`, `docs/features/Feature Addition - Intelligence Layer (SEC Edgar, Stocktwits, X, and News).md`, `docs/features/Feature Addition - Market Lens Studio.md`
+Related docs: `docs/MARKET_TERMINAL_ROADMAP.md`, `docs/features/Feature Addition - Intelligence Layer (SEC Edgar, Stocktwits, X, and News).md`, `docs/features/completed/Feature Addition - Market Lens Studio.md`
 
 ---
 

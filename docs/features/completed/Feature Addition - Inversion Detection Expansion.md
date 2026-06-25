@@ -1,3 +1,7 @@
+# Feature Addition — Inversion Detection Expansion
+
+Status: Completed — live spread inversion detection is integrated
+
 Here's exactly how the inversion periods are derived (all in src/data/econCurve.ts). There are two different paths depending on which spread you've selected.
 
 1. The default 10Y-2Y spread → curated historical record

@@ -1,8 +1,8 @@
 # Feature Completion — NEWS NLP: live Attention, Event Clusters & Signals
 
 Date: 2026-06-22
-Status: Plan → implementation
-Related: `docs/features/Feature Addition - NEWS Terminal Module (Market News & Signal Intelligence).md`, `news_nlp/README.md`, `docs/PLATFORM_DATA_CONNECTIVITY.md`
+Status: Completed — tape-derived attention, clusters, and signals are integrated
+Related: `docs/features/completed/Feature Addition - NEWS Terminal Module (Market News & Signal Intelligence).md`, `news_nlp/README.md`, `docs/PLATFORM_DATA_CONNECTIVITY.md`
 
 ## Objective
 
