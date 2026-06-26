@@ -6,7 +6,7 @@ import { MarketDataControls } from "@/components/market/MarketDataControls";
 import { getAssetQuilt, quiltColor, type QuiltYear } from "@/data/marketAnalytics";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
-import type { BilelloView, BilelloMonthlyReturn, ReturnBasis } from "@/data/marketPipeline";
+import type { BilelloView, BilelloMonthlyReturn, BilelloDailyPrice, ReturnBasis } from "@/data/marketPipeline";
 import { fmtNum, fmtSignedPct } from "@/lib/format";
 
 function tone(v: number): "up" | "down" | "amber" | "neutral" {
@@ -119,6 +119,17 @@ export default function AssetQuiltPage() {
   );
 }
 
+function returnFromDaily(daily: BilelloDailyPrice[], seriesId: string, yearStart: number, asof: string): number | null {
+  const priorYearEnd = `${yearStart - 1}-12-31`;
+  const seriesPrices = daily.filter((r) => r.series_id === seriesId);
+  const basePrices = seriesPrices.filter((r) => r.date <= priorYearEnd);
+  const base = basePrices.length ? basePrices[basePrices.length - 1].price : null;
+  const endPrices = seriesPrices.filter((r) => r.date >= `${yearStart}-01-01` && r.date <= asof);
+  const end = endPrices.length ? endPrices[endPrices.length - 1].price : null;
+  if (base == null || end == null || base === 0) return null;
+  return end / base - 1;
+}
+
 function compoundMonthly(monthly: BilelloMonthlyReturn[], seriesId: string, year: number, maxMonth: number): number | null {
   const rows = monthly.filter((r) => r.series_id === seriesId && r.year === year && r.month <= maxMonth);
   if (!rows.length) return null;
@@ -128,22 +139,31 @@ function compoundMonthly(monthly: BilelloMonthlyReturn[], seriesId: string, year
 function quiltFromBilello(bilello: BilelloView | null | undefined, asof: string): QuiltYear[] | null {
   const annualRows = bilello?.asset_class_returns_by_year ?? [];
   if (!annualRows.length) return null;
+  const daily = bilello?.asset_daily_prices ?? [];
   const monthly = bilello?.asset_monthly_returns ?? [];
+  const hasDaily = daily.length > 0;
   const hasMonthly = monthly.length > 0;
 
   const maxYear = asof ? parseInt(asof.slice(0, 4), 10) : 9999;
   const maxMonth = asof ? parseInt(asof.slice(5, 7), 10) : 12;
+  const isPartialDate = asof !== "" && maxYear < 9999;
   const years = Array.from(new Set(annualRows.map((r) => r.year))).sort((a, b) => a - b).filter((y) => y <= maxYear);
   if (!years.length) return null;
 
   return years.map((year) => {
-    const isPartialYear = hasMonthly && year === maxYear && maxMonth < 12 && asof !== "";
+    const isPartialYear = isPartialDate && year === maxYear;
+    const needsGranular = isPartialYear && !(maxMonth === 12 && asof.endsWith("12-31"));
     const cells = annualRows
       .filter((r) => r.year === year && r.total_return !== null)
       .map((r) => {
-        const ret = isPartialYear
-          ? compoundMonthly(monthly, r.series_id ?? "", year, maxMonth)
-          : r.total_return;
+        let ret: number | null = r.total_return;
+        if (needsGranular) {
+          if (hasDaily) {
+            ret = returnFromDaily(daily, r.series_id ?? "", year, asof);
+          } else if (hasMonthly) {
+            ret = compoundMonthly(monthly, r.series_id ?? "", year, maxMonth);
+          }
+        }
         if (ret === null) return null;
         return {
           year,

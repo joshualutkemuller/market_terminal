@@ -128,6 +128,38 @@ def asset_monthly_returns(prices_norm: pl.DataFrame) -> list[dict]:
     return rows
 
 
+def asset_daily_prices(prices_norm: pl.DataFrame) -> list[dict]:
+    """Daily price levels per series for intra-month quilt calculations.
+
+    Stores the normalized price level for each trading day so the frontend
+    can compute returns between any two arbitrary dates.
+    """
+    if prices_norm is None or prices_norm.height == 0:
+        return []
+    df = prices_norm.filter(pl.col("asset_class").is_in(list(PRICE_CLASSES)))
+    if df.height == 0:
+        return []
+
+    rows = []
+    for series_id in df.get_column("series_id").unique().to_list():
+        sub = df.filter(pl.col("series_id") == series_id)
+        asset_class = sub.tail(1).get_column("asset_class").to_list()[0]
+        display_name = sub.tail(1).get_column("display_name").to_list()[0]
+        dates, values = R.to_series(df, series_id)
+        for d, v in zip(dates, values):
+            rows.append(
+                {
+                    "series_id": series_id,
+                    "display_name": display_name,
+                    "asset_class": asset_class,
+                    "date": d.isoformat(),
+                    "price": R.round_or_none(v, 4),
+                }
+            )
+    rows.sort(key=lambda r: (r["date"], r["series_id"]))
+    return rows
+
+
 def current_drawdowns(prices_norm: pl.DataFrame) -> list[dict]:
     """Current drawdown per series, deepest first."""
     if prices_norm is None or prices_norm.height == 0:

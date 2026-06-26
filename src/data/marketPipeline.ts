@@ -118,12 +118,21 @@ export interface BilelloMonthlyReturn {
   monthly_return: number;
 }
 
+export interface BilelloDailyPrice {
+  series_id: string;
+  display_name: string;
+  asset_class: string;
+  date: string;
+  price: number;
+}
+
 export interface BilelloView {
   return_basis?: ReturnBasis;
   asof?: string | null;
   best_worst_ytd: { best: { series_id: string; display_name: string; ytd: number }[]; worst: { series_id: string; display_name: string; ytd: number }[] };
   asset_class_returns_by_year: { series_id?: string; display_name?: string; asset_class: string; year: number; total_return: number }[];
   asset_monthly_returns?: BilelloMonthlyReturn[];
+  asset_daily_prices?: BilelloDailyPrice[];
   current_drawdowns: { series_id: string; display_name: string; drawdown: number | null }[];
   rate_moves_ranked: Record<string, unknown>[];
   inflation_vs_policy_gap: Record<string, unknown>;
