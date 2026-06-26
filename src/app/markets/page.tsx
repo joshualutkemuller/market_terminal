@@ -21,17 +21,23 @@ import {
   heatmapFromCards,
   moversFromCards,
   INDEX_FRED_IDS,
+  HEAT_HORIZONS,
+  horizonDateRange,
+  isAnnualized,
   type Quote,
   type Mover,
   type IndexQuote,
   type PipelineCard,
+  type HeatHorizon,
 } from "@/data/markets";
 import { useLiveSeriesSet } from "@/lib/useEcon";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 import { bySymbol, type AssetClass } from "@/data/universe";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import type { ReturnBasis, SnapshotCard } from "@/data/marketPipeline";
 import { fmtNum, fmtInt, fmtAbbr, fmtSignedPct, pnlClass } from "@/lib/format";
+import { StalenessBar } from "@/components/ui/StalenessBar";
 import { marketChartHref } from "@/components/charting/ChartLink";
 import Link from "@/components/Link";
 import { CandlestickChart } from "lucide-react";
@@ -80,6 +86,7 @@ export default function LiveMarkets() {
   const [chartTicker, setChartTicker] = useState("AAPL");
   const [basis, setBasis] = useState<ReturnBasis>("total");
   const [asof, setAsOf] = useState("");
+  const [heatHorizon, setHeatHorizon] = useState<HeatHorizon>("1D");
 
   // Deep-link from the command palette / watchlists: /markets?sym=NVDA focuses
   // the intraday chart on that security and switches to its asset-class tab.
@@ -105,7 +112,8 @@ export default function LiveMarkets() {
     if (anyFredLive) idx = mergeLiveIndices(idx, indexFred);
     return idx;
   }, [marketData, indexFred, anyFredLive]);
-  const heat = useMemo(() => hasCards ? heatmapFromCards(marketData!.cards as PipelineCard[]) : getHeatmap(), [hasCards, marketData]);
+  const heat = useMemo(() => hasCards ? heatmapFromCards(marketData!.cards as PipelineCard[], heatHorizon) : getHeatmap(), [hasCards, marketData, heatHorizon]);
+  const heatRange = useMemo(() => horizonDateRange(heatHorizon, dataAsOf), [heatHorizon, dataAsOf]);
   const simMovers = useMemo(() => getMovers(), []);
   const movers = useMemo(() => {
     if (hasCards) { const m = moversFromCards(marketData!.cards as PipelineCard[]); return { ...simMovers, gainers: m.gainers, losers: m.losers }; }
@@ -239,6 +247,8 @@ export default function LiveMarkets() {
         right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} earliestAsOf={earliestAsOf} /><PipelineTag source={source} asOf={dataAsOf} /></span>}
       />
 
+      <StalenessBar asOf={asof || dataAsOf} />
+
       <KpiStrip>
         <Stat label="S&P 500" value={fmtNum(spx?.last ?? 0, 1)} sub={<span className={pnlClass(spx?.chgPct ?? 0)}>{fmtSignedPct(spx?.chgPct ?? 0)}</span>} tone={(spx?.chgPct ?? 0) >= 0 ? "up" : "down"} />
         <Stat label="Nasdaq 100" value={fmtNum(ndx?.last ?? 0, 1)} sub={<span className={pnlClass(ndx?.chgPct ?? 0)}>{fmtSignedPct(ndx?.chgPct ?? 0)}</span>} tone={(ndx?.chgPct ?? 0) >= 0 ? "up" : "down"} />
@@ -285,9 +295,17 @@ export default function LiveMarkets() {
 
         {/* Heat map */}
         <div className="col-span-12 xl:col-span-4">
-          <Panel title="Equity Heat Map" code="HEAT">
+          <Panel title="Equity Heat Map" code="HEAT" toolbar={
+            <div className="flex w-full items-center justify-between gap-2">
+              <TermToggleGroup value={heatHorizon} onChange={setHeatHorizon} options={HEAT_HORIZONS} size="sm" />
+              <span className="shrink-0 text-3xs text-term-text-mute">
+                {heatRange && <span className="font-mono">{heatRange}</span>}
+                {isAnnualized(heatHorizon) && <span className="ml-1 text-term-amber">ANNUALIZED</span>}
+              </span>
+            </div>
+          }>
             <div className="p-1">
-              <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct, group: h.sector }))} height={360} />
+              <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct, group: h.sector }))} height={360} maxAbs={isAnnualized(heatHorizon) ? 30 : heatHorizon === "YTD" || heatHorizon === "1Y" ? 20 : 4} />
             </div>
           </Panel>
         </div>

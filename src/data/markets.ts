@@ -168,6 +168,113 @@ export function getHeatmap(): HeatCell[] {
   });
 }
 
+export type HeatHorizon = "1D" | "1W" | "MTD" | "YTD" | "1Y" | "3Y" | "5Y";
+
+export const HEAT_HORIZONS: { value: HeatHorizon; label: string }[] = [
+  { value: "1D", label: "1D" },
+  { value: "1W", label: "1W" },
+  { value: "MTD", label: "MTD" },
+  { value: "YTD", label: "YTD" },
+  { value: "1Y", label: "1Y" },
+  { value: "3Y", label: "3Y" },
+  { value: "5Y", label: "5Y" },
+];
+
+const ETF_SECTOR: Record<string, string> = {
+  XLK: "Technology", XLC: "Comms", XLY: "Cons Disc", XLP: "Cons Staples",
+  XLF: "Financials", XLE: "Energy", XLV: "Healthcare", XLI: "Industrials",
+  XLB: "Materials", XLU: "Utilities", XLRE: "Real Estate",
+  SPY: "Broad Mkt", QQQ: "Technology", DIA: "Broad Mkt", IWM: "Broad Mkt",
+  VTI: "Broad Mkt", RSP: "Broad Mkt", VUG: "Growth", VTV: "Value",
+  MTUM: "Momentum", VNQ: "Real Estate", ACWI: "Global", EFA: "Intl Dev",
+  EEM: "Emerg Mkts", VGK: "Europe", EWJ: "Japan", FXI: "China",
+  EWU: "UK", EWZ: "Brazil", EWC: "Canada", INDA: "India",
+};
+
+const ETF_WEIGHT: Record<string, number> = {
+  SPY: 0.14, QQQ: 0.10, VTI: 0.06, IWM: 0.04, DIA: 0.04,
+  XLK: 0.08, XLF: 0.05, XLV: 0.04, XLY: 0.03, XLC: 0.03,
+  XLI: 0.03, XLE: 0.02, XLP: 0.02, XLB: 0.01, XLU: 0.01, XLRE: 0.01,
+  RSP: 0.02, VUG: 0.03, VTV: 0.03, MTUM: 0.02, VNQ: 0.02,
+  ACWI: 0.04, EFA: 0.03, EEM: 0.03, VGK: 0.02, EWJ: 0.01,
+  FXI: 0.01, EWU: 0.01, EWZ: 0.01, EWC: 0.01, INDA: 0.01,
+};
+
+interface SnapshotFields {
+  ret_1d: number | null;
+  ret_5d: number | null;
+  mtd: number | null;
+  ytd: number | null;
+  ret_1y: number | null;
+  cagr_3y: number | null;
+  cagr_5y: number | null;
+  asof: string | null;
+}
+
+function horizonReturn(c: SnapshotFields, h: HeatHorizon): number | null {
+  switch (h) {
+    case "1D": return c.ret_1d;
+    case "1W": return c.ret_5d;
+    case "MTD": return c.mtd;
+    case "YTD": return c.ytd;
+    case "1Y": return c.ret_1y;
+    case "3Y": return c.cagr_3y;
+    case "5Y": return c.cagr_5y;
+  }
+}
+
+const ANNUALIZED_HORIZONS = new Set<HeatHorizon>(["3Y", "5Y"]);
+
+export function isAnnualized(h: HeatHorizon): boolean {
+  return ANNUALIZED_HORIZONS.has(h);
+}
+
+export function horizonDateRange(h: HeatHorizon, asOf: string | null): string {
+  if (!asOf) return "";
+  const end = asOf;
+  const d = new Date(asOf + "T00:00:00");
+  switch (h) {
+    case "1D": {
+      const prev = new Date(d);
+      prev.setDate(prev.getDate() - 1);
+      while (prev.getDay() === 0 || prev.getDay() === 6) prev.setDate(prev.getDate() - 1);
+      return `${fmt(prev)} → ${end}`;
+    }
+    case "1W": {
+      const prev = new Date(d);
+      prev.setDate(prev.getDate() - 5);
+      return `${fmt(prev)} → ${end}`;
+    }
+    case "MTD": {
+      const start = `${asOf.slice(0, 7)}-01`;
+      return `${start} → ${end}`;
+    }
+    case "YTD": {
+      const start = `${asOf.slice(0, 4)}-01-01`;
+      return `${start} → ${end}`;
+    }
+    case "1Y": {
+      const prev = new Date(d);
+      prev.setFullYear(prev.getFullYear() - 1);
+      return `${fmt(prev)} → ${end}`;
+    }
+    case "3Y": {
+      const prev = new Date(d);
+      prev.setFullYear(prev.getFullYear() - 3);
+      return `${fmt(prev)} → ${end} (ann.)`;
+    }
+    case "5Y": {
+      const prev = new Date(d);
+      prev.setFullYear(prev.getFullYear() - 5);
+      return `${fmt(prev)} → ${end} (ann.)`;
+    }
+  }
+}
+
+function fmt(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 export interface Mover {
   ticker: string;
   name: string;
@@ -190,42 +297,29 @@ export interface PipelineCard {
   asset_class: string;
   price: number | null;
   ret_1d: number | null;
+  ret_5d?: number | null;
+  mtd?: number | null;
+  ytd?: number | null;
+  ret_1y?: number | null;
+  cagr_3y?: number | null;
+  cagr_5y?: number | null;
+  asof?: string | null;
 }
 
-const ETF_SECTOR: Record<string, string> = {
-  XLK: "Technology", XLC: "Comms", XLY: "Consumer", XLP: "Consumer",
-  XLF: "Financials", XLE: "Energy", XLV: "Healthcare", XLI: "Industrials",
-  XLB: "Materials", XLU: "Utilities", XLRE: "Real Estate",
-  SPY: "Broad Market", QQQ: "Technology", DIA: "Broad Market", IWM: "Broad Market",
-  VTI: "Broad Market", RSP: "Broad Market", VUG: "Growth", VTV: "Value",
-  MTUM: "Momentum", VNQ: "Real Estate", ACWI: "Global", EFA: "Intl Developed",
-  EEM: "Emerging Mkts", VGK: "Europe", EWJ: "Japan", FXI: "China",
-  EWU: "UK", EWZ: "Brazil", EWC: "Canada", INDA: "India",
-};
-
-const ETF_WEIGHT: Record<string, number> = {
-  SPY: 0.14, QQQ: 0.10, VTI: 0.06, IWM: 0.04, DIA: 0.04,
-  XLK: 0.08, XLF: 0.05, XLV: 0.04, XLY: 0.03, XLC: 0.03,
-  XLE: 0.03, XLI: 0.03, XLP: 0.02, XLU: 0.02, XLB: 0.02,
-  XLRE: 0.02, RSP: 0.02, VUG: 0.02, VTV: 0.02, MTUM: 0.02,
-  VNQ: 0.02, ACWI: 0.03, EFA: 0.03, EEM: 0.02, VGK: 0.02,
-  EWJ: 0.01, FXI: 0.01, EWU: 0.01, EWZ: 0.01, EWC: 0.01, INDA: 0.01,
-};
-
-export function heatmapFromCards(cards: PipelineCard[]): HeatCell[] {
-  const eq = cards.filter((c) => c.asset_class.toUpperCase() === "EQUITY" && c.ret_1d != null);
-  if (!eq.length) return getHeatmap();
-  const totalWeight = eq.reduce((a, c) => a + (ETF_WEIGHT[c.series_id] ?? 1 / eq.length), 0);
-  return eq.map((c) => {
-    const sec = EQUITIES.find((s) => s.ticker === c.series_id);
-    const w = ETF_WEIGHT[c.series_id] ?? 1 / eq.length;
-    return {
-      ticker: c.series_id,
-      sector: sec?.sector ?? ETF_SECTOR[c.series_id] ?? "Other",
-      chgPct: (c.ret_1d ?? 0) * 100,
-      weight: w / totalWeight,
-    };
+export function heatmapFromCards(cards: PipelineCard[], horizon: HeatHorizon = "1D"): HeatCell[] {
+  const eq = cards.filter((c) => {
+    if (c.asset_class.toUpperCase() !== "EQUITY") return false;
+    const v = horizonReturn(c as SnapshotFields, horizon);
+    return v != null;
   });
+  if (!eq.length) return getHeatmap();
+  const wTotal = eq.reduce((a, c) => a + (ETF_WEIGHT[c.series_id] ?? 0.01), 0) || 1;
+  return eq.map((c) => ({
+    ticker: c.series_id,
+    sector: ETF_SECTOR[c.series_id] ?? "Other",
+    chgPct: (horizonReturn(c as SnapshotFields, horizon) ?? 0) * 100,
+    weight: (ETF_WEIGHT[c.series_id] ?? 0.01) / wTotal,
+  }));
 }
 
 export function moversFromCards(cards: PipelineCard[]): { gainers: Mover[]; losers: Mover[] } {
