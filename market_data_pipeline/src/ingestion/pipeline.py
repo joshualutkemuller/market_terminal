@@ -337,6 +337,7 @@ class Pipeline:
                 "unemployment_vs_longrun": analytics.unemployment_vs_longrun(macro),
             },
             "index-returns": build_index_returns_view(prices, return_basis=basis_note, asof=asof),
+            "eda": analytics.eda_dashboard(prices, macro),
         })
 
     def materialize_api_views(
@@ -407,6 +408,7 @@ class Pipeline:
             "market": "market_snapshot", "cross-asset": "cross_asset", "rates": "rates",
             "inflation": "inflation", "regime": "regime", "bilello": "bilello",
             "index-returns": "index_returns",
+            "eda": "eda",
             "market:price": "market_snapshot_price",
             "cross-asset:price": "cross_asset_price",
             "regime:price": "regime_price",

@@ -22,6 +22,15 @@ from market_data_pipeline.src.analytics.bilello import (
     inflation_vs_policy_gap,
     unemployment_vs_longrun,
 )
+from market_data_pipeline.src.analytics.eda import (
+    eda_dashboard,
+    cross_correlation,
+    lagged_ols,
+    granger_causality,
+    pearson_heatmap,
+    cusum_changepoints,
+    pelt_changepoints,
+)
 
 __all__ = [
     "market_snapshot",
@@ -38,4 +47,11 @@ __all__ = [
     "rate_moves_ranked",
     "inflation_vs_policy_gap",
     "unemployment_vs_longrun",
+    "eda_dashboard",
+    "cross_correlation",
+    "lagged_ols",
+    "granger_causality",
+    "pearson_heatmap",
+    "cusum_changepoints",
+    "pelt_changepoints",
 ]

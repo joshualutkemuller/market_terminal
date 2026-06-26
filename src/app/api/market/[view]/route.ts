@@ -32,6 +32,7 @@ const ENDPOINT: Record<MarketView, string> = {
   regime: "/dashboard/regime",
   bilello: "/dashboard/bilello",
   "index-returns": "",
+  eda: "/dashboard/eda",
 };
 
 /** Exported-JSON filename for each view (matches `mdp export-views`). */
@@ -43,6 +44,7 @@ const FILE_NAME: Record<MarketView, string> = {
   regime: "regime.json",
   bilello: "bilello.json",
   "index-returns": "index_returns.json",
+  eda: "eda.json",
 };
 
 const PRICE_FILE_NAME: Partial<Record<MarketView, string>> = {

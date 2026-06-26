@@ -24,6 +24,7 @@ import regimePriceRaw from "./market/regime_price.json";
 import bilelloPriceRaw from "./market/bilello_price.json";
 import indexReturnsRaw from "./market/index_returns.json";
 import indexReturnsPriceRaw from "./market/index_returns_price.json";
+import edaRaw from "./market/eda.json";
 
 export interface SnapshotCard {
   series_id: string;
@@ -178,6 +179,53 @@ export interface IndexReturnsView {
   matrices: Record<string, IndexReturnMatrix>;
 }
 
+export interface CcfPoint { lag: number; corr: number }
+export interface CrossCorrelationResult {
+  leader: string; follower: string;
+  leader_name: string; follower_name: string;
+  best_lag: number; best_corr: number;
+  ccf: CcfPoint[];
+}
+export interface OlsLagResult { lag: number; r2: number; beta: number; pvalue: number }
+export interface LaggedOlsResult {
+  leader: string; follower: string;
+  leader_name: string; follower_name: string;
+  best_lag: number; best_r2: number; best_beta: number; best_pvalue: number;
+  lags: OlsLagResult[];
+}
+export interface GrangerLagResult { lag: number; f_stat: number; p_value: number }
+export interface GrangerResult {
+  leader: string; follower: string;
+  leader_name: string; follower_name: string;
+  best_lag: number; f_stat: number; p_value: number;
+  lags: GrangerLagResult[];
+}
+export interface PearsonHeatmap {
+  labels: string[];
+  display_names: string[];
+  matrix: number[][];
+}
+export interface CusumResult {
+  series_id: string; display_name: string;
+  changepoints: string[];
+  cusum_path: { date: string; cusum_pos: number; cusum_neg: number }[];
+}
+export interface PeltSegment { start: string; end: string; mean_return: number; volatility: number }
+export interface PeltResult {
+  series_id: string; display_name: string;
+  changepoints: string[];
+  segments: PeltSegment[];
+}
+export interface EdaView {
+  asof?: string;
+  cross_correlation: CrossCorrelationResult[];
+  lagged_ols: LaggedOlsResult[];
+  granger_causality: GrangerResult[];
+  pearson_heatmap: PearsonHeatmap;
+  cusum: CusumResult[];
+  pelt: PeltResult[];
+}
+
 export const marketSnapshot = (marketSnapshotRaw as { cards: SnapshotCard[] }).cards;
 export const crossAsset = crossAssetRaw as unknown as CrossAsset;
 export const ratesView = ratesRaw as unknown as RatesView;
@@ -185,6 +233,7 @@ export const inflationView = (inflationRaw as { cards: InflationCard[] }).cards;
 export const regimeView = regimeRaw as unknown as RegimeView;
 export const bilelloView = bilelloRaw as unknown as BilelloView;
 export const indexReturnsView = indexReturnsRaw as unknown as IndexReturnsView;
+export const edaView = edaRaw as unknown as EdaView;
 
 /** Snapshot keyed by view name, mirroring the FastAPI endpoints. */
 export const SNAPSHOTS = {
@@ -195,6 +244,7 @@ export const SNAPSHOTS = {
   regime: regimeRaw,
   bilello: bilelloRaw,
   "index-returns": indexReturnsRaw,
+  "eda": edaRaw,
 } as const;
 
 export const PRICE_SNAPSHOTS = {
