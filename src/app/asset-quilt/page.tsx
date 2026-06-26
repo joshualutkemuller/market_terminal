@@ -20,7 +20,7 @@ export default function AssetQuiltPage() {
   const [basis, setBasis] = useState<ReturnBasis>("total");
   const [asof, setAsOf] = useState("");
   const { data: bilello, source, earliestAsOf } = useMarketView<BilelloView>("bilello", basis, asof);
-  const quilt = useMemo(() => quiltFromBilello(bilello) ?? getAssetQuilt(), [bilello]);
+  const quilt = useMemo(() => quiltFromBilello(bilello, asof) ?? getAssetQuilt(), [bilello, asof]);
   const latest = quilt[quilt.length - 1];
   const bestLatest = latest.cells[0];
   const worstLatest = latest.cells[latest.cells.length - 1];
@@ -48,7 +48,7 @@ export default function AssetQuiltPage() {
         <Stat label="Latest Laggard" value={worstLatest.asset} sub={fmtSignedPct(worstLatest.returnPct, 1)} tone={tone(worstLatest.returnPct)} />
         <Stat label="Dispersion" value={`${fmtNum(dispersion, 1)} pts`} sub={`${latest.year} high-low`} tone="amber" />
         <Stat label="Most #1 Finishes" value={leader?.[0] ?? "—"} sub={`${leader?.[1] ?? 0} years`} />
-        <Stat label="Years" value={`${quilt[0].year}-${latest.year}`} sub="2016-2025 + current YTD" />
+        <Stat label="Years" value={`${quilt[0].year}-${latest.year}`} sub={`${quilt.length} years${latest.year === new Date().getFullYear() ? " + current YTD" : ""}`} />
         <Stat label="Method" value="ETF Proxy" sub={basis === "total" ? "adj close total return" : "raw close price return"} tone="neutral" />
       </KpiStrip>
 
@@ -65,7 +65,7 @@ export default function AssetQuiltPage() {
               <div className="sticky left-0 z-20 border-b border-r border-term-border bg-term-panel-2 px-2 py-1 text-2xs font-semibold uppercase text-term-text-mute">Rank</div>
               {quilt.map((y) => (
                 <div key={y.year} className="border-b border-r border-term-border bg-term-panel-2 px-2 py-1 text-center text-2xs font-semibold text-term-text-dim">
-                  {y.year === 2026 ? `${y.year} YTD` : y.year}
+                  {y.year === latest.year && y.year === new Date().getFullYear() ? `${y.year} YTD` : y.year}
                 </div>
               ))}
 
@@ -119,10 +119,12 @@ export default function AssetQuiltPage() {
   );
 }
 
-function quiltFromBilello(bilello: BilelloView | null | undefined): QuiltYear[] | null {
+function quiltFromBilello(bilello: BilelloView | null | undefined, asof: string): QuiltYear[] | null {
   const rows = bilello?.asset_class_returns_by_year ?? [];
   if (!rows.length) return null;
-  const years = Array.from(new Set(rows.map((r) => r.year))).sort((a, b) => a - b);
+  const maxYear = asof ? parseInt(asof.slice(0, 4), 10) : 9999;
+  const years = Array.from(new Set(rows.map((r) => r.year))).sort((a, b) => a - b).filter((y) => y <= maxYear);
+  if (!years.length) return null;
   return years.map((year) => {
     const cells = rows
       .filter((r) => r.year === year && r.total_return !== null)
