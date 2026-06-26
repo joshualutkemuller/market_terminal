@@ -143,9 +143,10 @@ export default function MacroDashboard() {
   const liveValues = live.data.map((o) => o.value);
   const liveLabels = live.data.map((o) => o.date);
 
-  const selHist = getSeriesHistory(selectedId, 120);
-  const selValues = selHist.map((o) => o.value);
-  const selLabels = selHist.map((o) => o.date);
+  const selLive = liveInd[selectedId];
+  const selHist = selLive?.history?.length ? null : getSeriesHistory(selectedId, 120);
+  const selValues = selLive?.history?.length ? selLive.history : (selHist?.map((o) => o.value) ?? []);
+  const selLabels = selHist?.map((o) => o.date) ?? selValues.map((_, i) => `T-${selValues.length - 1 - i}`);
   const selMeta = byId(selectedId);
 
   // Economic surprise: high-signal series with non-trivial surprise magnitude.

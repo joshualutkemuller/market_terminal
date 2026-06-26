@@ -48,6 +48,8 @@ export interface PolicyRate {
   bias: "HAWKISH" | "NEUTRAL" | "DOVISH";
   history: number[];
   fredId?: string; // OECD central-bank-rate / ECB series where available
+  source: DataSource;
+  asOf: string | null;
 }
 
 // country, flag, region, fredId, current CPI YoY, target
@@ -73,6 +75,28 @@ const CPI_DEFS: [string, string, Region, string, number, number][] = [
   ["South Africa", "🇿🇦", "EMEA", "ZAFCPIALLMINMEI", 4.4, 4.5],
   ["Saudi Arabia", "🇸🇦", "EMEA", "SAUCPIALLMINMEI", 1.9, 2.0],
 ];
+
+
+const RATE_ISO: Record<string, string> = {
+  "United States": "USA",
+  "Euro Area": "EMU",
+  "United Kingdom": "GBR",
+  Japan: "JPN",
+  Canada: "CAN",
+  Australia: "AUS",
+  Switzerland: "CHE",
+  China: "CHN",
+  India: "IND",
+  Brazil: "BRA",
+  Mexico: "MEX",
+  "South Korea": "KOR",
+  Sweden: "SWE",
+  Norway: "NOR",
+  "New Zealand": "NZL",
+  Turkey: "TUR",
+  Indonesia: "IDN",
+  "South Africa": "ZAF",
+};
 
 const CPI_ISO: Record<string, string> = {
   "United States": "USA",
@@ -156,7 +180,7 @@ export function getGlobalCPI(): CountryInflation[] {
       target,
       vsTarget: Number((yoy - target).toFixed(1)),
       history: hist,
-      source: "SIM",
+      source: "SIM" as const,
       asOf: null,
     };
   });
@@ -218,15 +242,17 @@ export function etlCountryCPI(base: CountryInflation): CountryInflation {
  */
 export function liveCountryCPI(base: CountryInflation, obs: { date: string; value: number }[]): CountryInflation {
   const v = obs.map((o) => o.value);
-  if (v.length < 14) return base;
+  const isQuarterly = base.fredId.includes("QINMEI") || base.fredId.includes("QOQ");
+  const yoyLag = isQuarterly ? 4 : 12;
+  if (v.length < yoyLag + 2) return base;
   const pct = (a: number, b: number, dp = 1) => (b ? Number(((a / b - 1) * 100).toFixed(dp)) : 0);
   const yoyArr: number[] = [];
-  for (let i = 12; i < v.length; i++) yoyArr.push(pct(v[i], v[i - 12]));
+  for (let i = yoyLag; i < v.length; i++) yoyArr.push(pct(v[i], v[i - yoyLag]));
   if (yoyArr.length < 2) return base;
   const yoy = yoyArr[yoyArr.length - 1];
   const priorYoy = yoyArr[yoyArr.length - 2];
-  const mom = pct(v[v.length - 1], v[v.length - 2], 2);
-  const priorMom = v.length >= 3 ? pct(v[v.length - 2], v[v.length - 3], 2) : null;
+  const mom = isQuarterly ? null : pct(v[v.length - 1], v[v.length - 2], 2);
+  const priorMom = isQuarterly ? null : (v.length >= 3 ? pct(v[v.length - 2], v[v.length - 3], 2) : null);
   const trend = trendOf(yoy, priorYoy);
   let streak = 1;
   for (let i = yoyArr.length - 1; i > 0; i--) {
@@ -238,7 +264,7 @@ export function liveCountryCPI(base: CountryInflation, obs: { date: string; valu
     ...base,
     yoy, priorYoy,
     mom,
-    momDelta: priorMom == null ? null : Number((mom - priorMom).toFixed(2)),
+    momDelta: mom == null || priorMom == null ? null : Number((mom - priorMom).toFixed(2)),
     yoyDelta: Number((yoy - priorYoy).toFixed(2)),
     trend,
     streak: trend === "FLAT" ? 0 : streak,
@@ -287,8 +313,49 @@ export function getGlobalPolicyRates(): PolicyRate[] {
       bias,
       history: hist,
       fredId,
+      source: "SIM" as const,
+      asOf: null,
     };
   }).sort((a, b) => b.rate - a.rate);
+}
+
+
+function etlRateRowFor(base: PolicyRate): EtlCountryMacro | undefined {
+  const iso = RATE_ISO[base.country];
+  if (!iso) return undefined;
+  return etlCountryMacro.find((r) => r.country_iso3 === iso);
+}
+
+function rateCycleFromEtl(cycle: string | null): PolicyRate["cycle"] | null {
+  if (cycle === "RISING") return "HIKING";
+  if (cycle === "FALLING") return "CUTTING";
+  if (cycle === "FLAT") return "HOLD";
+  return null;
+}
+
+/** Overlay the committed macro ETL gold snapshot before falling back to SIM. */
+export function etlPolicyRate(base: PolicyRate): PolicyRate {
+  const row = etlRateRowFor(base);
+  if (!row || row.policy_rate == null) return base;
+  const rate = Number(row.policy_rate.toFixed(2));
+  const priorRate = row.rate_prior != null ? Number(row.rate_prior.toFixed(2)) : base.priorRate;
+  const cycle = rateCycleFromEtl(row.rate_cycle) ?? (rate > priorRate ? "HIKING" : rate < priorRate ? "CUTTING" : "HOLD");
+  const realRate = row.real_rate != null ? Number(row.real_rate.toFixed(1)) : Number((rate - (base.rate - base.realRate)).toFixed(1));
+  const bias: PolicyRate["bias"] = realRate > 1.5 ? "HAWKISH" : realRate < 0 ? "DOVISH" : "NEUTRAL";
+  const history = [...base.history.slice(0, -1), priorRate, rate].slice(-10);
+  return {
+    ...base,
+    rate,
+    priorRate,
+    lastMoveBps: Math.round((rate - priorRate) * 100),
+    cycle,
+    streak: Math.max(1, row.rate_streak ?? base.streak),
+    realRate,
+    bias,
+    history,
+    source: "ETL",
+    asOf: row.last_updated,
+  };
 }
 
 /**
@@ -326,6 +393,8 @@ export function livePolicyRate(base: PolicyRate, obs: { date: string; value: num
     streak: Math.max(1, streak),
     realRate, bias,
     history: v.map((x) => Number(x.toFixed(2))),
+    source: obs.length ? ("FRED" as const) : base.source,
+    asOf: obs[obs.length - 1]?.date ?? base.asOf,
   };
 }
 
@@ -343,7 +412,7 @@ export interface GlobalSummary {
 
 export function getGlobalSummary(): GlobalSummary {
   const cpi = getGlobalCPI();
-  const rates = getGlobalPolicyRates();
+  const rates = getGlobalPolicyRates().map(etlPolicyRate);
   const ys = cpi.map((c) => c.yoy).sort((a, b) => a - b);
   return {
     avgCpi: Number((cpi.reduce((a, c) => a + c.yoy, 0) / cpi.length).toFixed(1)),

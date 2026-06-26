@@ -66,13 +66,13 @@ const EQUITY_SEED: [string, string, string, number][] = [
 ];
 
 const ETF_SEED: [string, string, number][] = [
-  ["SPY", "SPDR S&P 500", 597.4],
-  ["QQQ", "Invesco QQQ", 512.8],
-  ["IWM", "iShares Russell 2000", 241.6],
+  ["SPY", "SPDR S&P 500", 738.0],
+  ["QQQ", "Invesco QQQ", 718.0],
+  ["IWM", "iShares Russell 2000", 298.0],
   ["HYG", "iShares HY Corp", 79.3],
   ["TLT", "iShares 20+Y Tsy", 91.7],
-  ["GLD", "SPDR Gold", 244.1],
-  ["XLF", "Financials Sel", 49.8],
+  ["GLD", "SPDR Gold", 305.0],
+  ["XLF", "Financials Sel", 55.2],
   ["ARKK", "ARK Innovation", 58.2],
 ];
 
@@ -88,16 +88,16 @@ const FI_SEED: [string, string, AssetClass, number][] = [
 ];
 
 const OTHER_SEED: [string, string, AssetClass, number][] = [
-  ["ES1", "E-mini S&P Fut", "FUTURE", 5972.0],
-  ["NQ1", "E-mini Nasdaq Fut", "FUTURE", 21340.0],
-  ["CL1", "WTI Crude Fut", "FUTURE", 71.4],
-  ["GC1", "Gold Future", "COMMODITY", 2648.0],
-  ["EURUSD", "Euro / US Dollar", "FX", 1.0512],
-  ["USDJPY", "US Dollar / Yen", "FX", 156.32],
-  ["GBPUSD", "Sterling / Dollar", "FX", 1.2634],
-  ["BTC", "Bitcoin", "CRYPTO", 104250.0],
+  ["ES1", "E-mini S&P Fut", "FUTURE", 7383.0],
+  ["NQ1", "E-mini Nasdaq Fut", "FUTURE", 22800.0],
+  ["CL1", "WTI Crude Fut", "FUTURE", 68.7],
+  ["GC1", "Gold Future", "COMMODITY", 3350.0],
+  ["EURUSD", "Euro / US Dollar", "FX", 1.147],
+  ["USDJPY", "US Dollar / Yen", "FX", 143.5],
+  ["GBPUSD", "Sterling / Dollar", "FX", 1.345],
+  ["BTC", "Bitcoin", "CRYPTO", 108500.0],
   ["ETH", "Ethereum", "CRYPTO", 3920.0],
-  ["VIX", "CBOE Volatility", "COMMODITY", 14.2],
+  ["VIX", "CBOE Volatility", "COMMODITY", 19.5],
 ];
 
 function buildUniverse(): Security[] {

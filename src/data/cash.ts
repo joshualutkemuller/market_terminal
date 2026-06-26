@@ -117,6 +117,22 @@ export function mergeLiveFundingRates(sources: FundingSource[], fred: LiveRateDa
   });
 }
 
+export function computeCashKpis(sources: FundingSource[], uses: FundingUse[]): Pick<CashSummary, "blendedRateBps" | "optimizedRateBps" | "savingsBps" | "savingsUsd" | "fundingGap"> {
+  const rng = new Rng("cash-sum");
+  const totalSources = sources.reduce((a, s) => a + s.available, 0);
+  const totalUses = uses.reduce((a, u) => a + u.amount, 0);
+  const blended = sources.reduce((a, s) => a + (s.used * s.rateBps), 0) / sources.reduce((a, s) => a + s.used, 0);
+  const optimized = blended - rng.float(3.5, 7);
+  const fundedAmt = Math.min(totalSources, totalUses);
+  return {
+    blendedRateBps: blended,
+    optimizedRateBps: optimized,
+    savingsBps: blended - optimized,
+    savingsUsd: (fundedAmt * (blended - optimized)) / 10000,
+    fundingGap: totalSources - totalUses,
+  };
+}
+
 /** Optimal funding path: cheapest sources matched to highest-priority uses. */
 export interface FundingPath {
   use: string;
