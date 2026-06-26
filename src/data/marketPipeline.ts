@@ -109,11 +109,21 @@ export interface RegimeView {
   narrative: string;
 }
 
+export interface BilelloMonthlyReturn {
+  series_id: string;
+  display_name: string;
+  asset_class: string;
+  year: number;
+  month: number;
+  monthly_return: number;
+}
+
 export interface BilelloView {
   return_basis?: ReturnBasis;
   asof?: string | null;
   best_worst_ytd: { best: { series_id: string; display_name: string; ytd: number }[]; worst: { series_id: string; display_name: string; ytd: number }[] };
   asset_class_returns_by_year: { series_id?: string; display_name?: string; asset_class: string; year: number; total_return: number }[];
+  asset_monthly_returns?: BilelloMonthlyReturn[];
   current_drawdowns: { series_id: string; display_name: string; drawdown: number | null }[];
   rate_moves_ranked: Record<string, unknown>[];
   inflation_vs_policy_gap: Record<string, unknown>;

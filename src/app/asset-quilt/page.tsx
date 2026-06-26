@@ -6,7 +6,7 @@ import { MarketDataControls } from "@/components/market/MarketDataControls";
 import { getAssetQuilt, quiltColor, type QuiltYear } from "@/data/marketAnalytics";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
-import type { BilelloView, ReturnBasis } from "@/data/marketPipeline";
+import type { BilelloView, BilelloMonthlyReturn, ReturnBasis } from "@/data/marketPipeline";
 import { fmtNum, fmtSignedPct } from "@/lib/format";
 
 function tone(v: number): "up" | "down" | "amber" | "neutral" {
@@ -119,24 +119,44 @@ export default function AssetQuiltPage() {
   );
 }
 
-function quiltFromBilello(bilello: BilelloView | null | undefined, asof: string): QuiltYear[] | null {
-  const rows = bilello?.asset_class_returns_by_year ?? [];
+function compoundMonthly(monthly: BilelloMonthlyReturn[], seriesId: string, year: number, maxMonth: number): number | null {
+  const rows = monthly.filter((r) => r.series_id === seriesId && r.year === year && r.month <= maxMonth);
   if (!rows.length) return null;
+  return rows.reduce((acc, r) => acc * (1 + r.monthly_return), 1) - 1;
+}
+
+function quiltFromBilello(bilello: BilelloView | null | undefined, asof: string): QuiltYear[] | null {
+  const annualRows = bilello?.asset_class_returns_by_year ?? [];
+  if (!annualRows.length) return null;
+  const monthly = bilello?.asset_monthly_returns ?? [];
+  const hasMonthly = monthly.length > 0;
+
   const maxYear = asof ? parseInt(asof.slice(0, 4), 10) : 9999;
-  const years = Array.from(new Set(rows.map((r) => r.year))).sort((a, b) => a - b).filter((y) => y <= maxYear);
+  const maxMonth = asof ? parseInt(asof.slice(5, 7), 10) : 12;
+  const years = Array.from(new Set(annualRows.map((r) => r.year))).sort((a, b) => a - b).filter((y) => y <= maxYear);
   if (!years.length) return null;
+
   return years.map((year) => {
-    const cells = rows
+    const isPartialYear = hasMonthly && year === maxYear && maxMonth < 12 && asof !== "";
+    const cells = annualRows
       .filter((r) => r.year === year && r.total_return !== null)
-      .sort((a, b) => b.total_return - a.total_return)
-      .map((r, i) => ({
-        year,
-        asset: r.series_id ?? prettyAssetClass(r.asset_class),
-        displayName: r.display_name,
-        assetClass: r.asset_class,
-        returnPct: Number((r.total_return * 100).toFixed(1)),
-        rank: i + 1,
-      }));
+      .map((r) => {
+        const ret = isPartialYear
+          ? compoundMonthly(monthly, r.series_id ?? "", year, maxMonth)
+          : r.total_return;
+        if (ret === null) return null;
+        return {
+          year,
+          asset: r.series_id ?? prettyAssetClass(r.asset_class),
+          displayName: r.display_name,
+          assetClass: r.asset_class,
+          returnPct: Number((ret * 100).toFixed(1)),
+          rank: 0,
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+      .sort((a, b) => b.returnPct - a.returnPct)
+      .map((c, i) => ({ ...c, rank: i + 1 }));
     return { year, cells };
   }).filter((y) => y.cells.length);
 }

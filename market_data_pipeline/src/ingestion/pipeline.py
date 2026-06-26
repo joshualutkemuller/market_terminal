@@ -329,6 +329,7 @@ class Pipeline:
                 "asof": asof,
                 "best_worst_ytd": analytics.best_worst_ytd(prices),
                 "asset_class_returns_by_year": analytics.asset_class_returns_by_year(prices),
+                "asset_monthly_returns": analytics.asset_monthly_returns(prices),
                 "current_drawdowns": analytics.current_drawdowns(prices),
                 "rate_moves_ranked": analytics.rate_moves_ranked(macro),
                 "inflation_vs_policy_gap": analytics.inflation_vs_policy_gap(macro),

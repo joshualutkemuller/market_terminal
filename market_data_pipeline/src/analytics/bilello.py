@@ -88,6 +88,46 @@ def asset_class_returns_by_year(prices_norm: pl.DataFrame) -> list[dict]:
     return rows
 
 
+def asset_monthly_returns(prices_norm: pl.DataFrame) -> list[dict]:
+    """Monthly returns per series for partial-year quilt calculations."""
+    if prices_norm is None or prices_norm.height == 0:
+        return []
+    df = prices_norm.filter(pl.col("asset_class").is_in(list(PRICE_CLASSES)))
+    if df.height == 0:
+        return []
+
+    rows = []
+    for series_id in df.get_column("series_id").unique().to_list():
+        sub = df.filter(pl.col("series_id") == series_id)
+        asset_class = sub.tail(1).get_column("asset_class").to_list()[0]
+        display_name = sub.tail(1).get_column("display_name").to_list()[0]
+        dates, values = R.to_series(df, series_id)
+        if len(values) < 2:
+            continue
+        by_month: dict[tuple[int, int], float] = {}
+        for d, v in zip(dates, values):
+            by_month[(d.year, d.month)] = v
+        keys = sorted(by_month.keys())
+        for i in range(1, len(keys)):
+            prev_k, cur_k = keys[i - 1], keys[i]
+            base = by_month[prev_k]
+            cur = by_month[cur_k]
+            if base and base != 0:
+                ret = cur / base - 1.0
+                rows.append(
+                    {
+                        "series_id": series_id,
+                        "display_name": display_name,
+                        "asset_class": asset_class,
+                        "year": cur_k[0],
+                        "month": cur_k[1],
+                        "monthly_return": R.round_or_none(ret, 6),
+                    }
+                )
+    rows.sort(key=lambda r: (r["year"], r["month"], r["series_id"]))
+    return rows
+
+
 def current_drawdowns(prices_norm: pl.DataFrame) -> list[dict]:
     """Current drawdown per series, deepest first."""
     if prices_norm is None or prices_norm.height == 0:
