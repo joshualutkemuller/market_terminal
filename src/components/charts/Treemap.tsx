@@ -21,50 +21,103 @@ function color(v: number, maxAbs: number): string {
   return `rgba(255,59,59,${(0.18 + -t * 0.62).toFixed(3)})`;
 }
 
-/** Squarified-ish treemap (slice-and-dice rows). Good enough for a dense heat grid. */
+/** Squarified-ish treemap (slice-and-dice rows) with optional group labels. */
 export function Treemap({ cells, height = 260, className, maxAbs = 4 }: TreemapProps) {
-  const sorted = [...cells].sort((a, b) => b.weight - a.weight);
-  const total = sorted.reduce((a, c) => a + c.weight, 0) || 1;
+  const hasGroups = cells.some((c) => c.group);
+
+  const grouped = hasGroups
+    ? Array.from(
+        cells.reduce((m, c) => {
+          const g = c.group ?? "";
+          if (!m.has(g)) m.set(g, []);
+          m.get(g)!.push(c);
+          return m;
+        }, new Map<string, TreeCell[]>()),
+      )
+        .map(([group, items]) => ({ group, items, weight: items.reduce((a, c) => a + c.weight, 0) }))
+        .sort((a, b) => b.weight - a.weight)
+    : [{ group: "", items: [...cells].sort((a, b) => b.weight - a.weight), weight: cells.reduce((a, c) => a + c.weight, 0) }];
+
+  const total = grouped.reduce((a, g) => a + g.weight, 0) || 1;
   const W = 100;
   const H = 100;
-  // Lay out in rows targeting ~ aspect via row capacity.
-  const rows: TreeCell[][] = [];
-  let row: TreeCell[] = [];
-  let rowSum = 0;
-  const target = total / Math.ceil(Math.sqrt(sorted.length));
-  for (const c of sorted) {
-    row.push(c);
-    rowSum += c.weight;
-    if (rowSum >= target) {
-      rows.push(row);
-      row = [];
-      rowSum = 0;
+
+  const out: { x: number; y: number; w: number; h: number; cell: TreeCell }[] = [];
+  const groupBounds: { x: number; y: number; w: number; h: number; group: string }[] = [];
+
+  const groupTarget = total / Math.ceil(Math.sqrt(grouped.length));
+  const gRows: typeof grouped[] = [];
+  let gRow: typeof grouped = [];
+  let gRowSum = 0;
+  for (const g of grouped) {
+    gRow.push(g);
+    gRowSum += g.weight;
+    if (gRowSum >= groupTarget) {
+      gRows.push(gRow);
+      gRow = [];
+      gRowSum = 0;
     }
   }
-  if (row.length) rows.push(row);
+  if (gRow.length) gRows.push(gRow);
 
-  const rowWeights = rows.map((r) => r.reduce((a, c) => a + c.weight, 0));
-  const rowTotal = rowWeights.reduce((a, b) => a + b, 0) || 1;
+  const gRowWeights = gRows.map((r) => r.reduce((a, g) => a + g.weight, 0));
+  const gRowTotal = gRowWeights.reduce((a, b) => a + b, 0) || 1;
 
-  let y = 0;
-  const out: { x: number; y: number; w: number; h: number; cell: TreeCell }[] = [];
-  rows.forEach((r, ri) => {
-    const rh = (rowWeights[ri] / rowTotal) * H;
-    let x = 0;
-    const rw = rowWeights[ri] || 1;
-    for (const cell of r) {
-      const cw = (cell.weight / rw) * W;
-      out.push({ x, y, w: cw, h: rh, cell });
-      x += cw;
+  let gy = 0;
+  for (let gi = 0; gi < gRows.length; gi++) {
+    const grh = (gRowWeights[gi] / gRowTotal) * H;
+    let gx = 0;
+    const grw = gRowWeights[gi] || 1;
+    for (const group of gRows[gi]) {
+      const gcw = (group.weight / grw) * W;
+      if (hasGroups && group.group) {
+        groupBounds.push({ x: gx, y: gy, w: gcw, h: grh, group: group.group });
+      }
+
+      const sorted = [...group.items].sort((a, b) => b.weight - a.weight);
+      const cellTotal = sorted.reduce((a, c) => a + c.weight, 0) || 1;
+      const cellTarget = cellTotal / Math.ceil(Math.sqrt(sorted.length));
+      const cRows: TreeCell[][] = [];
+      let cRow: TreeCell[] = [];
+      let cRowSum = 0;
+      for (const c of sorted) {
+        cRow.push(c);
+        cRowSum += c.weight;
+        if (cRowSum >= cellTarget) {
+          cRows.push(cRow);
+          cRow = [];
+          cRowSum = 0;
+        }
+      }
+      if (cRow.length) cRows.push(cRow);
+
+      const cRowWeights = cRows.map((r) => r.reduce((a, c) => a + c.weight, 0));
+      const cRowTotal = cRowWeights.reduce((a, b) => a + b, 0) || 1;
+
+      let cy = gy;
+      for (let ci = 0; ci < cRows.length; ci++) {
+        const crh = (cRowWeights[ci] / cRowTotal) * grh;
+        let cx = gx;
+        const crw = cRowWeights[ci] || 1;
+        for (const cell of cRows[ci]) {
+          const cw = (cell.weight / crw) * gcw;
+          out.push({ x: cx, y: cy, w: cw, h: crh, cell });
+          cx += cw;
+        }
+        cy += crh;
+      }
+      gx += gcw;
     }
-    y += rh;
-  });
+    gy += grh;
+  }
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className={className} preserveAspectRatio="none" style={{ width: "100%", height }}>
       {out.map((o, i) => (
         <g key={i}>
-          <rect x={o.x} y={o.y} width={o.w} height={o.h} fill={color(o.cell.value, maxAbs)} stroke="#0A0A0A" strokeWidth={0.4} />
+          <rect x={o.x} y={o.y} width={o.w} height={o.h} fill={color(o.cell.value, maxAbs)} stroke="#0A0A0A" strokeWidth={0.4}>
+            {o.cell.group && <title>{o.cell.label} ({o.cell.group}) {fmtSignedPct(o.cell.value)}</title>}
+          </rect>
           {o.w > 8 && o.h > 8 && (
             <>
               <text x={o.x + o.w / 2} y={o.y + o.h / 2 - 1} textAnchor="middle" fontSize={Math.min(3.4, o.w / 4)} fill="#fff" fontFamily="var(--font-mono)" fontWeight={600}>
@@ -75,7 +128,30 @@ export function Treemap({ cells, height = 260, className, maxAbs = 4 }: TreemapP
                   {fmtSignedPct(o.cell.value, 1)}
                 </text>
               )}
+              {o.cell.group && o.h > 20 && o.w > 12 && (
+                <text x={o.x + o.w / 2} y={o.y + o.h / 2 + 6.5} textAnchor="middle" fontSize={Math.min(2, o.w / 7)} fill="rgba(255,255,255,0.4)" fontFamily="var(--font-mono)">
+                  {o.cell.group}
+                </text>
+              )}
             </>
+          )}
+        </g>
+      ))}
+      <defs>
+        {groupBounds.map((gb, i) => (
+          <clipPath key={`clip-${i}`} id={`gclip-${i}`}>
+            <rect x={gb.x} y={gb.y} width={gb.w} height={gb.h} />
+          </clipPath>
+        ))}
+      </defs>
+      {groupBounds.map((gb, i) => (
+        <g key={`g-${i}`}>
+          <rect x={gb.x} y={gb.y} width={gb.w} height={gb.h} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth={0.5} />
+          {gb.w > 10 && gb.h > 6 && (
+            <text x={gb.x + 1} y={gb.y + 3} fontSize={Math.min(2.4, gb.w / 6)} fill="rgba(255,255,255,0.55)" fontFamily="var(--font-mono)" fontWeight={600} clipPath={`url(#gclip-${i})`}>
+              <title>{gb.group}</title>
+              {gb.group}
+            </text>
           )}
         </g>
       ))}

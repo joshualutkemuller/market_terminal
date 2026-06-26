@@ -287,7 +287,7 @@ export default function LiveMarkets() {
         <div className="col-span-12 xl:col-span-4">
           <Panel title="Equity Heat Map" code="HEAT">
             <div className="p-1">
-              <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct }))} height={360} />
+              <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct, group: h.sector }))} height={360} />
             </div>
           </Panel>
         </div>
