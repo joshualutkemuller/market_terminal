@@ -1,4 +1,5 @@
 
+import { useState, useRef, useCallback } from "react";
 import { fmtSignedPct } from "@/lib/format";
 
 export interface TreeCell {
@@ -21,8 +22,28 @@ function color(v: number, maxAbs: number): string {
   return `rgba(255,59,59,${(0.18 + -t * 0.62).toFixed(3)})`;
 }
 
+interface LayoutRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  cell: TreeCell;
+}
+
+interface Tooltip {
+  label: string;
+  value: number;
+  group?: string;
+  weight: number;
+  px: number;
+  py: number;
+}
+
 /** Squarified-ish treemap (slice-and-dice rows) with optional group labels. */
 export function Treemap({ cells, height = 260, className, maxAbs = 4 }: TreemapProps) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [tip, setTip] = useState<Tooltip | null>(null);
+
   const hasGroups = cells.some((c) => c.group);
 
   const grouped = hasGroups
@@ -42,7 +63,7 @@ export function Treemap({ cells, height = 260, className, maxAbs = 4 }: TreemapP
   const W = 100;
   const H = 100;
 
-  const out: { x: number; y: number; w: number; h: number; cell: TreeCell }[] = [];
+  const out: LayoutRect[] = [];
   const groupBounds: { x: number; y: number; w: number; h: number; group: string }[] = [];
 
   const groupTarget = total / Math.ceil(Math.sqrt(grouped.length));
@@ -111,50 +132,154 @@ export function Treemap({ cells, height = 260, className, maxAbs = 4 }: TreemapP
     gy += grh;
   }
 
+  const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * W;
+    const my = ((e.clientY - rect.top) / rect.height) * H;
+    const hit = out.find((o) => mx >= o.x && mx <= o.x + o.w && my >= o.y && my <= o.y + o.h);
+    if (hit) {
+      setTip({
+        label: hit.cell.label,
+        value: hit.cell.value,
+        group: hit.cell.group,
+        weight: hit.cell.weight,
+        px: e.clientX - rect.left,
+        py: e.clientY - rect.top,
+      });
+    } else {
+      setTip(null);
+    }
+  }, [out]);
+
+  const handleMouseLeave = useCallback(() => setTip(null), []);
+
+  // Compute pixel scale factors so we can set font-size thresholds based on
+  // approximate rendered pixel sizes rather than viewBox units.
+  // The SVG is 100×100 viewBox stretched to container width × `height` px.
+  // pxPerUnit tells us how many CSS pixels one viewBox unit maps to.
+  const containerRef = useRef<HTMLDivElement>(null);
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className={className} preserveAspectRatio="none" style={{ width: "100%", height }}>
-      {out.map((o, i) => (
-        <g key={i}>
-          <rect x={o.x} y={o.y} width={o.w} height={o.h} fill={color(o.cell.value, maxAbs)} stroke="#0A0A0A" strokeWidth={0.4}>
-            {o.cell.group && <title>{o.cell.label} ({o.cell.group}) {fmtSignedPct(o.cell.value)}</title>}
-          </rect>
-          {o.w > 8 && o.h > 8 && (
-            <>
-              <text x={o.x + o.w / 2} y={o.y + o.h / 2 - 1} textAnchor="middle" fontSize={Math.min(3.4, o.w / 4)} fill="#fff" fontFamily="var(--font-mono)" fontWeight={600}>
-                {o.cell.label}
-              </text>
-              {o.h > 14 && (
-                <text x={o.x + o.w / 2} y={o.y + o.h / 2 + 3.2} textAnchor="middle" fontSize={Math.min(2.6, o.w / 5)} fill="rgba(255,255,255,0.8)" fontFamily="var(--font-mono)">
+    <div ref={containerRef} className="relative" style={{ height }}>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        className={className}
+        preserveAspectRatio="none"
+        style={{ width: "100%", height: "100%" }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
+        {out.map((o, i) => {
+          const showLabel = o.w > 5 && o.h > 5;
+          const showPct = o.w > 5 && o.h > 9;
+          const showGroup = o.cell.group && o.w > 10 && o.h > 16;
+          return (
+            <g key={i}>
+              <rect
+                x={o.x}
+                y={o.y}
+                width={o.w}
+                height={o.h}
+                fill={color(o.cell.value, maxAbs)}
+                stroke="#0A0A0A"
+                strokeWidth={0.4}
+              />
+              {showLabel && (
+                <text
+                  x={o.x + o.w / 2}
+                  y={o.y + o.h / 2 + (showPct ? -1.2 : 0.8)}
+                  textAnchor="middle"
+                  fontSize={Math.min(3.6, o.w / 3.5)}
+                  fill="#fff"
+                  fontFamily="var(--font-mono)"
+                  fontWeight={600}
+                  style={{ pointerEvents: "none" }}
+                >
+                  {o.cell.label}
+                </text>
+              )}
+              {showPct && (
+                <text
+                  x={o.x + o.w / 2}
+                  y={o.y + o.h / 2 + (showGroup ? 2.8 : 3)}
+                  textAnchor="middle"
+                  fontSize={Math.min(2.8, o.w / 4)}
+                  fill="rgba(255,255,255,0.85)"
+                  fontFamily="var(--font-mono)"
+                  fontWeight={500}
+                  style={{ pointerEvents: "none" }}
+                >
                   {fmtSignedPct(o.cell.value, 1)}
                 </text>
               )}
-              {o.cell.group && o.h > 20 && o.w > 12 && (
-                <text x={o.x + o.w / 2} y={o.y + o.h / 2 + 6.5} textAnchor="middle" fontSize={Math.min(2, o.w / 7)} fill="rgba(255,255,255,0.4)" fontFamily="var(--font-mono)">
+              {showGroup && (
+                <text
+                  x={o.x + o.w / 2}
+                  y={o.y + o.h / 2 + 6}
+                  textAnchor="middle"
+                  fontSize={Math.min(2, o.w / 7)}
+                  fill="rgba(255,255,255,0.4)"
+                  fontFamily="var(--font-mono)"
+                  style={{ pointerEvents: "none" }}
+                >
                   {o.cell.group}
                 </text>
               )}
-            </>
-          )}
-        </g>
-      ))}
-      <defs>
+            </g>
+          );
+        })}
+        <defs>
+          {groupBounds.map((gb, i) => (
+            <clipPath key={`clip-${i}`} id={`gclip-${i}`}>
+              <rect x={gb.x} y={gb.y} width={gb.w} height={gb.h} />
+            </clipPath>
+          ))}
+        </defs>
         {groupBounds.map((gb, i) => (
-          <clipPath key={`clip-${i}`} id={`gclip-${i}`}>
-            <rect x={gb.x} y={gb.y} width={gb.w} height={gb.h} />
-          </clipPath>
+          <g key={`g-${i}`}>
+            <rect x={gb.x} y={gb.y} width={gb.w} height={gb.h} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth={0.5} />
+            {gb.w > 10 && gb.h > 6 && (
+              <text
+                x={gb.x + 1}
+                y={gb.y + 3}
+                fontSize={Math.min(2.4, gb.w / 6)}
+                fill="rgba(255,255,255,0.55)"
+                fontFamily="var(--font-mono)"
+                fontWeight={600}
+                clipPath={`url(#gclip-${i})`}
+                style={{ pointerEvents: "none" }}
+              >
+                {gb.group}
+              </text>
+            )}
+          </g>
         ))}
-      </defs>
-      {groupBounds.map((gb, i) => (
-        <g key={`g-${i}`}>
-          <rect x={gb.x} y={gb.y} width={gb.w} height={gb.h} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth={0.5} />
-          {gb.w > 10 && gb.h > 6 && (
-            <text x={gb.x + 1} y={gb.y + 3} fontSize={Math.min(2.4, gb.w / 6)} fill="rgba(255,255,255,0.55)" fontFamily="var(--font-mono)" fontWeight={600} clipPath={`url(#gclip-${i})`}>
-              <title>{gb.group}</title>
-              {gb.group}
-            </text>
-          )}
-        </g>
-      ))}
-    </svg>
+      </svg>
+      {tip && (
+        <div
+          className="pointer-events-none absolute z-50 rounded border border-term-border bg-term-panel-2 px-2.5 py-1.5 shadow-lg"
+          style={{
+            left: Math.min(tip.px + 12, (containerRef.current?.clientWidth ?? 300) - 160),
+            top: tip.py < height / 2 ? tip.py + 12 : tip.py - 70,
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-term-amber">{tip.label}</span>
+            {tip.group && <span className="text-3xs text-term-text-mute">{tip.group}</span>}
+          </div>
+          <div className="mt-0.5 flex items-baseline gap-2">
+            <span className={`text-sm font-semibold tnum ${tip.value >= 0 ? "text-term-up" : "text-term-down"}`}>
+              {fmtSignedPct(tip.value, 2)}
+            </span>
+            <span className="text-3xs text-term-text-mute">
+              {(tip.weight * 100).toFixed(1)}% weight
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
