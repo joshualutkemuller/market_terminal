@@ -242,13 +242,13 @@ export default function MacroDashboard() {
                       <span className="text-3xs text-term-text-mute">{rows.length}</span>
                     </div>
                     <div className="divide-y divide-term-border-soft">
-                      <div className="grid grid-cols-[minmax(4.5rem,1fr)_1.5rem_4.75rem_4.25rem_3.5rem_3.5rem_3.5rem_3.5rem_3.5rem_4rem_3.5rem] items-center gap-1 px-2 py-1 text-3xs uppercase tracking-wide text-term-text-mute">
+                      <div className="grid grid-cols-[minmax(4.5rem,1fr)_1.5rem_4.75rem_4.25rem_4rem_4rem_3.5rem_3.5rem_3.5rem_4rem_3.5rem] items-center gap-1 px-2 py-1 text-3xs uppercase tracking-wide text-term-text-mute">
                         <span>Series</span>
                         <span title="Publication frequency">F</span>
                         <span className="text-right">Value</span>
                         <span className="text-right">As of</span>
-                        <span className="text-right" title="Absolute change versus prior observation, in the series unit">Δ</span>
-                        <span className="text-right" title="Percent change versus prior observation">Δ%</span>
+                        <span className="text-right" title="Absolute change vs prior print (for YoY series this is the change in the YoY rate, not monthly price change)">Δ Prior</span>
+                        <span className="text-right" title="Percent change vs prior print">Δ% Prior</span>
                         <span className="text-right" title="Month-over-month percent change from raw level/index values">MoM %</span>
                         <span className="text-right" title="Quarter-over-quarter percent change from raw level/index values">QoQ %</span>
                         <span className="text-right" title="Year-over-year percent change from raw level/index values, or the YoY display print">YoY %</span>
@@ -261,7 +261,7 @@ export default function MacroDashboard() {
                           <div
                             key={r.id}
                             onClick={() => drill(r)}
-                            className="grid cursor-pointer grid-cols-[minmax(4.5rem,1fr)_1.5rem_4.75rem_4.25rem_3.5rem_3.5rem_3.5rem_3.5rem_3.5rem_4rem_3.5rem] items-center gap-1 px-2 py-1 text-2xs transition-colors hover:bg-term-panel-2"
+                            className="grid cursor-pointer grid-cols-[minmax(4.5rem,1fr)_1.5rem_4.75rem_4.25rem_4rem_4rem_3.5rem_3.5rem_3.5rem_4rem_3.5rem] items-center gap-1 px-2 py-1 text-2xs transition-colors hover:bg-term-panel-2"
                             title={`${r.label} — click to drill 24m`}
                           >
                             <span className="truncate font-semibold text-term-text" title={r.label}>
@@ -276,10 +276,10 @@ export default function MacroDashboard() {
                             <span className="tnum truncate text-right text-term-text-mute" title={e.asOf}>
                               {e.asOf.slice(5)}
                             </span>
-                            <span className={`tnum text-right ${pnlClass(e.change)}`} title="Absolute change vs prior observation">
+                            <span className={`tnum text-right ${pnlClass(e.change)}`} title={`Change vs prior print${r.unit.includes("y/y") ? " (change in YoY rate, not monthly)" : ""}: ${fmtSigned(e.change, r.decimals)} ${r.unit}`}>
                               {fmtSigned(e.change, r.decimals)}
                             </span>
-                            <span className={`tnum text-right ${e.changePct == null ? "text-term-text-dim" : pnlClass(e.changePct)}`} title="Percent change vs prior observation">
+                            <span className={`tnum text-right ${e.changePct == null ? "text-term-text-dim" : pnlClass(e.changePct)}`} title="Percent change vs prior print">
                               {e.changePct == null ? "—" : `${fmtSigned(e.changePct, 2)}%`}
                             </span>
                             <span className={`tnum text-right ${e.mom == null ? "text-term-text-dim" : pnlClass(e.mom)}`}>
