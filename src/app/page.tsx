@@ -1,5 +1,5 @@
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "@/components/Link";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
@@ -13,7 +13,8 @@ import { getPrimeSummary } from "@/data/primeFinance";
 import { getCollateralSummary } from "@/data/collateral";
 import { getCashSummary } from "@/data/cash";
 import { getOptimizationRuns } from "@/data/optimization";
-import { getIndices, getHeatmap, getMovers, INDEX_FRED_IDS, mergeLiveIndices, mergeSnapshotIndices, latestFredAsOf, heatmapFromCards, moversFromCards, type PipelineCard } from "@/data/markets";
+import { getIndices, getHeatmap, getMovers, INDEX_FRED_IDS, mergeLiveIndices, mergeSnapshotIndices, latestFredAsOf, heatmapFromCards, moversFromCards, HEAT_HORIZONS, horizonDateRange, isAnnualized, type PipelineCard, type HeatHorizon } from "@/data/markets";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 import { getActiveAlerts, SEVERITY_TONE, CATEGORY_LABEL, type Alert } from "@/data/alerts";
 import { useLiveSeriesSet } from "@/lib/useEcon";
 import { useMarketView } from "@/lib/useMarket";
@@ -30,6 +31,7 @@ export default function CommandCenter() {
   const simHeat = getHeatmap();
   const simMovers = getMovers();
   const alerts = getActiveAlerts().slice(0, 7);
+  const [heatHorizon, setHeatHorizon] = useState<HeatHorizon>("1D");
 
   const { data: indexFred } = useLiveSeriesSet(INDEX_FRED_IDS, "lin", 30);
   const anyIndexLive = INDEX_FRED_IDS.some((id) => indexFred[id]?.source === "FRED");
@@ -53,7 +55,8 @@ export default function CommandCenter() {
     return idx;
   }, [simIndices, indexFred, anyIndexLive, marketData, hasCards, pipelineAsOf]);
 
-  const heat = useMemo(() => hasCards ? heatmapFromCards(marketData!.cards) : simHeat, [hasCards, marketData, simHeat]);
+  const heat = useMemo(() => hasCards ? heatmapFromCards(marketData!.cards, heatHorizon) : simHeat, [hasCards, marketData, simHeat, heatHorizon]);
+  const heatRange = useMemo(() => horizonDateRange(heatHorizon, pipelineAsOf), [heatHorizon, pipelineAsOf]);
   const movers = useMemo(() => {
     if (hasCards) { const m = moversFromCards(marketData!.cards); return { ...simMovers, gainers: m.gainers, losers: m.losers }; }
     return simMovers;
@@ -154,14 +157,22 @@ export default function CommandCenter() {
             </div>
           </Panel>
 
-          <Panel title="Equity Heat Map" code="HEAT" right={
+          <Panel title="Equity Heat Map" code="HEAT" toolbar={
+            <div className="flex w-full items-center justify-between gap-2">
+              <TermToggleGroup value={heatHorizon} onChange={setHeatHorizon} options={HEAT_HORIZONS} size="sm" />
+              <span className="text-3xs text-term-text-mute">
+                {heatRange && <span className="font-mono">{heatRange}</span>}
+                {isAnnualized(heatHorizon) && <span className="ml-1 text-term-amber">ANNUALIZED</span>}
+              </span>
+            </div>
+          } right={
             <span className="flex items-center gap-1.5 text-3xs text-term-text-mute">
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${hasCards ? "bg-term-up" : "bg-term-amber"}`} />
-              {pipelineLive ? "PIPELINE" : hasCards ? "SNAPSHOT" : "SIM"}{hasCards && pipelineAsOf ? ` ${pipelineAsOf}` : ""}
+              {pipelineLive ? "PIPELINE" : hasCards ? "SNAPSHOT" : "SIM"}
             </span>
           }>
             <div className="p-1">
-              <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct, group: h.sector }))} height={200} />
+              <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct, group: h.sector }))} height={200} maxAbs={isAnnualized(heatHorizon) ? 30 : heatHorizon === "YTD" || heatHorizon === "1Y" ? 20 : 4} />
             </div>
           </Panel>
         </div>

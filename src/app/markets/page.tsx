@@ -17,10 +17,16 @@ import {
   getMovers,
   getCandles,
   getOrderBook,
+  heatmapFromCards,
+  HEAT_HORIZONS,
+  horizonDateRange,
+  isAnnualized,
   type Quote,
   type Mover,
   type IndexQuote,
+  type HeatHorizon,
 } from "@/data/markets";
+import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 import { bySymbol, type AssetClass } from "@/data/universe";
 import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
@@ -74,6 +80,7 @@ export default function LiveMarkets() {
   const [chartTicker, setChartTicker] = useState("AAPL");
   const [basis, setBasis] = useState<ReturnBasis>("total");
   const [asof, setAsOf] = useState("");
+  const [heatHorizon, setHeatHorizon] = useState<HeatHorizon>("1D");
 
   // Deep-link from the command palette / watchlists: /markets?sym=NVDA focuses
   // the intraday chart on that security and switches to its asset-class tab.
@@ -91,7 +98,9 @@ export default function LiveMarkets() {
   const dataAsOf = marketData?.cards?.[0]?.asof ?? null;
 
   const indices = useMemo(() => mergeIndexQuotes(getIndices(), marketData?.cards ?? []), [marketData]);
-  const heat = useMemo(() => getHeatmap(), []);
+  const hasCards = !!marketData?.cards?.length;
+  const heat = useMemo(() => hasCards ? heatmapFromCards(marketData!.cards, heatHorizon) : getHeatmap(), [hasCards, marketData, heatHorizon]);
+  const heatRange = useMemo(() => horizonDateRange(heatHorizon, dataAsOf), [heatHorizon, dataAsOf]);
   const movers = useMemo(() => getMovers(), []);
   const allQuotes = useMemo(() => getQuotes(), []);
 
@@ -267,9 +276,17 @@ export default function LiveMarkets() {
 
         {/* Heat map */}
         <div className="col-span-12 xl:col-span-4">
-          <Panel title="Equity Heat Map" code="HEAT">
+          <Panel title="Equity Heat Map" code="HEAT" toolbar={
+            <div className="flex w-full items-center justify-between gap-2">
+              <TermToggleGroup value={heatHorizon} onChange={setHeatHorizon} options={HEAT_HORIZONS} size="sm" />
+              <span className="shrink-0 text-3xs text-term-text-mute">
+                {heatRange && <span className="font-mono">{heatRange}</span>}
+                {isAnnualized(heatHorizon) && <span className="ml-1 text-term-amber">ANNUALIZED</span>}
+              </span>
+            </div>
+          }>
             <div className="p-1">
-              <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct, group: h.sector }))} height={360} />
+              <Treemap cells={heat.map((h) => ({ label: h.ticker, weight: h.weight, value: h.chgPct, group: h.sector }))} height={360} maxAbs={isAnnualized(heatHorizon) ? 30 : heatHorizon === "YTD" || heatHorizon === "1Y" ? 20 : 4} />
             </div>
           </Panel>
         </div>
