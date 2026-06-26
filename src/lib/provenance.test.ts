@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { classifyFreshness } from "./provenance";
+import { describe, it, expect, test } from "vitest";
+import { classifyFreshness, PROVENANCE_META, provenanceMeta, type ProvenanceSource, PROVENANCE_TONE_CLASS } from "./provenance";
 
 const NOW = new Date("2026-06-23T12:00:00Z");
 
@@ -37,4 +37,50 @@ describe("classifyFreshness", () => {
   it("accepts ISO timestamps as well as plain dates", () => {
     expect(classifyFreshness("2026-06-23T09:00:00Z", { now: NOW }).status).toBe("FRESH");
   });
+});
+
+// --- New tests ---
+
+test("PROVENANCE_META covers all source tiers", () => {
+  const sources: ProvenanceSource[] = ["FRED", "LIVE", "DB", "FILE", "ETL", "SNAPSHOT", "ECON", "SIM", "LOADING", "ERR"];
+  for (const s of sources) {
+    const meta = PROVENANCE_META[s];
+    expect(meta).toBeDefined();
+    expect(meta.label).toBeTruthy();
+    expect(typeof meta.live).toBe("boolean");
+    expect(meta.tone).toBeTruthy();
+    expect(meta.title).toBeTruthy();
+  }
+});
+
+test("live sources are correctly classified", () => {
+  const liveSources: ProvenanceSource[] = ["FRED", "LIVE", "DB", "FILE", "ETL"];
+  const offlineSources: ProvenanceSource[] = ["SNAPSHOT", "ECON", "SIM"];
+  for (const s of liveSources) expect(PROVENANCE_META[s].live).toBe(true);
+  for (const s of offlineSources) expect(PROVENANCE_META[s].live).toBe(false);
+});
+
+test("provenanceMeta returns SIM meta for unknown sources", () => {
+  const meta = provenanceMeta("UNKNOWN_GARBAGE");
+  expect(meta).toEqual(PROVENANCE_META.SIM);
+});
+
+test("PROVENANCE_TONE_CLASS covers all tones", () => {
+  const tones = ["live", "snapshot", "model", "etl", "loading", "error"] as const;
+  for (const t of tones) {
+    expect(PROVENANCE_TONE_CLASS[t]).toBeDefined();
+    expect(PROVENANCE_TONE_CLASS[t].pill).toBeTruthy();
+    expect(PROVENANCE_TONE_CLASS[t].dot).toBeTruthy();
+  }
+});
+
+test("classifyFreshness handles future dates as FRESH", () => {
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const result = classifyFreshness(tomorrow);
+  expect(result.status).toBe("FRESH");
+});
+
+test("classifyFreshness handles empty string as UNKNOWN", () => {
+  const result = classifyFreshness("");
+  expect(result.status).toBe("UNKNOWN");
 });

@@ -8,6 +8,7 @@ import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import type { BilelloView, BilelloMonthlyReturn, BilelloDailyPrice, ReturnBasis } from "@/data/marketPipeline";
 import { fmtNum, fmtSignedPct } from "@/lib/format";
+import { StalenessBar } from "@/components/ui/StalenessBar";
 
 function tone(v: number): "up" | "down" | "amber" | "neutral" {
   if (v > 10) return "up";
@@ -42,6 +43,8 @@ export default function AssetQuiltPage() {
         asOf={asof || bilello?.asof || null}
         right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={bilello?.asof} earliestAsOf={earliestAsOf} /><PipelineTag source={source} asOf={bilello?.asof} /></span>}
       />
+
+      <StalenessBar asOf={asof || bilello?.asof || null} />
 
       <KpiStrip>
         <Stat label="Latest Leader" value={bestLatest.asset} sub={fmtSignedPct(bestLatest.returnPct, 1)} tone={tone(bestLatest.returnPct)} />

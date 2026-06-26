@@ -19,7 +19,9 @@ import {
   type FredSeries,
 } from "@/data/econSeries";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
+import clsx from "clsx";
 import { DataLegend } from "@/components/ui/DataLegend";
+import { StalenessBar } from "@/components/ui/StalenessBar";
 import { TermToggleGroup } from "@/components/ui/TermToggleGroup";
 import { econChartHref } from "@/components/charting/ChartLink";
 import Link from "@/components/Link";
@@ -103,6 +105,7 @@ function effective(r: IndicatorRow, L: LiveIndicator | undefined) {
     monthlyPrint: L ? L.monthlyPrint : null,
     spark: L && L.history.length ? L.history : r.spark,
     asOf: L ? L.asOf : r.asOf,
+    source: L ? L.source : "SIM" as const,
   };
 }
 
@@ -196,6 +199,8 @@ export default function MacroDashboard() {
         right={<SourceBadge source={indSource} />}
       />
 
+      <StalenessBar asOf={dashAsOf} />
+
       <KpiStrip>
         {KPI_IDS.map((id) => {
           const r = byId(id);
@@ -242,7 +247,7 @@ export default function MacroDashboard() {
                       <span className="text-3xs text-term-text-mute">{rows.length}</span>
                     </div>
                     <div className="divide-y divide-term-border-soft">
-                      <div className="grid grid-cols-[minmax(4.5rem,1fr)_1.5rem_4.75rem_4.25rem_4rem_4rem_3.5rem_3.5rem_3.5rem_4rem_3.5rem] items-center gap-1 px-2 py-1 text-3xs uppercase tracking-wide text-term-text-mute">
+                      <div className="grid grid-cols-[minmax(4.5rem,1fr)_1.5rem_4.75rem_4.25rem_4rem_4rem_3.5rem_3.5rem_3.5rem_4rem_1.25rem_3.5rem] items-center gap-1 px-2 py-1 text-3xs uppercase tracking-wide text-term-text-mute">
                         <span>Series</span>
                         <span title="Publication frequency">F</span>
                         <span className="text-right">Value</span>
@@ -253,6 +258,7 @@ export default function MacroDashboard() {
                         <span className="text-right" title="Quarter-over-quarter percent change from raw level/index values">QoQ %</span>
                         <span className="text-right" title="Year-over-year percent change from raw level/index values, or the YoY display print">YoY %</span>
                         <span className="text-right" title="Inflation monthly print derived from index levels">Infl. print</span>
+                        <span className="text-center" title="Data source for this indicator">Src</span>
                         <span />
                       </div>
                       {rows.map((r) => {
@@ -261,7 +267,7 @@ export default function MacroDashboard() {
                           <div
                             key={r.id}
                             onClick={() => drill(r)}
-                            className="grid cursor-pointer grid-cols-[minmax(4.5rem,1fr)_1.5rem_4.75rem_4.25rem_4rem_4rem_3.5rem_3.5rem_3.5rem_4rem_3.5rem] items-center gap-1 px-2 py-1 text-2xs transition-colors hover:bg-term-panel-2"
+                            className="grid cursor-pointer grid-cols-[minmax(4.5rem,1fr)_1.5rem_4.75rem_4.25rem_4rem_4rem_3.5rem_3.5rem_3.5rem_4rem_1.25rem_3.5rem] items-center gap-1 px-2 py-1 text-2xs transition-colors hover:bg-term-panel-2"
                             title={`${r.label} — click to drill 24m`}
                           >
                             <span className="truncate font-semibold text-term-text" title={r.label}>
@@ -293,6 +299,9 @@ export default function MacroDashboard() {
                             </span>
                             <span className={`tnum text-right ${e.monthlyPrint == null ? "text-term-text-dim" : pnlClass(e.monthlyPrint)}`} title="Inflation monthly print: percent change from raw index level, not a change in the YoY print">
                               {e.monthlyPrint == null ? "—" : `${fmtSigned(e.monthlyPrint, 2)}%`}
+                            </span>
+                            <span className="flex items-center justify-center" title={`Source: ${e.source}`}>
+                              <span className={clsx("h-1.5 w-1.5 rounded-full", e.source === "FRED" ? "bg-term-up" : e.source === "SNAPSHOT" ? "bg-term-violet" : "bg-term-amber")} />
                             </span>
                             <span className="inline-flex justify-end">
                               <Sparkline data={e.spark} width={56} height={18} />

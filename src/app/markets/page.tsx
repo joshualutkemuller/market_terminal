@@ -37,6 +37,7 @@ import { useMarketView, type MarketSource } from "@/lib/useMarket";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 import type { ReturnBasis, SnapshotCard } from "@/data/marketPipeline";
 import { fmtNum, fmtInt, fmtAbbr, fmtSignedPct, pnlClass } from "@/lib/format";
+import { StalenessBar } from "@/components/ui/StalenessBar";
 import { marketChartHref } from "@/components/charting/ChartLink";
 import Link from "@/components/Link";
 import { CandlestickChart } from "lucide-react";
@@ -245,6 +246,8 @@ export default function LiveMarkets() {
         asOf={asof || dataAsOf}
         right={<span className="flex items-center gap-2"><MarketDataControls basis={basis} onBasisChange={setBasis} asof={asof} onAsOfChange={setAsOf} latestAsOf={dataAsOf} earliestAsOf={earliestAsOf} /><PipelineTag source={source} asOf={dataAsOf} /></span>}
       />
+
+      <StalenessBar asOf={asof || dataAsOf} />
 
       <KpiStrip>
         <Stat label="S&P 500" value={fmtNum(spx?.last ?? 0, 1)} sub={<span className={pnlClass(spx?.chgPct ?? 0)}>{fmtSignedPct(spx?.chgPct ?? 0)}</span>} tone={(spx?.chgPct ?? 0) >= 0 ? "up" : "down"} />

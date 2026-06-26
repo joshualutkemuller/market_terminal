@@ -20,6 +20,7 @@ import { useLiveSeriesSet } from "@/lib/useEcon";
 import { useMarketView } from "@/lib/useMarket";
 import { fmtUsdAbbr, fmtSignedPct, fmtNum, pnlClass, fmtAbbr } from "@/lib/format";
 import { NAV } from "@/lib/nav";
+import { StalenessBar } from "@/components/ui/StalenessBar";
 
 export default function CommandCenter() {
   const sl = getSLSummary();
@@ -82,6 +83,8 @@ export default function CommandCenter() {
           <ProvenanceBadge source={badgeSource} />
         </span>
       } />
+
+      <StalenessBar asOf={marketAsOf} />
 
       <KpiStrip>
         <Stat label="SL Revenue (Day)" value={fmtUsdAbbr(sl.dayRevenue)} sub={<span className={pnlClass(sl.dayChgPct)}>{fmtSignedPct(sl.dayChgPct)} vs prior</span>} tone="amber" />
