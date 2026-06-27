@@ -26,6 +26,7 @@ from market_data_pipeline.src.connectors import (
     YahooConnector,
     fred_enabled,
 )
+from market_data_pipeline.src.ingestion.news import ingest_news as _ingest_news, export_news_snapshot
 from market_data_pipeline.src.ingestion.manifest import ManifestWriter
 from market_data_pipeline.src.quality.checks import QualityChecker
 from market_data_pipeline.src.storage.duckdb_store import DuckDBStore
@@ -184,6 +185,21 @@ class Pipeline:
         )
 
     # ------------------------------------------------------------------
+    # News ingestion
+    # ------------------------------------------------------------------
+
+    def ingest_news(self, n: int = 50) -> dict:
+        """Fetch news headlines from the provider chain.
+
+        Returns the result of ``ingest_news()`` from the news module.
+        Never raises — returns an empty result when no API key is configured.
+        """
+        try:
+            return _ingest_news(n)
+        except Exception:
+            return {"source": "NONE", "headlines": [], "fetched_at": _now().isoformat()}
+
+    # ------------------------------------------------------------------
     # Full run
     # ------------------------------------------------------------------
 
@@ -318,7 +334,9 @@ class Pipeline:
         ca = analytics.cross_asset_dashboard(prices)
         basis_note = "total" if return_basis != "price" else "price"
         asof = _frame_asof(prices)
-        return _json_clean({
+        news_result = self.ingest_news()
+        news_view = export_news_snapshot(news_result["headlines"]) if news_result["headlines"] else None
+        views = _json_clean({
             "market": {"return_basis": basis_note, "cards": analytics.market_snapshot(prices)},
             "cross-asset": {"return_basis": basis_note, **ca},
             "rates": analytics.rates_dashboard(macro),
@@ -339,6 +357,9 @@ class Pipeline:
             "index-returns": build_index_returns_view(prices, return_basis=basis_note, asof=asof),
             "eda": analytics.eda_dashboard(prices, macro),
         })
+        if news_view:
+            views["news"] = news_view
+        return views
 
     def materialize_api_views(
         self,

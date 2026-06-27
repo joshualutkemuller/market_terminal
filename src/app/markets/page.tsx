@@ -1,5 +1,6 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNews } from "@/lib/useNews";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { DataGrid, type Column } from "@/components/ui/DataGrid";
@@ -82,6 +83,8 @@ function tabForAssetClass(ac: AssetClass): TabKey {
 }
 
 export default function LiveMarkets() {
+  const { headlines } = useNews(30);
+  const marketHeadlines = useMemo(() => headlines.filter(h => h.assetClass === "EQUITY" || h.assetClass === "COMMODITY").sort((a, b) => b.importance - a.importance), [headlines]);
   const [tab, setTab] = useState<TabKey>("EQUITY");
   const [chartTicker, setChartTicker] = useState("AAPL");
   const [basis, setBasis] = useState<ReturnBasis>("total");
@@ -436,6 +439,21 @@ export default function LiveMarkets() {
                   Rates vol (MOVE) {fmtNum(move.last, 1)} · equity vol (VIX) elevated regime monitor.
                 </div>
               )}
+            </div>
+          </Panel>
+        </div>
+
+        <div className="col-span-12">
+          <Panel title="Market Headlines" code="NEWS" right={<Link href="/news" className="text-3xs text-term-blue hover:underline">Full News →</Link>}>
+            <div className="divide-y divide-term-border-soft">
+              {marketHeadlines.slice(0, 6).map((h) => (
+                <div key={h.id} className="flex items-center gap-2 px-2 py-1.5 text-2xs">
+                  <span className="tnum w-10 shrink-0 text-term-text-mute">{h.time}</span>
+                  <Tag tone={h.sentimentScore > 0.15 ? "up" : h.sentimentScore < -0.15 ? "down" : "neutral"}>{h.sentiment}</Tag>
+                  <span className="min-w-0 flex-1 truncate text-term-text">{h.headline}</span>
+                  {h.tickers.slice(0, 2).map((t, i) => <span key={i} className="text-3xs text-term-blue">{t}</span>)}
+                </div>
+              ))}
             </div>
           </Panel>
         </div>

@@ -1,5 +1,6 @@
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useNews } from "@/lib/useNews";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { Sparkline } from "@/components/charts/Sparkline";
@@ -111,6 +112,8 @@ function effective(r: IndicatorRow, L: LiveIndicator | undefined) {
 
 export default function MacroDashboard() {
   // Unconditional, fixed-id live hook — drives the featured live chart.
+  const { headlines } = useNews(30);
+  const macroHeadlines = useMemo(() => headlines.filter(h => h.assetClass === "MACRO" || h.assetClass === "RATES" || h.assetClass === "CREDIT").sort((a, b) => b.importance - a.importance), [headlines]);
   const live = useEconSeries("DGS10", 120);
   // All-indicator live feed (FRED, unit-corrected server-side) keyed by series id.
   const { data: liveInd, source: indSource } = useLiveIndicators();
@@ -422,8 +425,24 @@ export default function MacroDashboard() {
         </div>
       </div>
 
-      <div className="px-2 pb-2">
-        <DataLegend />
+      <div className="grid grid-cols-12 gap-2 px-2 pb-2">
+        <div className="col-span-12 xl:col-span-5">
+          <Panel title="Macro Headlines" code="NEWS" right={<Link href="/news" className="text-3xs text-term-blue hover:underline">Full News →</Link>}>
+            <div className="divide-y divide-term-border-soft">
+              {macroHeadlines.slice(0, 5).map((h) => (
+                <div key={h.id} className="flex items-center gap-2 px-2 py-1.5 text-2xs">
+                  <span className="tnum w-10 shrink-0 text-term-text-mute">{h.time}</span>
+                  <Tag tone={h.sentimentScore > 0.15 ? "up" : h.sentimentScore < -0.15 ? "down" : "neutral"}>{h.sentiment}</Tag>
+                  <span className="min-w-0 flex-1 truncate text-term-text">{h.headline}</span>
+                  {h.tickers.slice(0, 2).map((t, i) => <span key={i} className="text-3xs text-term-blue">{t}</span>)}
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </div>
+        <div className="col-span-12 xl:col-span-7">
+          <DataLegend />
+        </div>
       </div>
     </div>
   );

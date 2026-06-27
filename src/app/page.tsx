@@ -1,6 +1,9 @@
 
 import { useMemo, useState } from "react";
+import clsx from "clsx";
 import Link from "@/components/Link";
+import { useNews } from "@/lib/useNews";
+import type { Headline } from "@/data/news";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
@@ -22,7 +25,25 @@ import { fmtUsdAbbr, fmtSignedPct, fmtNum, pnlClass, fmtAbbr } from "@/lib/forma
 import { NAV } from "@/lib/nav";
 import { StalenessBar } from "@/components/ui/StalenessBar";
 
+function NewsTicker({ headlines }: { headlines: Headline[] }) {
+  if (!headlines.length) return null;
+  const top = headlines.slice(0, 8);
+  return (
+    <div className="flex items-center gap-4 overflow-x-auto border-b border-term-border bg-term-panel px-3 py-1 scrollbar-hide">
+      <span className="shrink-0 text-3xs font-bold uppercase tracking-widest text-term-amber">NEWS</span>
+      {top.map((h) => (
+        <span key={h.id} className="flex shrink-0 items-center gap-1.5 text-2xs">
+          <span className="text-term-text-mute">{h.time}</span>
+          <span className={clsx("font-semibold", h.sentimentScore > 0.15 ? "text-term-up" : h.sentimentScore < -0.15 ? "text-term-down" : "text-term-text")}>{h.headline}</span>
+          {h.tickers[0] && <span className="text-3xs text-term-blue">{h.tickers[0]}</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function CommandCenter() {
+  const { headlines } = useNews(20);
   const sl = getSLSummary();
   const pb = getPrimeSummary();
   const coll = getCollateralSummary();
@@ -85,6 +106,8 @@ export default function CommandCenter() {
       } />
 
       <StalenessBar asOf={marketAsOf} />
+
+      <NewsTicker headlines={headlines} />
 
       <KpiStrip>
         <Stat label="SL Revenue (Day)" value={fmtUsdAbbr(sl.dayRevenue)} sub={<span className={pnlClass(sl.dayChgPct)}>{fmtSignedPct(sl.dayChgPct)} vs prior</span>} tone="amber" />
