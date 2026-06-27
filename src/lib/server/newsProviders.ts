@@ -175,9 +175,9 @@ async function newsapi(n: number): Promise<Headline[] | null> {
 }
 
 const PROVIDERS: { name: string; fn: (n: number) => Promise<Headline[] | null> }[] = [
+  { name: "Finnhub", fn: finnhub },
   { name: "Alpha Vantage", fn: alphaVantage },
   { name: "Marketaux", fn: marketaux },
-  { name: "Finnhub", fn: finnhub },
   { name: "NewsAPI", fn: newsapi },
 ];
 
@@ -187,14 +187,15 @@ export async function fetchLiveNews(n = 60): Promise<LiveNews | null> {
     try {
       const headlines = await p.fn(n);
       if (headlines && headlines.length) {
-        // newest first, then re-id deterministically for stable React keys
         headlines.sort((a, b) => a.minutesAgo - b.minutesAgo);
+        console.log(`[NEWS] ${p.name}: ${headlines.length} headlines`);
         return { source: p.name, headlines };
       }
-    } catch {
-      /* try next provider */
+    } catch (err) {
+      console.warn(`[NEWS] ${p.name} failed:`, err instanceof Error ? err.message : err);
     }
   }
+  console.warn("[NEWS] all providers failed, falling back to SIM");
   return null;
 }
 
