@@ -170,22 +170,90 @@ const mFmt = (v: number) => `${v.toFixed(2)}M`;
 const idxFmt = (v: number) => `${v.toFixed(1)}`;
 const rngFmt = (lo: number, hi: number) => `${lo.toFixed(2)}-${hi.toFixed(2)}%`;
 
+const bpsFmt = (v: number) => `${Math.round(v)}bps`;
+const rateFmt = (v: number) => `${v.toFixed(2)}%`;
+const tFmt = (v: number) => `$${v.toFixed(2)}T`;
+const savFmt = (v: number) => `${v.toFixed(1)}%`;
+
 const EVENT_SERIES: EventDef[] = [
+  // ── Inflation (HIGH) ──
   { name: "CPI (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 12, baseValue: 0.25, volatility: 0.15, unit: "%", fmt: pctFmt, fredId: "CPIAUCSL", fredUnits: "pch" },
   { name: "Core CPI (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 12, baseValue: 0.3, volatility: 0.1, unit: "%", fmt: pctFmt, fredId: "CPILFESL", fredUnits: "pch" },
+  { name: "Core PCE (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 28, baseValue: 0.25, volatility: 0.1, unit: "%", fmt: pctFmt, fredId: "PCEPILFE", fredUnits: "pch" },
+  { name: "PCE Price Index (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 28, baseValue: 0.2, volatility: 0.15, unit: "%", fmt: pctFmt, fredId: "PCEPI", fredUnits: "pch" },
+  { name: "PPI (m/m)", category: "Inflation", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 13, baseValue: 0.15, volatility: 0.2, unit: "%", fmt: pctFmt, fredId: "PPIACO", fredUnits: "pch" },
+  { name: "Sticky CPI (y/y)", category: "Inflation", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 12, baseValue: 3.2, volatility: 0.12, unit: "%", fmt: pctFmt, fredId: "STICKCPIM159SFRB" },
+  { name: "Median CPI (ann.)", category: "Inflation", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 12, baseValue: 3.3, volatility: 0.2, unit: "%", fmt: pctFmt, fredId: "MEDCPIM159SFRB" },
+  { name: "Trimmed-Mean PCE (y/y)", category: "Inflation", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 28, baseValue: 2.7, volatility: 0.12, unit: "%", fmt: pctFmt, fredId: "PCETRIM12M159SFRB" },
+  { name: "5y Breakeven Inflation", category: "Inflation", time: "—", importance: "LOW", freq: "monthly", releaseDay: 15, baseValue: 2.34, volatility: 0.05, unit: "%", fmt: rateFmt, fredId: "T5YIE" },
+
+  // ── Labor (HIGH/MEDIUM) ──
   { name: "Nonfarm Payrolls", category: "Labor", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 5, baseValue: 180, volatility: 60, unit: "k", fmt: kFmt, fredId: "PAYEMS", fredUnits: "chg" },
   { name: "Unemployment Rate", category: "Labor", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 5, baseValue: 4.2, volatility: 0.2, unit: "%", fmt: pctFmt, fredId: "UNRATE" },
   { name: "Initial Jobless Claims", category: "Labor", time: "08:30", importance: "MEDIUM", freq: "weekly", releaseDay: 4, baseValue: 230, volatility: 15, unit: "k", fmt: kFmt, fredId: "ICSA", fredScale: 0.001 },
-  { name: "Retail Sales (m/m)", category: "Consumer", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 15, baseValue: 0.2, volatility: 0.3, unit: "%", fmt: pctFmt, fredId: "RSAFS", fredUnits: "pch" },
-  { name: "FOMC Rate Decision", category: "Policy", time: "14:00", importance: "HIGH", freq: "8x", releaseDay: 0, baseValue: 4.125, volatility: 0, unit: "%", fmt: (v) => rngFmt(v - 0.125, v + 0.125), fredId: "DFEDTARU" },
-  { name: "Core PCE (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 28, baseValue: 0.25, volatility: 0.1, unit: "%", fmt: pctFmt, fredId: "PCEPILFE", fredUnits: "pch" },
-  { name: "ISM Manufacturing", category: "Activity", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 49.5, volatility: 1.5, unit: "", fmt: idxFmt, fredId: "MANEMP" },
-  { name: "ISM Services", category: "Activity", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 3, baseValue: 53.0, volatility: 1.2, unit: "", fmt: idxFmt },
-  { name: "GDP (q/q ann.)", category: "Growth", time: "08:30", importance: "HIGH", freq: "quarterly", releaseDay: 27, baseValue: 2.2, volatility: 0.8, unit: "%", fmt: pctFmt, fredId: "A191RL1Q225SBEA" },
-  { name: "U. Mich Sentiment", category: "Consumer", time: "10:00", importance: "LOW", freq: "monthly", releaseDay: 14, baseValue: 68, volatility: 3, unit: "", fmt: idxFmt, fredId: "UMCSENT" },
+  { name: "Continued Claims", category: "Labor", time: "08:30", importance: "MEDIUM", freq: "weekly", releaseDay: 4, baseValue: 1870, volatility: 40, unit: "k", fmt: kFmt, fredId: "CCSA", fredScale: 0.001 },
   { name: "JOLTS Job Openings", category: "Labor", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 8, baseValue: 7.5, volatility: 0.4, unit: "M", fmt: mFmt, fredId: "JTSJOL", fredScale: 0.001 },
-  { name: "Housing Starts", category: "Housing", time: "08:30", importance: "LOW", freq: "monthly", releaseDay: 17, baseValue: 1.38, volatility: 0.08, unit: "M", fmt: mFmt, fredId: "HOUST", fredScale: 0.001 },
-  { name: "PPI (m/m)", category: "Inflation", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 13, baseValue: 0.15, volatility: 0.2, unit: "%", fmt: pctFmt, fredId: "PPIACO", fredUnits: "pch" },
+  { name: "JOLTS Quits Rate", category: "Labor", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 8, baseValue: 2.0, volatility: 0.1, unit: "%", fmt: pctFmt, fredId: "JTSQUR" },
+  { name: "JOLTS Hires Rate", category: "Labor", time: "10:00", importance: "LOW", freq: "monthly", releaseDay: 8, baseValue: 3.4, volatility: 0.1, unit: "%", fmt: pctFmt, fredId: "JTSHIR" },
+  { name: "Avg Hourly Earnings (y/y)", category: "Labor", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 5, baseValue: 3.9, volatility: 0.2, unit: "%", fmt: pctFmt, fredId: "CES0500000003", fredUnits: "pc1" },
+  { name: "U-6 Underemployment", category: "Labor", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 5, baseValue: 7.9, volatility: 0.15, unit: "%", fmt: pctFmt, fredId: "U6RATE" },
+  { name: "Labor Force Participation", category: "Labor", time: "08:30", importance: "LOW", freq: "monthly", releaseDay: 5, baseValue: 62.4, volatility: 0.1, unit: "%", fmt: pctFmt, fredId: "CIVPART" },
+  { name: "Avg Weekly Hours", category: "Labor", time: "08:30", importance: "LOW", freq: "monthly", releaseDay: 5, baseValue: 34.2, volatility: 0.1, unit: "hrs", fmt: idxFmt, fredId: "AWHAETP" },
+
+  // ── Growth (HIGH) ──
+  { name: "GDP (q/q ann.)", category: "Growth", time: "08:30", importance: "HIGH", freq: "quarterly", releaseDay: 27, baseValue: 2.2, volatility: 0.8, unit: "%", fmt: pctFmt, fredId: "A191RL1Q225SBEA" },
+
+  // ── Activity (MEDIUM) ──
+  { name: "ISM Manufacturing", category: "Activity", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 49.5, volatility: 1.5, unit: "", fmt: idxFmt },
+  { name: "ISM Services", category: "Activity", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 3, baseValue: 53.0, volatility: 1.2, unit: "", fmt: idxFmt },
+  { name: "Industrial Production (m/m)", category: "Activity", time: "09:15", importance: "MEDIUM", freq: "monthly", releaseDay: 16, baseValue: 0.2, volatility: 0.4, unit: "%", fmt: pctFmt, fredId: "INDPRO", fredUnits: "pch" },
+  { name: "Capacity Utilization", category: "Activity", time: "09:15", importance: "LOW", freq: "monthly", releaseDay: 16, baseValue: 77.4, volatility: 0.4, unit: "%", fmt: pctFmt, fredId: "TCU" },
+  { name: "Durable Goods Orders (m/m)", category: "Activity", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 24, baseValue: 0.3, volatility: 1.2, unit: "%", fmt: pctFmt, fredId: "DGORDER", fredUnits: "pch" },
+  { name: "Chicago Fed Activity", category: "Activity", time: "08:30", importance: "LOW", freq: "monthly", releaseDay: 22, baseValue: -0.05, volatility: 0.25, unit: "", fmt: (v) => v.toFixed(2), fredId: "CFNAI" },
+
+  // ── Consumer (HIGH/MEDIUM) ──
+  { name: "Retail Sales (m/m)", category: "Consumer", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 15, baseValue: 0.2, volatility: 0.3, unit: "%", fmt: pctFmt, fredId: "RSAFS", fredUnits: "pch" },
+  { name: "U. Mich Sentiment", category: "Consumer", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 14, baseValue: 68, volatility: 3, unit: "", fmt: idxFmt, fredId: "UMCSENT" },
+  { name: "Personal Saving Rate", category: "Consumer", time: "08:30", importance: "LOW", freq: "monthly", releaseDay: 28, baseValue: 4.4, volatility: 0.3, unit: "%", fmt: savFmt, fredId: "PSAVERT" },
+  { name: "Light Vehicle Sales", category: "Consumer", time: "—", importance: "LOW", freq: "monthly", releaseDay: 3, baseValue: 16.1, volatility: 0.5, unit: "M", fmt: mFmt, fredId: "TOTALSA" },
+
+  // ── Housing (MEDIUM/LOW) ──
+  { name: "Housing Starts", category: "Housing", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 17, baseValue: 1.38, volatility: 0.08, unit: "M", fmt: mFmt, fredId: "HOUST", fredScale: 0.001 },
+  { name: "Building Permits", category: "Housing", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 17, baseValue: 1.42, volatility: 0.05, unit: "M", fmt: mFmt, fredId: "PERMIT", fredScale: 0.001 },
+  { name: "Existing Home Sales", category: "Housing", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 21, baseValue: 4.05, volatility: 0.1, unit: "M", fmt: mFmt, fredId: "EXHOSLUSM495S", fredScale: 1e-6 },
+  { name: "Case-Shiller Home Prices (y/y)", category: "Housing", time: "09:00", importance: "MEDIUM", freq: "monthly", releaseDay: 25, baseValue: 3.4, volatility: 0.4, unit: "%", fmt: pctFmt, fredId: "CSUSHPINSA", fredUnits: "pc1" },
+  { name: "30Y Mortgage Rate", category: "Housing", time: "10:00", importance: "MEDIUM", freq: "weekly", releaseDay: 4, baseValue: 6.62, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "MORTGAGE30US" },
+  { name: "Monthly Supply of New Homes", category: "Housing", time: "10:00", importance: "LOW", freq: "monthly", releaseDay: 25, baseValue: 8.9, volatility: 0.3, unit: "mos", fmt: idxFmt, fredId: "MSACSR" },
+
+  // ── Policy (HIGH) ──
+  { name: "FOMC Rate Decision", category: "Policy", time: "14:00", importance: "HIGH", freq: "8x", releaseDay: 0, baseValue: 4.125, volatility: 0, unit: "%", fmt: (v) => rngFmt(v - 0.125, v + 0.125), fredId: "DFEDTARU" },
+
+  // ── Money & Liquidity (MEDIUM/LOW) ──
+  { name: "M2 Money Supply (y/y)", category: "Money", time: "—", importance: "LOW", freq: "monthly", releaseDay: 23, baseValue: 3.6, volatility: 0.3, unit: "%", fmt: pctFmt, fredId: "M2SL", fredUnits: "pc1" },
+  { name: "Fed Balance Sheet", category: "Money", time: "16:15", importance: "LOW", freq: "weekly", releaseDay: 4, baseValue: 6.62, volatility: 0.03, unit: "$T", fmt: tFmt, fredId: "WALCL", fredScale: 1e-6 },
+  { name: "Overnight Reverse Repo", category: "Money", time: "15:15", importance: "LOW", freq: "monthly", releaseDay: 1, baseValue: 470, volatility: 12, unit: "$B", fmt: (v) => `$${Math.round(v)}B`, fredId: "RRPONTSYD" },
+  { name: "Chicago Fed Fin. Conditions", category: "Money", time: "08:30", importance: "LOW", freq: "weekly", releaseDay: 3, baseValue: -0.42, volatility: 0.05, unit: "", fmt: (v) => v.toFixed(2), fredId: "NFCI" },
+  { name: "St. Louis Fed Fin. Stress", category: "Money", time: "—", importance: "LOW", freq: "weekly", releaseDay: 4, baseValue: -0.4, volatility: 0.08, unit: "", fmt: (v) => v.toFixed(2), fredId: "STLFSI4" },
+
+  // ── Credit (MEDIUM) ──
+  { name: "HY Credit Spread (OAS)", category: "Credit", time: "—", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 312, volatility: 12, unit: "bps", fmt: bpsFmt, fredId: "BAMLH0A0HYM2", fredScale: 100 },
+  { name: "IG Corp Spread (OAS)", category: "Credit", time: "—", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 92, volatility: 5, unit: "bps", fmt: bpsFmt, fredId: "BAMLC0A0CM", fredScale: 100 },
+  { name: "Bank Lending Standards (SLOOS)", category: "Credit", time: "—", importance: "MEDIUM", freq: "quarterly", releaseDay: 5, baseValue: 8.0, volatility: 3, unit: "net %", fmt: pctFmt, fredId: "DRTSCILM" },
+
+  // ── Global Central Banks (MEDIUM) ──
+  { name: "ECB Deposit Rate", category: "Policy", time: "07:45", importance: "MEDIUM", freq: "8x", releaseDay: 15, baseValue: 2.75, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "ECBDFR" },
+  { name: "Bank of England Rate", category: "Policy", time: "07:00", importance: "MEDIUM", freq: "8x", releaseDay: 10, baseValue: 4.50, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01GBM156N" },
+  { name: "Bank of Japan Rate", category: "Policy", time: "—", importance: "MEDIUM", freq: "8x", releaseDay: 20, baseValue: 0.50, volatility: 0.04, unit: "%", fmt: rateFmt, fredId: "IRSTCB01JPM156N" },
+  { name: "Bank of Canada Rate", category: "Policy", time: "10:00", importance: "LOW", freq: "8x", releaseDay: 22, baseValue: 2.75, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01CAM156N" },
+  { name: "RBA Cash Rate", category: "Policy", time: "—", importance: "LOW", freq: "8x", releaseDay: 5, baseValue: 4.10, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01AUM156N" },
+
+  // ── Global Inflation (MEDIUM/LOW) ──
+  { name: "Euro Area CPI", category: "Inflation", time: "05:00", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 128.4, volatility: 0.35, unit: "idx", fmt: idxFmt, fredId: "CP0000EZ19M086NEST" },
+  { name: "UK CPI", category: "Inflation", time: "02:00", importance: "MEDIUM", freq: "monthly", releaseDay: 15, baseValue: 138.0, volatility: 0.45, unit: "idx", fmt: idxFmt, fredId: "GBRCPIALLMINMEI" },
+  { name: "Japan CPI", category: "Inflation", time: "—", importance: "LOW", freq: "monthly", releaseDay: 20, baseValue: 111.0, volatility: 0.25, unit: "idx", fmt: idxFmt, fredId: "JPNCPIALLMINMEI" },
+  { name: "China CPI", category: "Inflation", time: "21:30", importance: "MEDIUM", freq: "monthly", releaseDay: 10, baseValue: 102.0, volatility: 0.25, unit: "idx", fmt: idxFmt, fredId: "CHNCPIALLMINMEI" },
+  { name: "Canada CPI", category: "Inflation", time: "08:30", importance: "LOW", freq: "monthly", releaseDay: 18, baseValue: 162.0, volatility: 0.35, unit: "idx", fmt: idxFmt, fredId: "CANCPIALLMINMEI" },
+  { name: "Germany CPI", category: "Inflation", time: "02:00", importance: "LOW", freq: "monthly", releaseDay: 28, baseValue: 127.0, volatility: 0.35, unit: "idx", fmt: idxFmt, fredId: "DEUCPIALLMINMEI" },
 ];
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
