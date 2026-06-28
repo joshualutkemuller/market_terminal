@@ -45,3 +45,6 @@ backend/__pycache__/
 backend/.venv/
 **/__pycache__/
 *.pyc
+
+# test artifacts
+/test-results/
