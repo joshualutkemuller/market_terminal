@@ -154,7 +154,7 @@ export interface EventDef {
   category: string;
   time: string;
   importance: EventImportance;
-  freq: "monthly" | "quarterly" | "8x" | "weekly";
+  freq: "monthly" | "quarterly" | "weekly";
   releaseDay: number;
   baseValue: number;
   volatility: number;
@@ -205,8 +205,6 @@ const EVENT_SERIES: EventDef[] = [
   { name: "GDP (q/q ann.)", category: "Growth", time: "08:30", importance: "HIGH", freq: "quarterly", releaseDay: 27, baseValue: 2.2, volatility: 0.8, unit: "%", fmt: pctFmt, fredId: "A191RL1Q225SBEA" },
 
   // ── Activity (MEDIUM) ──
-  { name: "ISM Manufacturing", category: "Activity", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 49.5, volatility: 1.5, unit: "", fmt: idxFmt },
-  { name: "ISM Services", category: "Activity", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 3, baseValue: 53.0, volatility: 1.2, unit: "", fmt: idxFmt },
   { name: "Industrial Production (m/m)", category: "Activity", time: "09:15", importance: "MEDIUM", freq: "monthly", releaseDay: 16, baseValue: 0.2, volatility: 0.4, unit: "%", fmt: pctFmt, fredId: "INDPRO", fredUnits: "pch" },
   { name: "Capacity Utilization", category: "Activity", time: "09:15", importance: "LOW", freq: "monthly", releaseDay: 16, baseValue: 77.4, volatility: 0.4, unit: "%", fmt: pctFmt, fredId: "TCU" },
   { name: "Durable Goods Orders (m/m)", category: "Activity", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 24, baseValue: 0.3, volatility: 1.2, unit: "%", fmt: pctFmt, fredId: "DGORDER", fredUnits: "pch" },
@@ -226,8 +224,7 @@ const EVENT_SERIES: EventDef[] = [
   { name: "30Y Mortgage Rate", category: "Housing", time: "10:00", importance: "MEDIUM", freq: "weekly", releaseDay: 4, baseValue: 6.62, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "MORTGAGE30US" },
   { name: "Monthly Supply of New Homes", category: "Housing", time: "10:00", importance: "LOW", freq: "monthly", releaseDay: 25, baseValue: 8.9, volatility: 0.3, unit: "mos", fmt: idxFmt, fredId: "MSACSR" },
 
-  // ── Policy (HIGH) ──
-  { name: "FOMC Rate Decision", category: "Policy", time: "14:00", importance: "HIGH", freq: "8x", releaseDay: 0, baseValue: 4.125, volatility: 0, unit: "%", fmt: (v) => rngFmt(v - 0.125, v + 0.125), fredId: "DFEDTARU" },
+  // ── Policy (HIGH) — FOMC uses real meeting dates via getFomcMeetings(); excluded here ──
 
   // ── Money & Liquidity (MEDIUM/LOW) ──
   { name: "M2 Money Supply (y/y)", category: "Money", time: "—", importance: "LOW", freq: "monthly", releaseDay: 23, baseValue: 3.6, volatility: 0.3, unit: "%", fmt: pctFmt, fredId: "M2SL", fredUnits: "pc1" },
@@ -242,11 +239,11 @@ const EVENT_SERIES: EventDef[] = [
   { name: "Bank Lending Standards (SLOOS)", category: "Credit", time: "—", importance: "MEDIUM", freq: "quarterly", releaseDay: 5, baseValue: 8.0, volatility: 3, unit: "net %", fmt: pctFmt, fredId: "DRTSCILM" },
 
   // ── Global Central Banks (MEDIUM) ──
-  { name: "ECB Deposit Rate", category: "Policy", time: "07:45", importance: "MEDIUM", freq: "8x", releaseDay: 15, baseValue: 2.75, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "ECBDFR" },
-  { name: "Bank of England Rate", category: "Policy", time: "07:00", importance: "MEDIUM", freq: "8x", releaseDay: 10, baseValue: 4.50, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01GBM156N" },
-  { name: "Bank of Japan Rate", category: "Policy", time: "—", importance: "MEDIUM", freq: "8x", releaseDay: 20, baseValue: 0.50, volatility: 0.04, unit: "%", fmt: rateFmt, fredId: "IRSTCB01JPM156N" },
-  { name: "Bank of Canada Rate", category: "Policy", time: "10:00", importance: "LOW", freq: "8x", releaseDay: 22, baseValue: 2.75, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01CAM156N" },
-  { name: "RBA Cash Rate", category: "Policy", time: "—", importance: "LOW", freq: "8x", releaseDay: 5, baseValue: 4.10, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01AUM156N" },
+  { name: "ECB Deposit Rate", category: "Policy", time: "07:45", importance: "MEDIUM", freq: "monthly", releaseDay: 15, baseValue: 2.75, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "ECBDFR" },
+  { name: "Bank of England Rate", category: "Policy", time: "07:00", importance: "MEDIUM", freq: "monthly", releaseDay: 10, baseValue: 4.50, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01GBM156N" },
+  { name: "Bank of Japan Rate", category: "Policy", time: "—", importance: "MEDIUM", freq: "monthly", releaseDay: 20, baseValue: 0.50, volatility: 0.04, unit: "%", fmt: rateFmt, fredId: "IRSTCB01JPM156N" },
+  { name: "Bank of Canada Rate", category: "Policy", time: "10:00", importance: "LOW", freq: "monthly", releaseDay: 22, baseValue: 2.75, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01CAM156N" },
+  { name: "RBA Cash Rate", category: "Policy", time: "—", importance: "LOW", freq: "monthly", releaseDay: 5, baseValue: 4.10, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01AUM156N" },
 
   // ── Global Inflation (MEDIUM/LOW) ──
   { name: "Euro Area CPI", category: "Inflation", time: "05:00", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 128.4, volatility: 0.35, unit: "idx", fmt: idxFmt, fredId: "CP0000EZ19M086NEST" },
@@ -259,7 +256,6 @@ const EVENT_SERIES: EventDef[] = [
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const QUARTERS = ["Q1", "Q2", "Q3", "Q4"];
-const FOMC_MONTHS = [0, 2, 4, 5, 6, 8, 10, 11];
 
 export interface EventHistoryPoint {
   date: string;
@@ -291,10 +287,6 @@ export function getEconEvents(anchor?: Date): EconEvent[] {
 
     for (let m = -months; m <= 1; m++) {
       if (def.freq === "quarterly" && m % 3 !== 0) continue;
-      if (def.freq === "8x") {
-        const monthIdx = (base.getUTCMonth() + m + 120) % 12;
-        if (!FOMC_MONTHS.includes(monthIdx)) continue;
-      }
 
       const releaseDate = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + m, def.releaseDay));
       if (def.freq === "weekly") {
@@ -354,6 +346,42 @@ export function getEconEvents(anchor?: Date): EconEvent[] {
       });
       if (released) prevActual = actual;
     }
+  }
+
+  // ── FOMC meetings from real schedule (not generic month-based) ──
+  const FOMC_DATES: [string, string][] = [
+    ["2025-01-29", "Jan 2025"], ["2025-03-19", "Mar 2025"], ["2025-05-07", "May 2025"],
+    ["2025-06-18", "Jun 2025"], ["2025-07-30", "Jul 2025"], ["2025-09-17", "Sep 2025"],
+    ["2025-10-29", "Oct 2025"], ["2025-12-10", "Dec 2025"],
+    ["2026-01-28", "Jan 2026"], ["2026-03-18", "Mar 2026"], ["2026-04-29", "Apr 2026"],
+    ["2026-06-17", "Jun 2026"], ["2026-07-29", "Jul 2026"], ["2026-09-16", "Sep 2026"],
+    ["2026-10-28", "Oct 2026"], ["2026-12-09", "Dec 2026"],
+  ];
+  const rngFomc = new Rng("fomc-cal");
+  let fomcPrev = CURRENT_TARGET.mid;
+  for (const [dateStr, label] of FOMC_DATES) {
+    const d = new Date(dateStr + "T00:00:00Z");
+    const daysOut = Math.round((d.getTime() - todayMs) / 86400000);
+    if (daysOut < -365 || daysOut > 60) continue;
+    const released = daysOut < 0;
+    const rate = released ? fomcPrev + rngFomc.float(-0.005, 0.005) : fomcPrev;
+    const lo = rate - 0.125;
+    const hi = rate + 0.125;
+    const fmt = (v: number) => `${v.toFixed(2)}-${(v + 0.25).toFixed(2)}%`;
+    events.push({
+      id: `EV-FOMC-${idCounter++}`,
+      date: dateStr,
+      time: "14:00",
+      daysOut,
+      name: "FOMC Rate Decision",
+      category: "Policy",
+      importance: "HIGH",
+      period: label,
+      prior: fmt(fomcPrev - 0.125),
+      consensus: fmt(lo),
+      actual: released ? fmt(lo) : null,
+    });
+    if (released) fomcPrev = rate;
   }
 
   return events.sort((a, b) => a.daysOut - b.daysOut);
