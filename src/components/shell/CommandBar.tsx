@@ -9,19 +9,19 @@ export function CommandBar({ onOpenPalette, onToggleSidebar }: { onOpenPalette: 
   const current = NAV.find((n) => n.href === path) ?? NAV[0];
   const { simEnabled, toggle: toggleSim } = useSimMode();
   return (
-    <header className="flex h-9 shrink-0 items-center gap-3 border-b border-term-border bg-term-panel px-3">
-      <button onClick={onToggleSidebar} className="text-term-text-mute hover:text-term-amber" title="Toggle sidebar">
+    <header className="flex h-9 shrink-0 items-center gap-2 border-b border-term-border bg-term-panel px-2 sm:gap-3 sm:px-3">
+      <button onClick={onToggleSidebar} className="shrink-0 text-term-text-mute hover:text-term-amber" title="Toggle sidebar">
         <PanelLeft size={16} />
       </button>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <div className="flex h-5 w-5 items-center justify-center bg-term-amber font-mono text-xs font-bold text-black">S</div>
         <span className="font-mono text-sm font-bold tracking-tight text-term-amber">SFX</span>
         <span className="hidden text-3xs uppercase tracking-widest text-term-text-mute sm:inline">Securities Finance Terminal</span>
       </div>
 
-      <div className="mx-1 h-4 w-px bg-term-border" />
+      <div className="mx-1 hidden h-4 w-px bg-term-border sm:block" />
 
-      <div className="flex items-center gap-1.5 text-xs">
+      <div className="hidden items-center gap-1.5 text-xs sm:flex">
         <span className="font-mono font-semibold text-term-amber">{current.code}</span>
         <span className="text-term-text-mute">/</span>
         <span className="text-term-text-dim">{current.label}</span>
@@ -29,7 +29,7 @@ export function CommandBar({ onOpenPalette, onToggleSidebar }: { onOpenPalette: 
 
       <button
         onClick={onOpenPalette}
-        className="ml-auto flex w-72 items-center gap-2 border border-term-border bg-term-panel-2 px-2 py-1 text-2xs text-term-text-mute hover:border-term-amber/60"
+        className="ml-auto hidden w-72 items-center gap-2 border border-term-border bg-term-panel-2 px-2 py-1 text-2xs text-term-text-mute hover:border-term-amber/60 sm:flex"
       >
         <Search size={13} />
         <span className="flex-1 text-left">Run command / find security…</span>
@@ -39,9 +39,18 @@ export function CommandBar({ onOpenPalette, onToggleSidebar }: { onOpenPalette: 
         </span>
       </button>
 
+      {/* Mobile-only compact search button */}
+      <button
+        onClick={onOpenPalette}
+        className="ml-auto shrink-0 text-term-text-mute hover:text-term-amber sm:hidden"
+        title="Search"
+      >
+        <Search size={16} />
+      </button>
+
       <button
         onClick={toggleSim}
-        className={`flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide transition-colors ${
+        className={`flex shrink-0 items-center gap-1.5 rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide transition-colors ${
           simEnabled
             ? "border-term-amber/40 bg-term-amber/10 text-term-amber hover:bg-term-amber/20"
             : "border-term-border bg-term-panel-2 text-term-text-mute hover:border-term-text-mute"
