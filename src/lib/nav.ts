@@ -28,6 +28,7 @@ import {
   Clapperboard,
   Newspaper,
   Droplets,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 
@@ -81,6 +82,7 @@ export const NAV: NavItem[] = [
   { code: "MGC", label: "Macro Chart Studio", href: "/macro-chart", icon: AreaChart, desc: "Freeform economic & macro charting", group: "ECONOMICS" },
   { code: "EDA", label: "EDA / Lead-Lag", href: "/economics/eda", icon: Activity, desc: "Cross-correlation, Granger causality & regime breaks", group: "ECONOMICS" },
   { code: "MOTN", label: "Macro Motion Studio", href: "/economics/motion", icon: Clapperboard, desc: "Animate economic series over time", group: "ECONOMICS" },
+  { code: "POLY", label: "Prediction Markets", href: "/polymarket", icon: TrendingUp, desc: "Event contract odds & probability curves", group: "INTELLIGENCE" },
   { code: "NEWS", label: "News & Signal Intel", href: "/news", icon: Newspaper, desc: "Market news, social & signal engine", group: "INTELLIGENCE" },
   { code: "SENT", label: "Investor Sentiment", href: "/sentiment", icon: Gauge, desc: "Survey + social fear/greed & positioning", group: "INTELLIGENCE" },
   { code: "AI", label: "AI Copilot", href: "/copilot", icon: Bot, desc: "Natural-language intelligence", group: "INTELLIGENCE" },
