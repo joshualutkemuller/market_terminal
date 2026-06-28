@@ -373,16 +373,25 @@ export default function PredictionMarkets() {
 
       <div className="grid min-h-0 flex-1 grid-cols-12 gap-0">
         <div className={clsx("min-h-0 overflow-auto", selected ? "col-span-12 xl:col-span-8" : "col-span-12")}>
-          {view === "BOARD" && (
-            <BoardView markets={markets} selected={selected} onSelect={setSelected} />
+          {!markets.length && source === "SIM" ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
+              <span className="text-sm text-term-text-mute">No live data available</span>
+              <span className="text-2xs text-term-text-dim">Polymarket API unreachable — enable SIM mode for simulated data</span>
+            </div>
+          ) : (
+            <>
+              {view === "BOARD" && (
+                <BoardView markets={markets} selected={selected} onSelect={setSelected} />
+              )}
+              {view === "EVENTS" && (
+                <EventsView events={events} onSelect={setSelected} />
+              )}
+              {view === "MOVERS" && (
+                <MoversView markets={markets} onSelect={setSelected} />
+              )}
+              {view === "CATEGORY" && <CategoryView />}
+            </>
           )}
-          {view === "EVENTS" && (
-            <EventsView events={events} onSelect={setSelected} />
-          )}
-          {view === "MOVERS" && (
-            <MoversView markets={markets} onSelect={setSelected} />
-          )}
-          {view === "CATEGORY" && <CategoryView />}
         </div>
 
         {selected && (

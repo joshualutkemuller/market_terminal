@@ -8,6 +8,7 @@ import {
   type PolyEvent,
   type PolyPricePoint,
 } from "@/data/polymarket";
+import { useSimMode } from "@/lib/simMode";
 
 export type PolySource = "POLY" | "SNAPSHOT" | "SIM" | "LOADING";
 
@@ -21,6 +22,7 @@ export function usePolymarkets(opts?: { limit?: number; category?: string }): {
   data: PolyMarket[];
   source: PolySource;
 } {
+  const { simEnabled } = useSimMode();
   const limit = opts?.limit ?? 100;
   const category = opts?.category;
   const sim = getPolymarkets().slice(0, limit);
@@ -54,8 +56,11 @@ export function usePolymarkets(opts?: { limit?: number; category?: string }): {
       });
 
     return () => { alive = false; };
-  }, [limit, category]);
+  }, [limit, category]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (!simEnabled && source === "SIM") {
+    return { data: [], source };
+  }
   return { data, source };
 }
 
@@ -63,6 +68,7 @@ export function usePolyEvents(): {
   data: PolyEvent[];
   source: PolySource;
 } {
+  const { simEnabled } = useSimMode();
   const sim = getPolyEvents();
   const url = "/api/polymarket/events";
   const cached = peekFresh<any>(url);
@@ -92,8 +98,11 @@ export function usePolyEvents(): {
       });
 
     return () => { alive = false; };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (!simEnabled && source === "SIM") {
+    return { data: [], source };
+  }
   return { data, source };
 }
 
@@ -101,6 +110,7 @@ export function usePolyHistory(marketId: string | null, days = 90): {
   data: PolyPricePoint[];
   source: PolySource;
 } {
+  const { simEnabled } = useSimMode();
   const sim = marketId ? getPolyPriceHistory(marketId, days) : [];
   const [data, setData] = useState<PolyPricePoint[]>(sim);
   const [source, setSource] = useState<PolySource>("SIM");
@@ -136,7 +146,10 @@ export function usePolyHistory(marketId: string | null, days = 90): {
       });
 
     return () => { alive = false; };
-  }, [marketId, days]);
+  }, [marketId, days]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (!simEnabled && source === "SIM") {
+    return { data: [], source };
+  }
   return { data, source };
 }
