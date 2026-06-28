@@ -238,12 +238,7 @@ const EVENT_SERIES: EventDef[] = [
   { name: "IG Corp Spread (OAS)", category: "Credit", time: "—", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 92, volatility: 5, unit: "bps", fmt: bpsFmt, fredId: "BAMLC0A0CM", fredScale: 100 },
   { name: "Bank Lending Standards (SLOOS)", category: "Credit", time: "—", importance: "MEDIUM", freq: "quarterly", releaseDay: 5, baseValue: 8.0, volatility: 3, unit: "net %", fmt: pctFmt, fredId: "DRTSCILM" },
 
-  // ── Global Central Banks (MEDIUM) ──
-  { name: "ECB Deposit Rate", category: "Policy", time: "07:45", importance: "MEDIUM", freq: "monthly", releaseDay: 15, baseValue: 2.75, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "ECBDFR" },
-  { name: "Bank of England Rate", category: "Policy", time: "07:00", importance: "MEDIUM", freq: "monthly", releaseDay: 10, baseValue: 4.50, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01GBM156N" },
-  { name: "Bank of Japan Rate", category: "Policy", time: "—", importance: "MEDIUM", freq: "monthly", releaseDay: 20, baseValue: 0.50, volatility: 0.04, unit: "%", fmt: rateFmt, fredId: "IRSTCB01JPM156N" },
-  { name: "Bank of Canada Rate", category: "Policy", time: "10:00", importance: "LOW", freq: "monthly", releaseDay: 22, baseValue: 2.75, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01CAM156N" },
-  { name: "RBA Cash Rate", category: "Policy", time: "—", importance: "LOW", freq: "monthly", releaseDay: 5, baseValue: 4.10, volatility: 0.08, unit: "%", fmt: rateFmt, fredId: "IRSTCB01AUM156N" },
+  // Global central bank rates use real meeting schedules (injected in getEconEvents)
 
   // ── Global Inflation (MEDIUM/LOW) ──
   { name: "Euro Area CPI", category: "Inflation", time: "05:00", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 128.4, volatility: 0.35, unit: "idx", fmt: idxFmt, fredId: "CP0000EZ19M086NEST" },
@@ -272,6 +267,37 @@ export interface EventSeriesHistory {
   importance: EventImportance;
   unit: string;
   points: EventHistoryPoint[];
+}
+
+function injectCBDates(
+  events: EconEvent[], dates: [string, string][], name: string,
+  time: string, importance: EventImportance, baseRate: number,
+  todayMs: number, idStart: number,
+) {
+  const rng = new Rng(`cb-${name}`);
+  let prev = baseRate;
+  for (let i = 0; i < dates.length; i++) {
+    const [dateStr, label] = dates[i];
+    const d = new Date(dateStr + "T00:00:00Z");
+    const daysOut = Math.round((d.getTime() - todayMs) / 86400000);
+    if (daysOut < -365 || daysOut > 60) continue;
+    const released = daysOut < 0;
+    const rate = released ? prev + rng.float(-0.01, 0.01) : prev;
+    events.push({
+      id: `EV-CB-${idStart + i}`,
+      date: dateStr,
+      time,
+      daysOut,
+      name,
+      category: "Policy",
+      importance,
+      period: label,
+      prior: `${prev.toFixed(2)}%`,
+      consensus: `${prev.toFixed(2)}%`,
+      actual: released ? `${rate.toFixed(2)}%` : null,
+    });
+    if (released) prev = rate;
+  }
 }
 
 export function getEconEvents(anchor?: Date): EconEvent[] {
@@ -384,6 +410,65 @@ export function getEconEvents(anchor?: Date): EconEvent[] {
     if (released) fomcPrev = rate;
   }
 
+  // ── ECB Governing Council rate decisions ──
+  const ECB_DATES: [string, string][] = [
+    ["2025-01-30", "Jan 2025"], ["2025-03-06", "Mar 2025"], ["2025-04-17", "Apr 2025"],
+    ["2025-06-05", "Jun 2025"], ["2025-07-24", "Jul 2025"], ["2025-09-11", "Sep 2025"],
+    ["2025-10-30", "Oct 2025"], ["2025-12-18", "Dec 2025"],
+    ["2026-01-22", "Jan 2026"], ["2026-03-05", "Mar 2026"], ["2026-04-16", "Apr 2026"],
+    ["2026-06-04", "Jun 2026"], ["2026-07-16", "Jul 2026"], ["2026-09-10", "Sep 2026"],
+    ["2026-10-29", "Oct 2026"], ["2026-12-17", "Dec 2026"],
+  ];
+  injectCBDates(events, ECB_DATES, "ECB Rate Decision", "07:45", "HIGH", 2.75, todayMs, idCounter);
+  idCounter += ECB_DATES.length;
+
+  // ── Bank of England MPC decisions ──
+  const BOE_DATES: [string, string][] = [
+    ["2025-02-06", "Feb 2025"], ["2025-03-20", "Mar 2025"], ["2025-05-08", "May 2025"],
+    ["2025-06-19", "Jun 2025"], ["2025-08-07", "Aug 2025"], ["2025-09-18", "Sep 2025"],
+    ["2025-11-06", "Nov 2025"], ["2025-12-18", "Dec 2025"],
+    ["2026-02-05", "Feb 2026"], ["2026-03-19", "Mar 2026"], ["2026-05-07", "May 2026"],
+    ["2026-06-18", "Jun 2026"], ["2026-08-06", "Aug 2026"], ["2026-09-17", "Sep 2026"],
+    ["2026-11-05", "Nov 2026"], ["2026-12-17", "Dec 2026"],
+  ];
+  injectCBDates(events, BOE_DATES, "BoE Rate Decision", "07:00", "MEDIUM", 4.50, todayMs, idCounter);
+  idCounter += BOE_DATES.length;
+
+  // ── Bank of Japan policy decisions ──
+  const BOJ_DATES: [string, string][] = [
+    ["2025-01-24", "Jan 2025"], ["2025-03-14", "Mar 2025"], ["2025-05-01", "May 2025"],
+    ["2025-06-17", "Jun 2025"], ["2025-07-31", "Jul 2025"], ["2025-09-19", "Sep 2025"],
+    ["2025-10-31", "Oct 2025"], ["2025-12-19", "Dec 2025"],
+    ["2026-01-23", "Jan 2026"], ["2026-03-13", "Mar 2026"], ["2026-04-28", "Apr 2026"],
+    ["2026-06-16", "Jun 2026"], ["2026-07-29", "Jul 2026"], ["2026-09-17", "Sep 2026"],
+    ["2026-10-29", "Oct 2026"], ["2026-12-18", "Dec 2026"],
+  ];
+  injectCBDates(events, BOJ_DATES, "BoJ Rate Decision", "—", "MEDIUM", 0.50, todayMs, idCounter);
+  idCounter += BOJ_DATES.length;
+
+  // ── Bank of Canada rate decisions ──
+  const BOC_DATES: [string, string][] = [
+    ["2025-01-29", "Jan 2025"], ["2025-03-12", "Mar 2025"], ["2025-04-16", "Apr 2025"],
+    ["2025-06-04", "Jun 2025"], ["2025-07-30", "Jul 2025"], ["2025-09-17", "Sep 2025"],
+    ["2025-10-29", "Oct 2025"], ["2025-12-10", "Dec 2025"],
+    ["2026-01-28", "Jan 2026"], ["2026-03-04", "Mar 2026"], ["2026-04-15", "Apr 2026"],
+    ["2026-06-03", "Jun 2026"], ["2026-07-15", "Jul 2026"], ["2026-09-16", "Sep 2026"],
+    ["2026-10-28", "Oct 2026"], ["2026-12-09", "Dec 2026"],
+  ];
+  injectCBDates(events, BOC_DATES, "BoC Rate Decision", "10:00", "LOW", 2.75, todayMs, idCounter);
+  idCounter += BOC_DATES.length;
+
+  // ── RBA cash rate decisions ──
+  const RBA_DATES: [string, string][] = [
+    ["2025-02-18", "Feb 2025"], ["2025-04-01", "Apr 2025"], ["2025-05-20", "May 2025"],
+    ["2025-07-08", "Jul 2025"], ["2025-08-12", "Aug 2025"], ["2025-09-30", "Sep 2025"],
+    ["2025-11-04", "Nov 2025"], ["2025-12-09", "Dec 2025"],
+    ["2026-02-03", "Feb 2026"], ["2026-03-17", "Mar 2026"], ["2026-05-05", "May 2026"],
+    ["2026-06-02", "Jun 2026"], ["2026-07-07", "Jul 2026"], ["2026-08-04", "Aug 2026"],
+    ["2026-09-01", "Sep 2026"], ["2026-11-03", "Nov 2026"],
+  ];
+  injectCBDates(events, RBA_DATES, "RBA Rate Decision", "—", "LOW", 4.10, todayMs, idCounter);
+
   return events.sort((a, b) => a.daysOut - b.daysOut);
 }
 
@@ -462,12 +547,21 @@ function autoFmt(s: { unit: string; decimals: number }): (v: number) => string {
   return (v) => `${v.toFixed(s.decimals)}`;
 }
 
+const CB_FRED_IDS = new Set([
+  "DFEDTARU", "ECBDFR", "IRSTCB01GBM156N", "IRSTCB01JPM156N",
+  "IRSTCB01CAM156N", "IRSTCB01AUM156N", "IRSTCB01CHM156N",
+  "IRSTCB01BRM156N", "IRSTCB01MXM156N", "IRSTCB01KRM156N",
+  "IRSTCB01SEM156N", "IRSTCB01NOM156N", "IRSTCB01NZM156N",
+  "IRSTCB01TRM156N",
+]);
+
 function buildFullEventSeries(): EventDef[] {
   const curated = [...EVENT_SERIES];
   const coveredFredIds = new Set(curated.filter((d) => d.fredId).map((d) => d.fredId));
 
   for (const s of FRED_CATALOG) {
     if (coveredFredIds.has(s.id)) continue;
+    if (CB_FRED_IDS.has(s.id)) continue;
     const resolved = resolveFred(s.id);
     if (resolved.simOnly) continue;
 
