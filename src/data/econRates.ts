@@ -562,6 +562,7 @@ function buildFullEventSeries(): EventDef[] {
   for (const s of FRED_CATALOG) {
     if (coveredFredIds.has(s.id)) continue;
     if (CB_FRED_IDS.has(s.id)) continue;
+    if (s.freq === "D") continue; // daily market data — not scheduled releases
     const resolved = resolveFred(s.id);
     if (resolved.simOnly) continue;
 
