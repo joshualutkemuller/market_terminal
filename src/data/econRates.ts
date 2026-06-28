@@ -146,7 +146,8 @@ export interface EconEvent {
   prior: string;
   consensus: string;
   actual: string | null;
-  fredId?: string;
+  ticker?: string;
+  source?: string;
 }
 
 export interface EventDef {

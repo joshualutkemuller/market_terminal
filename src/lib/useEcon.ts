@@ -12,7 +12,7 @@ import {
   type CurveSnapshot,
   type Inversion,
 } from "@/data/econCurve";
-import { getEconEvents, type EconEvent } from "@/data/econRates";
+import { type EconEvent } from "@/data/econRates";
 
 export type DataSource = "FRED" | "SNAPSHOT" | "SIM" | "LOADING" | "ETL";
 export type RealEconSource = "FRED" | "SNAPSHOT";
@@ -107,7 +107,7 @@ export function useCurveSnapshots(years = 7): { data: CurveSnapshot[]; source: D
 }
 
 export function useEconCalendar(): { data: EconEvent[]; source: DataSource } {
-  return useEconResource<EconEvent[]>(`/api/econ/calendar`, getEconEvents(), (j) => j.events ?? []);
+  return useEconResource<EconEvent[]>(`/api/econ/calendar`, [], (j) => j.events ?? [], "LOADING");
 }
 
 export interface InversionData {

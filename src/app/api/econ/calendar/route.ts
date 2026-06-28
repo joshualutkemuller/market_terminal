@@ -1,7 +1,7 @@
 import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries, fredReleaseDates, type FredObservation } from "@/lib/server/fred";
 import { finnhubEnabled, finnhubEconCalendar, type FinnhubEconEvent } from "@/lib/server/finnhubCalendar";
-import { getEconEvents, EVENT_SERIES, type EconEvent } from "@/data/econRates";
+import { EVENT_SERIES, type EconEvent } from "@/data/econRates";
 
 const BATCH_SIZE = 25;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -29,6 +29,20 @@ async function batchFred(
     results.push(...batchResults);
   }
   return results;
+}
+
+function fredPeriodLabel(def: { freq: string }, obsDate: Date): string {
+  const month = obsDate.getUTCMonth();
+  const year = obsDate.getUTCFullYear();
+  if (def.freq === "quarterly") {
+    const q = Math.floor(month / 3) + 1;
+    return `Q${q} ${year}`;
+  }
+  if (def.freq === "weekly") {
+    const weekStart = obsDate.toISOString().slice(0, 10);
+    return `Wk ${weekStart}`;
+  }
+  return `${MONTHS[month]} ${year}`;
 }
 
 function buildFredEvents(
@@ -61,18 +75,6 @@ function buildFredEvents(
       const prior = i > 0 ? obs[i - 1].value : o.value;
       const actual = o.value;
       const released = daysOut < 0;
-      const month = obsDate.getUTCMonth();
-      const year = obsDate.getUTCFullYear();
-
-      let period: string;
-      if (def.freq === "quarterly") {
-        const q = Math.floor(month / 3) + 1;
-        period = `Q${q} ${year}`;
-      } else if (def.freq === "weekly") {
-        period = `Wk ${obsDate.toISOString().slice(5, 10)}`;
-      } else {
-        period = MONTHS[month];
-      }
 
       events.push({
         id: `FR-${def.fredId}-${idCounter++}`,
@@ -82,10 +84,12 @@ function buildFredEvents(
         name: def.name,
         category: def.category,
         importance: def.importance,
-        period,
+        period: fredPeriodLabel(def, obsDate),
         prior: def.fmt(prior),
         consensus: def.fmt(prior),
         actual: released ? def.fmt(actual) : null,
+        ticker: def.fredId,
+        source: "FRED",
       });
     }
   }
@@ -123,6 +127,11 @@ function finnhubCategory(event: string): string {
   return "Release";
 }
 
+function finnhubPeriodLabel(dateOnly: string): string {
+  const d = new Date(dateOnly + "T00:00:00Z");
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
 function buildFinnhubEvents(raw: FinnhubEconEvent[], todayMs: number): EconEvent[] {
   const events: EconEvent[] = [];
 
@@ -138,7 +147,6 @@ function buildFinnhubEvents(raw: FinnhubEconEvent[], todayMs: number): EconEvent
     if (daysOut < -90 || daysOut > 90) continue;
 
     const released = r.actual != null;
-    const month = eventDate.getUTCMonth();
     const country = r.country ? `${r.country} ` : "";
 
     events.push({
@@ -149,10 +157,12 @@ function buildFinnhubEvents(raw: FinnhubEconEvent[], todayMs: number): EconEvent
       name: `${country}${r.event}`,
       category: finnhubCategory(r.event),
       importance: FINNHUB_IMPACT_MAP[r.impact] ?? "LOW",
-      period: MONTHS[month],
+      period: finnhubPeriodLabel(dateOnly),
       prior: fmtFinnhubVal(r.prev, r.unit),
       consensus: fmtFinnhubVal(r.estimate, r.unit),
       actual: released ? fmtFinnhubVal(r.actual, r.unit) : null,
+      ticker: "—",
+      source: "FINNHUB",
     });
   }
 
@@ -164,24 +174,22 @@ function buildFinnhubEvents(raw: FinnhubEconEvent[], todayMs: number): EconEvent
 /**
  * GET /api/econ/calendar
  *
- * Hybrid approach:
- *   1. FRED — deep 12-month history of real observations (~101 series)
+ * Real data only — no simulated fallback. Merges:
+ *   1. FRED — 12-month history of real observations with series tickers
  *   2. Finnhub — upcoming events with real consensus estimates
- *   3. SIM — deterministic fallback (central bank meetings, fill gaps)
+ *   3. FRED release dates — supplementary forward schedule
  *
- * Each layer is optional. The route merges whatever is available and
- * deduplicates by date+name. Falls back entirely to SIM if nothing works.
+ * Returns empty events array if no live sources are configured.
  */
 export async function GET() {
   const now = new Date();
   const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const todayStr = new Date(todayMs).toISOString().slice(0, 10);
 
   const hasFred = fredEnabled();
   const hasFinnhub = finnhubEnabled();
 
   if (!hasFred && !hasFinnhub) {
-    return json({ source: "SIM", events: getEconEvents() });
+    return json({ source: "NONE", events: [], detail: "Set FRED_API_KEY and/or FINNHUB_API_KEY for real calendar data" });
   }
 
   const sources: string[] = [];
@@ -215,10 +223,10 @@ export async function GET() {
         console.log(`[calendar] FRED: ${events.length} observations from ${fulfilled}/${seriesWithFred.length} series`);
       }
 
-      // Supplementary FRED release dates
+      // Supplementary FRED release dates (forward schedule)
       try {
         const releases = await fredReleaseDates(40);
-        const releaseEvents = releases
+        const releaseEvents: EconEvent[] = releases
           .filter((r) => !seen.has(`${r.date}|${r.release_name.toLowerCase()}`))
           .slice(0, 30)
           .map((r, i) => {
@@ -231,10 +239,12 @@ export async function GET() {
               name: r.release_name,
               category: "Release",
               importance: "MEDIUM" as const,
-              period: "",
+              period: finnhubPeriodLabel(r.date),
               prior: "",
               consensus: "",
               actual: daysOut < 0 ? "released" : null,
+              ticker: `REL-${r.release_id}`,
+              source: "FRED",
             };
           });
         addEvents(releaseEvents);
@@ -255,15 +265,12 @@ export async function GET() {
       const finnhubEvents = buildFinnhubEvents(raw, todayMs);
 
       if (finnhubEvents.length > 0) {
-        // For Finnhub events that overlap with FRED on the same date+name,
-        // prefer Finnhub if it has a real consensus (estimate) that FRED lacks
         const upgrades: EconEvent[] = [];
         const fresh: EconEvent[] = [];
 
         for (const fe of finnhubEvents) {
           const key = `${fe.date}|${fe.name.toLowerCase()}`;
           if (seen.has(key)) {
-            // Check if Finnhub has better data (real consensus)
             if (fe.consensus && fe.consensus !== fe.prior) {
               const idx = allEvents.findIndex(
                 (e) => e.date === fe.date && e.name.toLowerCase() === fe.name.toLowerCase()
@@ -290,22 +297,8 @@ export async function GET() {
     }
   }
 
-  // Layer 3: SIM fallback for upcoming events not covered (central bank meetings, etc.)
-  const simEvents = getEconEvents();
-  const simUpcoming = simEvents.filter((e) => e.daysOut >= 0 && !seen.has(`${e.date}|${e.name.toLowerCase()}`));
-  if (simUpcoming.length > 0) {
-    addEvents(simUpcoming);
-    sources.push(`SIM(${simUpcoming.length})`);
-  }
-
-  // If we got almost nothing from live sources, fall back entirely to SIM
-  if (allEvents.length < 10) {
-    console.warn(`[calendar] Only ${allEvents.length} events from live sources — falling back to full SIM`);
-    return json({ source: "SIM", events: getEconEvents() });
-  }
-
   allEvents.sort((a, b) => a.daysOut - b.daysOut);
-  const sourceLabel = sources.join(" + ");
+  const sourceLabel = sources.length > 0 ? sources.join(" + ") : "NONE";
   console.log(`[calendar] ${sourceLabel} → ${allEvents.length} total events`);
   return json({ source: sourceLabel, events: allEvents });
 }

@@ -228,7 +228,11 @@ export default function EconomicCalendarPage() {
   const timeFiltered = filterByTimeRange(events, timeRange);
   const searchLower = search.toLowerCase();
   const searched = search
-    ? timeFiltered.filter((e) => e.name.toLowerCase().includes(searchLower) || e.category.toLowerCase().includes(searchLower))
+    ? timeFiltered.filter((e) =>
+        e.name.toLowerCase().includes(searchLower) ||
+        e.category.toLowerCase().includes(searchLower) ||
+        (e.ticker?.toLowerCase().includes(searchLower) ?? false)
+      )
     : timeFiltered;
   const sortDir = dateSort === "asc" ? 1 : -1;
   const sorted = [...searched].sort((a, b) => sortDir * (a.daysOut - b.daysOut) || a.time.localeCompare(b.time));
@@ -295,12 +299,17 @@ export default function EconomicCalendarPage() {
       sortVal: (r) => r.name,
     },
     {
+      key: "ticker", header: "Ticker", width: "88px",
+      render: (r) => <span className="tnum text-2xs text-term-text-dim">{r.ticker ?? "—"}</span>,
+      sortVal: (r) => r.ticker ?? "",
+    },
+    {
       key: "importance", header: "Imp.", width: "64px", align: "center",
       render: (r) => <Tag tone={importanceTone(r.importance)}>{r.importance}</Tag>,
       sortVal: (r) => r.importance === "HIGH" ? 0 : r.importance === "MEDIUM" ? 1 : 2,
     },
     { key: "category", header: "Cat.", width: "80px", render: (r) => <Tag tone="neutral">{r.category}</Tag>, sortVal: (r) => r.category },
-    { key: "period", header: "Period", width: "72px", render: (r) => <span className="text-2xs text-term-text-mute">{r.period}</span>, sortVal: (r) => r.period },
+    { key: "period", header: "Period", width: "84px", render: (r) => <span className="text-2xs text-term-text">{r.period}</span>, sortVal: (r) => r.period },
     {
       key: "prior", header: "Prior", width: "72px", align: "right",
       render: (r) => <span className="tnum text-term-text-dim">{r.prior}</span>,
@@ -333,6 +342,15 @@ export default function EconomicCalendarPage() {
         if (a == null || c == null) return -Infinity;
         return a - c;
       },
+    },
+    {
+      key: "source", header: "Src", width: "64px", align: "center",
+      render: (r) => {
+        const s = r.source ?? "—";
+        const tone = s === "FRED" ? "up" : s === "FINNHUB" ? "blue" : "neutral";
+        return <Tag tone={tone as "up" | "blue" | "neutral"}>{s}</Tag>;
+      },
+      sortVal: (r) => r.source ?? "",
     },
   ];
 
@@ -536,9 +554,15 @@ export default function EconomicCalendarPage() {
                                       NEXT
                                     </span>
                                   )}
+                                  {e.ticker && e.ticker !== "—" && (
+                                    <span className="tnum text-3xs text-term-text-mute">{e.ticker}</span>
+                                  )}
                                   <Tag tone={importanceTone(e.importance)}>{e.importance}</Tag>
                                   <Tag tone="neutral">{e.category}</Tag>
-                                  <span className="text-3xs text-term-text-mute">{e.period}</span>
+                                  <span className="text-2xs font-medium text-term-text-dim">{e.period}</span>
+                                  {e.source && (
+                                    <Tag tone={e.source === "FRED" ? "up" : e.source === "FINNHUB" ? "blue" : "neutral"}>{e.source}</Tag>
+                                  )}
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-center gap-1">
                                   {sensitivities.map((tag) => (
@@ -579,7 +603,16 @@ export default function EconomicCalendarPage() {
                   );
                 })}
                 {groups.length === 0 && (
-                  <div className="px-3 py-8 text-center text-xs text-term-text-mute">No events match the current filters.</div>
+                  <div className="px-3 py-8 text-center">
+                    {events.length === 0 ? (
+                      <div className="space-y-1">
+                        <div className="text-xs text-term-text-mute">No live data available</div>
+                        <div className="text-3xs text-term-text-mute">Set FRED_API_KEY and/or FINNHUB_API_KEY for real calendar data</div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-term-text-mute">No events match the current filters.</div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
