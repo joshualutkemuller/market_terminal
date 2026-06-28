@@ -2,25 +2,23 @@ import { json } from "@/lib/server/http";
 import { fredEnabled, fredReleaseDates } from "@/lib/server/fred";
 import { getEconEvents } from "@/data/econRates";
 
-function snapshotEvents() {
-  return getEconEvents(new Date("2026-06-24T00:00:00Z"));
-}
-
-
 /**
  * GET /api/econ/calendar
- * Live: FRED release dates (real economic-release schedule) merged with the
- * curated importance/forecast metadata. Otherwise the simulated calendar.
+ * Returns the full 12-month historical + upcoming calendar. When FRED is
+ * available, upcoming FRED release dates are merged in alongside the
+ * simulated history so the user always sees the full timeline.
  */
 export async function GET() {
-  const snapshot = snapshotEvents();
+  const events = getEconEvents();
+
   if (!fredEnabled()) {
-    return json({ source: "SNAPSHOT", events: snapshot });
+    return json({ source: "SIM", events });
   }
+
   try {
     const releases = await fredReleaseDates(60);
     const today = Date.now();
-    const events = releases.slice(0, 30).map((r, i) => {
+    const fredEvents = releases.slice(0, 40).map((r, i) => {
       const daysOut = Math.round((new Date(r.date).getTime() - today) / 86400000);
       return {
         id: `FR-${r.release_id}-${i}`,
@@ -36,8 +34,15 @@ export async function GET() {
         actual: daysOut < 0 ? "released" : null,
       };
     });
-    return json({ source: "FRED", events });
+
+    const existingNames = new Set(events.map((e) => e.name.toLowerCase()));
+    const merged = [
+      ...events,
+      ...fredEvents.filter((fe) => !existingNames.has(fe.name.toLowerCase())),
+    ].sort((a, b) => a.daysOut - b.daysOut);
+
+    return json({ source: "FRED", events: merged });
   } catch (err) {
-    return json({ source: "SNAPSHOT", note: err instanceof Error ? err.message : "FRED error", events: snapshot });
+    return json({ source: "SIM", note: err instanceof Error ? err.message : "FRED error", events });
   }
 }
