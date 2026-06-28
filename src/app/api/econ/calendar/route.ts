@@ -31,9 +31,12 @@ async function batchFred(
 /**
  * GET /api/econ/calendar
  *
- * Pulls real historical observations from FRED for all ~165 calendar series,
- * building a 12-month event calendar from actual prints. Requests are batched
- * to stay within FRED rate limits. Without FRED, falls back to SIM.
+ * When FRED is configured: pulls real historical observations and merges them
+ * with SIM-generated upcoming events (central bank meetings, future releases
+ * that FRED can't provide). This ensures the calendar always has both real
+ * history AND a forward-looking schedule.
+ *
+ * Falls back entirely to SIM when FRED is unavailable or produces too few results.
  */
 export async function GET() {
   if (!fredEnabled()) {
@@ -44,8 +47,10 @@ export async function GET() {
     const now = new Date();
     const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
     const startDate = new Date(todayMs - 400 * 86400000).toISOString().slice(0, 10);
-    const events: EconEvent[] = [];
+    const fredEvents: EconEvent[] = [];
     let idCounter = 0;
+    let fulfilled = 0;
+    let rejected = 0;
 
     const seriesWithFred = EVENT_SERIES.filter((d) => d.fredId);
     const fredResults = await batchFred(seriesWithFred, startDate);
@@ -54,9 +59,10 @@ export async function GET() {
       const def = seriesWithFred[si];
       const result = fredResults[si];
       if (result.status === "rejected") {
-        console.warn(`[calendar] FRED fetch failed for ${def.fredId}: ${result.reason}`);
+        rejected++;
         continue;
       }
+      fulfilled++;
       const obs = result.value.filter((o): o is FredObservation & { value: number } => o.value != null);
       if (!obs.length) continue;
 
@@ -82,7 +88,7 @@ export async function GET() {
           period = MONTHS[month];
         }
 
-        events.push({
+        fredEvents.push({
           id: `FR-${def.fredId}-${idCounter++}`,
           date: o.date,
           time: def.time,
@@ -98,10 +104,21 @@ export async function GET() {
       }
     }
 
+    if (rejected > 0) {
+      console.warn(`[calendar] FRED: ${rejected}/${seriesWithFred.length} series failed`);
+    }
+
+    // If FRED returned too few results, fall back entirely to SIM
+    if (fredEvents.length < 10) {
+      console.warn(`[calendar] FRED returned only ${fredEvents.length} observations (${fulfilled} ok, ${rejected} failed) — falling back to SIM`);
+      return json({ source: "SIM", events: getEconEvents() });
+    }
+
+    // Merge in FRED release dates for upcoming releases not covered by observations
     let fredReleases: EconEvent[] = [];
     try {
       const releases = await fredReleaseDates(40);
-      const existingNames = new Set(events.map((e) => e.name.toLowerCase()));
+      const existingNames = new Set(fredEvents.map((e) => e.name.toLowerCase()));
       fredReleases = releases
         .filter((r) => !existingNames.has(r.release_name.toLowerCase()))
         .slice(0, 30)
@@ -125,8 +142,17 @@ export async function GET() {
       // release dates are supplementary
     }
 
-    const merged = [...events, ...fredReleases].sort((a, b) => a.daysOut - b.daysOut);
-    console.log(`[calendar] FRED: ${events.length} real observations from ${seriesWithFred.length} series + ${fredReleases.length} upcoming releases`);
+    // Merge SIM upcoming events (central bank meetings, future scheduled releases)
+    // that FRED can't provide — FRED only has historical observations
+    const simEvents = getEconEvents();
+    const fredDateNames = new Set(fredEvents.map((e) => `${e.date}|${e.name.toLowerCase()}`));
+    const simUpcoming = simEvents.filter((e) => {
+      if (e.daysOut < 0) return false;
+      return !fredDateNames.has(`${e.date}|${e.name.toLowerCase()}`);
+    });
+
+    const merged = [...fredEvents, ...fredReleases, ...simUpcoming].sort((a, b) => a.daysOut - b.daysOut);
+    console.log(`[calendar] FRED: ${fredEvents.length} real observations (${fulfilled}/${seriesWithFred.length} series ok) + ${fredReleases.length} release dates + ${simUpcoming.length} SIM upcoming`);
     return json({ source: "FRED", events: merged });
   } catch (err) {
     console.warn(`[calendar] FRED failed, falling back to SIM:`, err instanceof Error ? err.message : err);
