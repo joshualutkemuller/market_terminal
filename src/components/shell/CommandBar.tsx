@@ -2,10 +2,12 @@
 import { usePathname } from "@/lib/navigation";
 import { NAV } from "@/lib/nav";
 import { Search, PanelLeft, Command } from "lucide-react";
+import { useSimMode } from "@/lib/simMode";
 
 export function CommandBar({ onOpenPalette, onToggleSidebar }: { onOpenPalette: () => void; onToggleSidebar: () => void }) {
   const path = usePathname();
   const current = NAV.find((n) => n.href === path) ?? NAV[0];
+  const { simEnabled, toggle: toggleSim } = useSimMode();
   return (
     <header className="flex h-9 shrink-0 items-center gap-3 border-b border-term-border bg-term-panel px-3">
       <button onClick={onToggleSidebar} className="text-term-text-mute hover:text-term-amber" title="Toggle sidebar">
@@ -35,6 +37,19 @@ export function CommandBar({ onOpenPalette, onToggleSidebar }: { onOpenPalette: 
           <Command size={10} />
           <span className="term-kbd">K</span>
         </span>
+      </button>
+
+      <button
+        onClick={toggleSim}
+        className={`flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide transition-colors ${
+          simEnabled
+            ? "border-term-amber/40 bg-term-amber/10 text-term-amber hover:bg-term-amber/20"
+            : "border-term-border bg-term-panel-2 text-term-text-mute hover:border-term-text-mute"
+        }`}
+        title={simEnabled ? "SIM fallback enabled — click to show only real data" : "SIM fallback disabled — click to allow simulated data when live feeds unavailable"}
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${simEnabled ? "bg-term-amber animate-blink" : "bg-term-text-mute"}`} />
+        SIM {simEnabled ? "ON" : "OFF"}
       </button>
 
       <div className="hidden items-center gap-3 text-3xs text-term-text-mute lg:flex">

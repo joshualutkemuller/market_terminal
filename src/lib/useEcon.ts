@@ -13,6 +13,7 @@ import {
   type Inversion,
 } from "@/data/econCurve";
 import { type EconEvent } from "@/data/econRates";
+import { useSimMode } from "@/lib/simMode";
 
 export type DataSource = "FRED" | "SNAPSHOT" | "SIM" | "LOADING" | "ETL";
 export type RealEconSource = "FRED" | "SNAPSHOT";
@@ -43,40 +44,44 @@ function useEconResource<T>(
   url: string,
   fallback: T,
   pick: (json: any) => T,
-  fallbackSource: DataSource = "SIM"
+  fallbackSource: DataSource = "SIM",
+  emptyValue?: T,
 ): { data: T; source: DataSource } {
-  // Seed from a recently-cached response so re-navigation renders real data
-  // instantly instead of flashing the fallback.
+  const { simEnabled } = useSimMode();
   const cached = peekFresh<any>(url);
-  const [data, setData] = useState<T>(cached ? pick(cached) : fallback);
-  const [source, setSource] = useState<DataSource>(cached ? mapSource(cached.source) : fallbackSource);
+  const [rawData, setRawData] = useState<T>(cached ? pick(cached) : fallback);
+  const [rawSource, setRawSource] = useState<DataSource>(cached ? mapSource(cached.source) : fallbackSource);
 
   useEffect(() => {
     let alive = true;
     const seed = peekFresh<any>(url);
     if (seed) {
-      setData(pick(seed));
-      setSource(mapSource(seed.source));
+      setRawData(pick(seed));
+      setRawSource(mapSource(seed.source));
     } else {
-      setSource("LOADING");
+      setRawSource("LOADING");
     }
     fetchJson<any>(url)
       .then((json) => {
         if (!alive) return;
-        setData(pick(json));
-        setSource(mapSource(json.source));
+        setRawData(pick(json));
+        setRawSource(mapSource(json.source));
       })
       .catch(() => {
         if (!alive) return;
-        setSource(fallbackSource);
+        setRawSource(fallbackSource);
       });
     return () => {
       alive = false;
     };
-    // `pick` is a stable per-call-site projection; re-running only on `url` is intended.
   }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { data, source };
+  // When SIM is off, suppress SIM-sourced data
+  if (!simEnabled && rawSource === "SIM" && emptyValue !== undefined) {
+    return { data: emptyValue, source: rawSource };
+  }
+
+  return { data: rawData, source: rawSource };
 }
 
 export function useEconSeries(id: string, n = 120): { data: Observation[]; source: DataSource } {
@@ -85,12 +90,13 @@ export function useEconSeries(id: string, n = 120): { data: Observation[]; sourc
     `/api/econ/series?id=${id}&n=${n}`,
     snap ?? getSeriesHistory(id, n),
     (j) => j.observations ?? [],
-    snap ? "SNAPSHOT" : "SIM"
+    snap ? "SNAPSHOT" : "SIM",
+    [],
   );
 }
 
-export function useLiveCurve(): { data: CurveSnapshot; source: DataSource } {
-  return useEconResource<CurveSnapshot>(`/api/econ/curve`, getCurrentCurve(), (j) => j.curve);
+export function useLiveCurve(): { data: CurveSnapshot | null; source: DataSource } {
+  return useEconResource<CurveSnapshot | null>(`/api/econ/curve`, getCurrentCurve(), (j) => j.curve, "SIM", null);
 }
 
 /**
@@ -102,7 +108,9 @@ export function useCurveSnapshots(years = 7): { data: CurveSnapshot[]; source: D
   return useEconResource<CurveSnapshot[]>(
     `/api/econ/curve-history?years=${years}`,
     getCurveSnapshots(),
-    (j) => (Array.isArray(j.snapshots) && j.snapshots.length ? j.snapshots : getCurveSnapshots())
+    (j) => (Array.isArray(j.snapshots) && j.snapshots.length ? j.snapshots : getCurveSnapshots()),
+    "SIM",
+    [],
   );
 }
 
@@ -121,8 +129,8 @@ export interface InversionData {
  * FRED history server-side and detects every unique inversion period. Falls back
  * to the curated/simulated record without a key.
  */
-export function useInversions(spreadId: string): { data: InversionData; source: DataSource } {
-  return useEconResource<InversionData>(
+export function useInversions(spreadId: string): { data: InversionData | null; source: DataSource } {
+  return useEconResource<InversionData | null>(
     `/api/econ/inversions?spread=${encodeURIComponent(spreadId)}`,
     {
       inversions: getInversionsForSpread(spreadId),
@@ -133,7 +141,9 @@ export function useInversions(spreadId: string): { data: InversionData; source: 
       inversions: j.inversions ?? [],
       stats: j.stats ?? getInversionStats(spreadId),
       timeline: j.timeline ?? [],
-    })
+    }),
+    "SIM",
+    null,
   );
 }
 
@@ -160,7 +170,9 @@ export function useLiveIndicators(): { data: Record<string, LiveIndicator>; sour
   const { data, source } = useEconResource<Record<string, LiveIndicator>>(
     `/api/econ/indicators`,
     {},
-    (j) => Object.fromEntries((j.indicators ?? []).map((i: LiveIndicator) => [i.id, i]))
+    (j) => Object.fromEntries((j.indicators ?? []).map((i: LiveIndicator) => [i.id, i])),
+    "SIM",
+    {},
   );
   return { data, source };
 }
@@ -197,6 +209,7 @@ export function useLiveSeriesSet(
     url,
     seeded as Record<string, { observations: { date: string; value: number }[]; source: "FRED" | "SNAPSHOT" | "SIM" }>,
     (j) => Object.fromEntries((j.series ?? []).map((s: { id: string; observations: { date: string; value: number }[]; source: "FRED" | "SNAPSHOT" | "SIM" }) => [s.id, { observations: s.observations, source: s.source }])),
-    Object.keys(seeded).length ? "SNAPSHOT" : "SIM"
+    Object.keys(seeded).length ? "SNAPSHOT" : "SIM",
+    {},
   );
 }

@@ -14,6 +14,7 @@ import {
   getCurveMetrics,
   currentSpreadBps,
   spreadDef,
+  getInversionStats,
   SPREAD_DEFS,
   type CurveSnapshot,
   type CurvePoint,
@@ -127,9 +128,9 @@ export default function TreasuryCurveLab() {
 
   // Live inversion detection — real FRED daily history for the selected spread.
   const { data: invData, source: invSource } = useInversions(spreadId);
-  const spreadHist = invData.timeline;
-  const inversions = invData.inversions;
-  const stats = invData.stats;
+  const spreadHist = invData?.timeline ?? [];
+  const inversions = invData?.inversions ?? [];
+  const stats = invData?.stats ?? getInversionStats(spreadId);
   // Condense recession months into distinct period ranges for the footnote.
   const recessionPeriods = (() => {
     const out: string[] = [];
