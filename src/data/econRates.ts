@@ -1,4 +1,5 @@
 import { Rng } from "@/lib/rng";
+import { FRED_CATALOG, resolveFred, type EconCategory } from "@/data/econSeries";
 
 /**
  * Policy-rate expectations & economic calendar.
@@ -284,7 +285,7 @@ export function getEconEvents(anchor?: Date): EconEvent[] {
   const events: EconEvent[] = [];
   let idCounter = 0;
 
-  for (const def of EVENT_SERIES) {
+  for (const def of FULL_EVENT_SERIES) {
     const months = def.freq === "weekly" ? 14 : 13;
     let prevActual = def.baseValue;
 
@@ -384,7 +385,7 @@ export function getEventSeriesHistory(seriesName?: string): EventSeriesHistory[]
   for (const name of names) {
     const evts = byName.get(name);
     if (!evts?.length) continue;
-    const def = EVENT_SERIES.find((d) => d.name === name);
+    const def = FULL_EVENT_SERIES.find((d) => d.name === name);
     if (!def) continue;
 
     const points: EventHistoryPoint[] = [];
@@ -411,5 +412,58 @@ export function getEventSeriesHistory(seriesName?: string): EventSeriesHistory[]
   return result.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export const EVENT_SERIES_NAMES = EVENT_SERIES.map((d) => d.name);
-export { EVENT_SERIES };
+const CATEGORY_MAP: Record<EconCategory, string> = {
+  GROWTH: "Growth", INFLATION: "Inflation", LABOR: "Labor", RATES: "Rates",
+  CREDIT: "Credit", HOUSING: "Housing", CONSUMER: "Consumer", MONEY: "Money",
+  ACTIVITY: "Activity", FX: "FX",
+};
+
+const IMPORTANCE_BY_CAT: Record<EconCategory, EventImportance> = {
+  GROWTH: "HIGH", INFLATION: "MEDIUM", LABOR: "MEDIUM", RATES: "LOW",
+  CREDIT: "LOW", HOUSING: "LOW", CONSUMER: "MEDIUM", MONEY: "LOW",
+  ACTIVITY: "LOW", FX: "LOW",
+};
+
+const FREQ_MAP: Record<string, EventDef["freq"]> = { D: "monthly", W: "weekly", M: "monthly", Q: "quarterly" };
+
+function autoFmt(s: { unit: string; decimals: number }): (v: number) => string {
+  if (s.unit === "%" || s.unit.includes("%")) return (v) => `${v.toFixed(s.decimals)}%`;
+  if (s.unit === "bps") return (v) => `${Math.round(v)}bps`;
+  if (s.unit.includes("$")) return (v) => `${v.toFixed(s.decimals)}`;
+  if (s.unit === "index" || s.unit === "") return (v) => v.toFixed(s.decimals);
+  return (v) => `${v.toFixed(s.decimals)}`;
+}
+
+function buildFullEventSeries(): EventDef[] {
+  const curated = [...EVENT_SERIES];
+  const coveredFredIds = new Set(curated.filter((d) => d.fredId).map((d) => d.fredId));
+
+  for (const s of FRED_CATALOG) {
+    if (coveredFredIds.has(s.id)) continue;
+    const resolved = resolveFred(s.id);
+    if (resolved.simOnly) continue;
+
+    curated.push({
+      name: s.label,
+      category: CATEGORY_MAP[s.category] ?? s.category,
+      time: "—",
+      importance: IMPORTANCE_BY_CAT[s.category] ?? "LOW",
+      freq: FREQ_MAP[s.freq] ?? "monthly",
+      releaseDay: 15,
+      baseValue: s.level,
+      volatility: s.vol,
+      unit: s.unit,
+      fmt: autoFmt(s),
+      fredId: s.id,
+      fredUnits: resolved.units !== "lin" ? resolved.units : undefined,
+      fredScale: resolved.scale !== 1 ? resolved.scale : undefined,
+    });
+  }
+
+  return curated;
+}
+
+const FULL_EVENT_SERIES = buildFullEventSeries();
+
+export const EVENT_SERIES_NAMES = FULL_EVENT_SERIES.map((d) => d.name);
+export { FULL_EVENT_SERIES as EVENT_SERIES };

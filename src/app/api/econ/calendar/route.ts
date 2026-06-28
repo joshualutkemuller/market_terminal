@@ -2,16 +2,38 @@ import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries, fredReleaseDates, type FredObservation } from "@/lib/server/fred";
 import { getEconEvents, EVENT_SERIES, type EconEvent } from "@/data/econRates";
 
+const BATCH_SIZE = 25;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+async function batchFred(
+  defs: typeof EVENT_SERIES,
+  startDate: string,
+): Promise<(PromiseSettledResult<FredObservation[]>)[]> {
+  const results: (PromiseSettledResult<FredObservation[]>)[] = [];
+  for (let i = 0; i < defs.length; i += BATCH_SIZE) {
+    const batch = defs.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.allSettled(
+      batch.map((def) =>
+        fredSeries(def.fredId!, {
+          start: startDate,
+          limit: def.freq === "weekly" ? 60 : def.freq === "quarterly" ? 8 : 15,
+          units: def.fredUnits,
+          scale: def.fredScale,
+          revalidateSec: 3600,
+        })
+      )
+    );
+    results.push(...batchResults);
+  }
+  return results;
+}
+
 /**
  * GET /api/econ/calendar
  *
- * When FRED is available, pulls real historical observations for each calendar
- * series (CPI, NFP, GDP, etc.) and builds the 12-month event calendar from
- * actual prints. Consensus is approximated from the prior value (real consensus
- * requires a paid data source like Bloomberg). Upcoming FRED release dates are
- * merged for the forward schedule.
- *
- * Without FRED, falls back to the deterministic SIM calendar.
+ * Pulls real historical observations from FRED for all ~165 calendar series,
+ * building a 12-month event calendar from actual prints. Requests are batched
+ * to stay within FRED rate limits. Without FRED, falls back to SIM.
  */
 export async function GET() {
   if (!fredEnabled()) {
@@ -26,17 +48,7 @@ export async function GET() {
     let idCounter = 0;
 
     const seriesWithFred = EVENT_SERIES.filter((d) => d.fredId);
-    const fredResults = await Promise.allSettled(
-      seriesWithFred.map((def) =>
-        fredSeries(def.fredId!, {
-          start: startDate,
-          limit: def.freq === "weekly" ? 60 : def.freq === "quarterly" ? 8 : 15,
-          units: def.fredUnits,
-          scale: def.fredScale,
-          revalidateSec: 3600,
-        })
-      )
-    );
+    const fredResults = await batchFred(seriesWithFred, startDate);
 
     for (let si = 0; si < seriesWithFred.length; si++) {
       const def = seriesWithFred[si];
@@ -67,7 +79,6 @@ export async function GET() {
         } else if (def.freq === "weekly") {
           period = `Wk ${obsDate.toISOString().slice(5, 10)}`;
         } else {
-          const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
           period = MONTHS[month];
         }
 
@@ -111,11 +122,11 @@ export async function GET() {
           };
         });
     } catch {
-      // release dates are supplementary; don't fail the whole response
+      // release dates are supplementary
     }
 
     const merged = [...events, ...fredReleases].sort((a, b) => a.daysOut - b.daysOut);
-    console.log(`[calendar] FRED: ${events.length} real observations + ${fredReleases.length} upcoming releases`);
+    console.log(`[calendar] FRED: ${events.length} real observations from ${seriesWithFred.length} series + ${fredReleases.length} upcoming releases`);
     return json({ source: "FRED", events: merged });
   } catch (err) {
     console.warn(`[calendar] FRED failed, falling back to SIM:`, err instanceof Error ? err.message : err);
