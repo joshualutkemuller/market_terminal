@@ -23,6 +23,8 @@ const TIME_RANGES: { value: TimeRange; label: string }[] = [
   { value: "UPCOMING", label: "Upcoming" },
 ];
 
+type ViewMode = "stream" | "table";
+
 function importanceTone(imp: EventImportance): "down" | "blue" | "neutral" {
   if (imp === "HIGH") return "down";
   if (imp === "MEDIUM") return "blue";
@@ -97,12 +99,18 @@ function filterByTimeRange(events: EconEvent[], range: TimeRange): EconEvent[] {
   }
 }
 
+function formatDateLabel(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00Z");
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${days[d.getUTCDay()]} ${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+}
+
 function SeriesTrendView({ series, onBack }: { series: EventSeriesHistory; onBack: () => void }) {
   const pts = series.points;
   const labels = pts.map((p) => p.period);
   const actuals = pts.map((p) => p.actual);
   const consensi = pts.map((p) => p.consensus);
-  const surprises = pts.map((p) => p.surprise);
 
   const beats = pts.filter((p) => p.surprise > 0).length;
   const misses = pts.filter((p) => p.surprise < 0).length;
@@ -180,7 +188,7 @@ function SeriesTrendView({ series, onBack }: { series: EventSeriesHistory; onBac
           </div>
         </Panel>
 
-        <Panel title="Surprise (Actual − Consensus)" code="SURP">
+        <Panel title="Surprise (Actual - Consensus)" code="SURP">
           <div className="p-2">
             <BarChart data={surpriseBarData} height={220} fmt={(n) => fmtSigned(n, 2)} />
           </div>
@@ -205,6 +213,9 @@ export default function EconomicCalendarPage() {
   const [catFilter, setCatFilter] = useState<string>("ALL");
   const [timeRange, setTimeRange] = useState<TimeRange>("ALL");
   const [trendSeries, setTrendSeries] = useState<string | null>(null);
+  const [dateSort, setDateSort] = useState<"asc" | "desc">("asc");
+  const [viewMode, setViewMode] = useState<ViewMode>("stream");
+  const [search, setSearch] = useState("");
 
   const activeTrend = trendSeries ? allSeriesHistory.find((s) => s.name === trendSeries) : null;
 
@@ -215,7 +226,12 @@ export default function EconomicCalendarPage() {
   const categories = [...new Set(events.map((e) => e.category))].sort();
 
   const timeFiltered = filterByTimeRange(events, timeRange);
-  const sorted = [...timeFiltered].sort((a, b) => a.daysOut - b.daysOut || a.time.localeCompare(b.time));
+  const searchLower = search.toLowerCase();
+  const searched = search
+    ? timeFiltered.filter((e) => e.name.toLowerCase().includes(searchLower) || e.category.toLowerCase().includes(searchLower))
+    : timeFiltered;
+  const sortDir = dateSort === "asc" ? 1 : -1;
+  const sorted = [...searched].sort((a, b) => sortDir * (a.daysOut - b.daysOut) || a.time.localeCompare(b.time));
 
   const thisWeek = events.filter((e) => e.daysOut >= 0 && e.daysOut <= 7).length;
   const highCount = events.filter((e) => e.importance === "HIGH").length;
@@ -229,11 +245,11 @@ export default function EconomicCalendarPage() {
     (e) => (impFilter === "ALL" || e.importance === impFilter) && (catFilter === "ALL" || e.category === catFilter)
   );
 
-  const groups: { date: string; daysOut: number; rows: EconEvent[] }[] = [];
+  const groups: { date: string; label: string; daysOut: number; rows: EconEvent[] }[] = [];
   for (const e of filtered) {
     let g = groups.find((x) => x.date === e.date);
     if (!g) {
-      g = { date: e.date, daysOut: e.daysOut, rows: [] };
+      g = { date: e.date, label: formatDateLabel(e.date), daysOut: e.daysOut, rows: [] };
       groups.push(g);
     }
     g.rows.push(e);
@@ -245,6 +261,80 @@ export default function EconomicCalendarPage() {
   const catCounts = categories
     .map((c) => ({ label: c, value: events.filter((e) => e.category === c).length, color: "#FF8C00" }))
     .sort((a, b) => b.value - a.value);
+
+  const tableCols: Column<EconEvent>[] = [
+    {
+      key: "date", header: "Date", width: "100px",
+      render: (r) => {
+        const isToday = r.daysOut === 0;
+        return (
+          <span className={`tnum ${isToday ? "font-semibold text-term-amber" : "text-term-text-dim"}`}>
+            {r.date}
+          </span>
+        );
+      },
+      sortVal: (r) => r.date,
+    },
+    {
+      key: "daysOut", header: "+/- Days", width: "72px", align: "right",
+      render: (r) => (
+        <span className={`tnum text-2xs ${r.daysOut === 0 ? "font-semibold text-term-amber" : r.daysOut < 0 ? "text-term-text-mute" : "text-term-text-dim"}`}>
+          {r.daysOut < 0 ? `${r.daysOut}d` : r.daysOut === 0 ? "TODAY" : `+${r.daysOut}d`}
+        </span>
+      ),
+      sortVal: (r) => r.daysOut,
+    },
+    { key: "time", header: "Time", width: "52px", render: (r) => <span className="tnum text-term-text-mute">{r.time}</span>, sortVal: (r) => r.time },
+    {
+      key: "name", header: "Event",
+      render: (r) => (
+        <button className="text-left text-xs font-semibold text-term-text hover:text-term-amber hover:underline" onClick={() => setTrendSeries(r.name)}>
+          {r.name}
+        </button>
+      ),
+      sortVal: (r) => r.name,
+    },
+    {
+      key: "importance", header: "Imp.", width: "64px", align: "center",
+      render: (r) => <Tag tone={importanceTone(r.importance)}>{r.importance}</Tag>,
+      sortVal: (r) => r.importance === "HIGH" ? 0 : r.importance === "MEDIUM" ? 1 : 2,
+    },
+    { key: "category", header: "Cat.", width: "80px", render: (r) => <Tag tone="neutral">{r.category}</Tag>, sortVal: (r) => r.category },
+    { key: "period", header: "Period", width: "72px", render: (r) => <span className="text-2xs text-term-text-mute">{r.period}</span>, sortVal: (r) => r.period },
+    {
+      key: "prior", header: "Prior", width: "72px", align: "right",
+      render: (r) => <span className="tnum text-term-text-dim">{r.prior}</span>,
+      sortVal: (r) => toNum(r.prior) ?? 0,
+    },
+    {
+      key: "consensus", header: "Cons.", width: "72px", align: "right",
+      render: (r) => <span className="tnum text-term-text-dim">{r.consensus}</span>,
+      sortVal: (r) => toNum(r.consensus) ?? 0,
+    },
+    {
+      key: "actual", header: "Actual", width: "72px", align: "right",
+      render: (r) => (
+        <span className={`tnum ${r.actual != null ? "font-semibold text-term-amber" : "text-term-text-mute"}`}>
+          {r.actual ?? "—"}
+        </span>
+      ),
+      sortVal: (r) => toNum(r.actual) ?? -Infinity,
+    },
+    {
+      key: "surprise", header: "Result", width: "72px", align: "center",
+      render: (r) => {
+        const sup = surprise(r.actual, r.consensus);
+        if (!sup) return <span className="text-term-text-mute">—</span>;
+        return <Tag tone={sup.tone}>{sup.label}</Tag>;
+      },
+      sortVal: (r) => {
+        const a = toNum(r.actual);
+        const c = toNum(r.consensus);
+        if (a == null || c == null) return -Infinity;
+        return a - c;
+      },
+    },
+  ];
 
   const moveCols: Column<ReleaseMoveSummary>[] = [
     { key: "release", header: "Release", render: (r) => <span className="font-semibold text-term-text">{r.release}</span>, sortVal: (r) => r.release },
@@ -293,9 +383,53 @@ export default function EconomicCalendarPage() {
     },
   ];
 
+  const streamToolbar = (
+    <>
+      <span className="text-3xs uppercase tracking-wider text-term-text-mute">Sort</span>
+      <button
+        className={`term-btn ${dateSort === "asc" ? "term-btn-active" : ""}`}
+        onClick={() => setDateSort("asc")}
+        title="Oldest first"
+      >
+        Date ↑
+      </button>
+      <button
+        className={`term-btn ${dateSort === "desc" ? "term-btn-active" : ""}`}
+        onClick={() => setDateSort("desc")}
+        title="Newest first"
+      >
+        Date ↓
+      </button>
+      <span className="mx-1 text-term-border">|</span>
+      <span className="text-3xs uppercase tracking-wider text-term-text-mute">View</span>
+      <button
+        className={`term-btn ${viewMode === "stream" ? "term-btn-active" : ""}`}
+        onClick={() => setViewMode("stream")}
+      >
+        Stream
+      </button>
+      <button
+        className={`term-btn ${viewMode === "table" ? "term-btn-active" : ""}`}
+        onClick={() => setViewMode("table")}
+      >
+        Table
+      </button>
+      <div className="ml-auto flex items-center gap-2">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search events..."
+          className="h-6 w-44 rounded-sm border border-term-border bg-term-panel px-2 text-2xs text-term-text placeholder:text-term-text-mute focus:border-term-amber focus:outline-none"
+        />
+        <span className="tnum text-3xs text-term-text-mute">{filtered.length} events</span>
+      </div>
+    </>
+  );
+
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="CAL" title="Economic Calendar" desc="12-month history & upcoming releases" asOf={todayStr} right={<SourceBadge source={source} />} />
+      <PageHeader code="CAL" title="Economic Calendar" desc="Scheduled releases & historical prints" asOf={todayStr} right={<SourceBadge source={source} />} />
 
       <KpiStrip>
         <Stat label="Events This Week" value={thisWeek} sub="next 7 days" tone="amber" />
@@ -303,7 +437,7 @@ export default function EconomicCalendarPage() {
         <Stat label="Released" value={releasedCount} sub="actual reported" tone="up" />
         <Stat label="Upcoming" value={upcomingCount} sub="awaiting print" />
         <Stat label="Next Event" value={<span className="text-sm">{nextEvent ? nextEvent.name : "—"}</span>} sub={nextEvent ? `${nextEvent.date} ${nextEvent.time}` : "—"} tone="amber" />
-        <Stat label="Policy Events" value={policyCount} sub="Fed / FOMC" tone="amber" />
+        <Stat label="Policy Events" value={policyCount} sub="central banks" tone="amber" />
       </KpiStrip>
 
       {/* Filter bar */}
@@ -331,107 +465,144 @@ export default function EconomicCalendarPage() {
             {c}
           </button>
         ))}
-        <span className="ml-auto tnum text-3xs text-term-text-mute">{filtered.length} events</span>
       </div>
 
       <div className="grid flex-1 grid-cols-1 gap-2 p-2 xl:grid-cols-3">
-        {/* Main calendar stream */}
+        {/* Main calendar */}
         <div className="xl:col-span-2">
-          <Panel title="Release Stream" code="ECO" accent right={<Tag tone="amber">{groups.length} days</Tag>}>
-            <div className="divide-y divide-term-border" style={{ maxHeight: 600, overflowY: "auto" }}>
-              {groups.map((g) => {
-                const isToday = g.daysOut === 0;
-                const isPast = g.daysOut < 0;
-                return (
-                  <div key={g.date}>
-                    <div className={`flex items-center justify-between px-2.5 py-1 ${isToday ? "bg-term-amber-soft" : "bg-term-panel-2"}`}>
-                      <span className={`text-2xs font-semibold uppercase tracking-wide ${isToday ? "text-term-amber" : isPast ? "text-term-text-mute" : "text-term-text-dim"}`}>
-                        {g.date}
-                        {isToday && " · TODAY"}
-                      </span>
-                      <span className="tnum text-3xs text-term-text-mute">
-                        {g.daysOut < 0 ? `${Math.abs(g.daysOut)}d ago` : g.daysOut === 0 ? "today" : `+${g.daysOut}d`}
-                      </span>
-                    </div>
-                    <div className="divide-y divide-term-border-soft">
-                      {g.rows.map((e) => {
-                        const released = e.actual != null;
-                        const isNext = nextEvent != null && e.id === nextEvent.id;
-                        const sup = surprise(e.actual, e.consensus);
-                        const sensitivities = getCalendarSensitivity(e.name, e.category);
-                        return (
-                          <div
-                            key={e.id}
-                            className={`grid grid-cols-[44px_1fr] items-start gap-2 px-2.5 py-1.5 hover:bg-term-panel-2 ${released ? "opacity-70" : ""} ${isToday ? "bg-term-amber/5" : ""}`}
-                          >
-                            <div className="flex items-center gap-1 pt-0.5">
-                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: importanceDot(e.importance) }} />
-                              <span className="tnum text-3xs text-term-text-mute">{e.time}</span>
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <button
-                                  className="text-xs font-semibold text-term-text hover:text-term-amber hover:underline"
-                                  onClick={() => setTrendSeries(e.name)}
-                                >
-                                  {e.name}
-                                </button>
-                                {isNext && (
-                                  <span className="inline-flex items-center gap-1 text-3xs text-term-amber">
-                                    <span className={`h-1.5 w-1.5 rounded-full bg-term-amber ${tick % 2 === 0 ? "opacity-100" : "opacity-30"}`} />
-                                    NEXT
-                                  </span>
+          <Panel title="Release Stream" code="ECO" accent toolbar={streamToolbar}>
+            {viewMode === "table" ? (
+              <DataGrid
+                columns={tableCols}
+                rows={filtered}
+                rowKey={(r) => r.id}
+                maxHeight="680px"
+                initialSort={{ key: "date", dir: dateSort }}
+                zebra
+                onRowClick={(r) => setTrendSeries(r.name)}
+              />
+            ) : (
+              <div className="divide-y divide-term-border" style={{ maxHeight: 680, overflowY: "auto" }}>
+                {groups.map((g) => {
+                  const isToday = g.daysOut === 0;
+                  const isPast = g.daysOut < 0;
+                  return (
+                    <div key={g.date}>
+                      <div className={`sticky top-0 z-[5] flex items-center justify-between px-3 py-1.5 ${isToday ? "bg-term-amber-soft" : "bg-term-panel-2"}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-2xs font-bold uppercase tracking-wide ${isToday ? "text-term-amber" : isPast ? "text-term-text-mute" : "text-term-text"}`}>
+                            {g.label}
+                          </span>
+                          {isToday && <Tag tone="amber">TODAY</Tag>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="tnum text-3xs text-term-text-mute">
+                            {g.daysOut < 0 ? `${Math.abs(g.daysOut)}d ago` : g.daysOut === 0 ? "today" : `in ${g.daysOut}d`}
+                          </span>
+                          <span className="rounded-sm bg-term-panel-3 px-1.5 py-px text-3xs font-semibold text-term-text-dim">
+                            {g.rows.length} {g.rows.length === 1 ? "event" : "events"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="divide-y divide-term-border-soft">
+                        {g.rows.map((e) => {
+                          const released = e.actual != null;
+                          const isNext = nextEvent != null && e.id === nextEvent.id;
+                          const sup = surprise(e.actual, e.consensus);
+                          const sensitivities = getCalendarSensitivity(e.name, e.category);
+                          return (
+                            <div
+                              key={e.id}
+                              className={`grid grid-cols-[56px_1fr_auto] items-start gap-2 px-3 py-2 transition-colors hover:bg-term-panel-2 ${released ? "opacity-75" : ""} ${isToday ? "bg-term-amber/5" : ""} ${isNext ? "border-l-2 border-l-term-amber" : ""}`}
+                            >
+                              {/* Time + importance dot */}
+                              <div className="flex items-center gap-1.5 pt-0.5">
+                                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: importanceDot(e.importance) }} />
+                                <span className="tnum text-2xs text-term-text-mute">{e.time}</span>
+                              </div>
+
+                              {/* Name + tags + values */}
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <button
+                                    className="text-xs font-semibold text-term-text hover:text-term-amber hover:underline"
+                                    onClick={() => setTrendSeries(e.name)}
+                                  >
+                                    {e.name}
+                                  </button>
+                                  {isNext && (
+                                    <span className="inline-flex items-center gap-1 rounded-sm border border-term-amber/40 bg-term-amber/10 px-1.5 py-px text-3xs font-bold text-term-amber">
+                                      <span className={`h-1.5 w-1.5 rounded-full bg-term-amber ${tick % 2 === 0 ? "opacity-100" : "opacity-30"}`} />
+                                      NEXT
+                                    </span>
+                                  )}
+                                  <Tag tone={importanceTone(e.importance)}>{e.importance}</Tag>
+                                  <Tag tone="neutral">{e.category}</Tag>
+                                  <span className="text-3xs text-term-text-mute">{e.period}</span>
+                                </div>
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  {sensitivities.map((tag) => (
+                                    <Tag key={tag} tone={sensitivityTone(tag)}>{tag}</Tag>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Values column */}
+                              <div className="flex shrink-0 items-start gap-4 text-2xs">
+                                <div className="text-right">
+                                  <div className="text-3xs uppercase text-term-text-mute">Prior</div>
+                                  <div className="tnum text-term-text-dim">{e.prior || "—"}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-3xs uppercase text-term-text-mute">Cons.</div>
+                                  <div className="tnum text-term-text-dim">{e.consensus || "—"}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-3xs uppercase text-term-text-mute">Actual</div>
+                                  <div className={`tnum ${released ? "font-semibold text-term-amber" : "text-term-text-mute"}`}>
+                                    {e.actual ?? "—"}
+                                  </div>
+                                </div>
+                                {sup ? (
+                                  <div className="flex items-end pt-2.5">
+                                    <Tag tone={sup.tone}>{sup.label}</Tag>
+                                  </div>
+                                ) : (
+                                  <div className="w-[52px]" />
                                 )}
-                                <Tag tone={importanceTone(e.importance)}>{e.importance}</Tag>
-                                <Tag tone="neutral">{e.category}</Tag>
-                                <span className="text-3xs text-term-text-mute">{e.period}</span>
-                              </div>
-                              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-3xs">
-                                <span className="text-term-text-mute">Prior <span className="tnum text-term-text-dim">{e.prior}</span></span>
-                                <span className="text-term-text-mute">Cons. <span className="tnum text-term-text-dim">{e.consensus}</span></span>
-                                <span className="text-term-text-mute">
-                                  Actual <span className={`tnum ${released ? "text-term-amber" : "text-term-text-mute"}`}>{e.actual ?? "—"}</span>
-                                </span>
-                                {sup && <Tag tone={sup.tone}>{sup.label}</Tag>}
-                              </div>
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {sensitivities.map((tag) => (
-                                  <Tag key={tag} tone={sensitivityTone(tag)}>{tag}</Tag>
-                                ))}
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-              {groups.length === 0 && (
-                <div className="px-3 py-6 text-center text-2xs text-term-text-mute">No events match the current filters.</div>
-              )}
-            </div>
+                  );
+                })}
+                {groups.length === 0 && (
+                  <div className="px-3 py-8 text-center text-xs text-term-text-mute">No events match the current filters.</div>
+                )}
+              </div>
+            )}
           </Panel>
         </div>
 
         {/* Side panel */}
         <div className="flex flex-col gap-2">
-          <Panel title="Series History" code="SER" accent right={<Tag tone="amber">{allSeriesHistory.length} series</Tag>}>
-            <DataGrid columns={seriesCols} rows={allSeriesHistory} rowKey={(r) => r.name} maxHeight="300px" initialSort={{ key: "name", dir: "asc" }} zebra />
-          </Panel>
-
-          <Panel title="This Week's High-Impact" code="HOT" right={<Tag tone="down">{highImpactWeek.length}</Tag>}>
+          <Panel title="This Week's High-Impact" code="HOT" accent right={<Tag tone="down">{highImpactWeek.length}</Tag>}>
             <div className="divide-y divide-term-border-soft">
               {highImpactWeek.map((e) => (
-                <div key={e.id} className="flex items-center justify-between px-2.5 py-1.5">
+                <div key={e.id} className="flex items-center justify-between px-2.5 py-2 hover:bg-term-panel-2">
                   <div className="min-w-0">
                     <button className="truncate text-2xs font-semibold text-term-text hover:text-term-amber" onClick={() => setTrendSeries(e.name)}>
                       {e.name}
                     </button>
-                    <div className="text-3xs text-term-text-mute">{e.category} · {e.period}</div>
+                    <div className="mt-0.5 flex items-center gap-1">
+                      <Tag tone="neutral">{e.category}</Tag>
+                      <span className="text-3xs text-term-text-mute">{e.period}</span>
+                    </div>
                   </div>
                   <div className="ml-2 shrink-0 text-right">
-                    <div className="tnum text-2xs text-term-amber">{e.date}</div>
+                    <div className="tnum text-2xs font-semibold text-term-amber">{e.date}</div>
                     <div className="tnum text-3xs text-term-text-mute">{e.time} · +{e.daysOut}d</div>
                   </div>
                 </div>
@@ -440,6 +611,10 @@ export default function EconomicCalendarPage() {
                 <div className="px-3 py-4 text-center text-2xs text-term-text-mute">No high-impact events in the next 7 days.</div>
               )}
             </div>
+          </Panel>
+
+          <Panel title="Series History" code="SER" right={<Tag tone="amber">{allSeriesHistory.length} series</Tag>}>
+            <DataGrid columns={seriesCols} rows={allSeriesHistory} rowKey={(r) => r.name} maxHeight="300px" initialSort={{ key: "name", dir: "asc" }} zebra />
           </Panel>
 
           <Panel title="Releases by Category" code="CAT">
