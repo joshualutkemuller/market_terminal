@@ -23,6 +23,7 @@
 export type ProvenanceSource =
   | "FRED"
   | "LIVE"
+  | "POLY"
   | "DB"
   | "FILE"
   | "ETL"
@@ -46,6 +47,7 @@ export interface ProvenanceMeta {
 export const PROVENANCE_META: Record<ProvenanceSource, ProvenanceMeta> = {
   FRED: { label: "LIVE · FRED", live: true, tone: "live", title: "Live data from FRED (api.stlouisfed.org)" },
   LIVE: { label: "LIVE · PIPELINE", live: true, tone: "live", title: "Live from the market_data_pipeline FastAPI service (MARKET_PIPELINE_URL)" },
+  POLY: { label: "LIVE · POLY", live: true, tone: "live", title: "Live from Polymarket CLOB + Gamma APIs (public, no auth)" },
   DB: { label: "LIVE · DB", live: true, tone: "live", title: "Local market_data_pipeline database — analytics_api_views (MARKET_DB_URL: DuckDB or Postgres)" },
   FILE: { label: "LIVE · FILE", live: true, tone: "live", title: "Local exported-file cache (MARKET_DATA_DIR — `mdp export-views`)" },
   ETL: { label: "ETL · MACRO", live: true, tone: "etl", title: "macro_data_etl gold tables (World Bank · BIS · CME FedWatch). Run the ETL with network access for live values." },

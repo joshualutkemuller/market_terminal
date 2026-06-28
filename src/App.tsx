@@ -21,6 +21,7 @@ import SourcesUses from "./app/sources-uses/page";
 import Optimization from "./app/optimization/page";
 import TradingDesk from "./app/trading-desk/page";
 import MacroChart from "./app/macro-chart/page";
+import Polymarket from "./app/polymarket/page";
 import News from "./app/news/page";
 import Sentiment from "./app/sentiment/page";
 import Copilot from "./app/copilot/page";
@@ -73,6 +74,7 @@ export function App() {
         <Route path="optimization" element={<Optimization />} />
         <Route path="trading-desk" element={<TradingDesk />} />
         <Route path="macro-chart" element={<MacroChart />} />
+        <Route path="polymarket" element={<Polymarket />} />
         <Route path="news" element={<News />} />
         <Route path="sentiment" element={<Sentiment />} />
         <Route path="copilot" element={<Copilot />} />
