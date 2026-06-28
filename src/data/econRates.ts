@@ -148,7 +148,7 @@ export interface EconEvent {
   fredId?: string;
 }
 
-interface EventDef {
+export interface EventDef {
   name: string;
   category: string;
   time: string;
@@ -159,6 +159,9 @@ interface EventDef {
   volatility: number;
   unit: string;
   fmt: (v: number) => string;
+  fredId?: string;
+  fredUnits?: string;
+  fredScale?: number;
 }
 
 const pctFmt = (v: number) => `${v.toFixed(1)}%`;
@@ -168,21 +171,21 @@ const idxFmt = (v: number) => `${v.toFixed(1)}`;
 const rngFmt = (lo: number, hi: number) => `${lo.toFixed(2)}-${hi.toFixed(2)}%`;
 
 const EVENT_SERIES: EventDef[] = [
-  { name: "CPI (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 12, baseValue: 0.25, volatility: 0.15, unit: "%", fmt: pctFmt },
-  { name: "Core CPI (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 12, baseValue: 0.3, volatility: 0.1, unit: "%", fmt: pctFmt },
-  { name: "Nonfarm Payrolls", category: "Labor", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 5, baseValue: 180, volatility: 60, unit: "k", fmt: kFmt },
-  { name: "Unemployment Rate", category: "Labor", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 5, baseValue: 4.2, volatility: 0.2, unit: "%", fmt: pctFmt },
-  { name: "Initial Jobless Claims", category: "Labor", time: "08:30", importance: "MEDIUM", freq: "weekly", releaseDay: 4, baseValue: 230, volatility: 15, unit: "k", fmt: kFmt },
-  { name: "Retail Sales (m/m)", category: "Consumer", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 15, baseValue: 0.2, volatility: 0.3, unit: "%", fmt: pctFmt },
-  { name: "FOMC Rate Decision", category: "Policy", time: "14:00", importance: "HIGH", freq: "8x", releaseDay: 0, baseValue: 4.125, volatility: 0, unit: "%", fmt: (v) => rngFmt(v - 0.125, v + 0.125) },
-  { name: "Core PCE (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 28, baseValue: 0.25, volatility: 0.1, unit: "%", fmt: pctFmt },
-  { name: "ISM Manufacturing", category: "Activity", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 49.5, volatility: 1.5, unit: "", fmt: idxFmt },
+  { name: "CPI (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 12, baseValue: 0.25, volatility: 0.15, unit: "%", fmt: pctFmt, fredId: "CPIAUCSL", fredUnits: "pch" },
+  { name: "Core CPI (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 12, baseValue: 0.3, volatility: 0.1, unit: "%", fmt: pctFmt, fredId: "CPILFESL", fredUnits: "pch" },
+  { name: "Nonfarm Payrolls", category: "Labor", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 5, baseValue: 180, volatility: 60, unit: "k", fmt: kFmt, fredId: "PAYEMS", fredUnits: "chg" },
+  { name: "Unemployment Rate", category: "Labor", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 5, baseValue: 4.2, volatility: 0.2, unit: "%", fmt: pctFmt, fredId: "UNRATE" },
+  { name: "Initial Jobless Claims", category: "Labor", time: "08:30", importance: "MEDIUM", freq: "weekly", releaseDay: 4, baseValue: 230, volatility: 15, unit: "k", fmt: kFmt, fredId: "ICSA", fredScale: 0.001 },
+  { name: "Retail Sales (m/m)", category: "Consumer", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 15, baseValue: 0.2, volatility: 0.3, unit: "%", fmt: pctFmt, fredId: "RSAFS", fredUnits: "pch" },
+  { name: "FOMC Rate Decision", category: "Policy", time: "14:00", importance: "HIGH", freq: "8x", releaseDay: 0, baseValue: 4.125, volatility: 0, unit: "%", fmt: (v) => rngFmt(v - 0.125, v + 0.125), fredId: "DFEDTARU" },
+  { name: "Core PCE (m/m)", category: "Inflation", time: "08:30", importance: "HIGH", freq: "monthly", releaseDay: 28, baseValue: 0.25, volatility: 0.1, unit: "%", fmt: pctFmt, fredId: "PCEPILFE", fredUnits: "pch" },
+  { name: "ISM Manufacturing", category: "Activity", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 1, baseValue: 49.5, volatility: 1.5, unit: "", fmt: idxFmt, fredId: "MANEMP" },
   { name: "ISM Services", category: "Activity", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 3, baseValue: 53.0, volatility: 1.2, unit: "", fmt: idxFmt },
-  { name: "GDP (q/q ann.)", category: "Growth", time: "08:30", importance: "HIGH", freq: "quarterly", releaseDay: 27, baseValue: 2.2, volatility: 0.8, unit: "%", fmt: pctFmt },
-  { name: "U. Mich Sentiment", category: "Consumer", time: "10:00", importance: "LOW", freq: "monthly", releaseDay: 14, baseValue: 68, volatility: 3, unit: "", fmt: idxFmt },
-  { name: "JOLTS Job Openings", category: "Labor", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 8, baseValue: 7.5, volatility: 0.4, unit: "M", fmt: mFmt },
-  { name: "Housing Starts", category: "Housing", time: "08:30", importance: "LOW", freq: "monthly", releaseDay: 17, baseValue: 1.38, volatility: 0.08, unit: "M", fmt: mFmt },
-  { name: "PPI (m/m)", category: "Inflation", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 13, baseValue: 0.15, volatility: 0.2, unit: "%", fmt: pctFmt },
+  { name: "GDP (q/q ann.)", category: "Growth", time: "08:30", importance: "HIGH", freq: "quarterly", releaseDay: 27, baseValue: 2.2, volatility: 0.8, unit: "%", fmt: pctFmt, fredId: "A191RL1Q225SBEA" },
+  { name: "U. Mich Sentiment", category: "Consumer", time: "10:00", importance: "LOW", freq: "monthly", releaseDay: 14, baseValue: 68, volatility: 3, unit: "", fmt: idxFmt, fredId: "UMCSENT" },
+  { name: "JOLTS Job Openings", category: "Labor", time: "10:00", importance: "MEDIUM", freq: "monthly", releaseDay: 8, baseValue: 7.5, volatility: 0.4, unit: "M", fmt: mFmt, fredId: "JTSJOL", fredScale: 0.001 },
+  { name: "Housing Starts", category: "Housing", time: "08:30", importance: "LOW", freq: "monthly", releaseDay: 17, baseValue: 1.38, volatility: 0.08, unit: "M", fmt: mFmt, fredId: "HOUST", fredScale: 0.001 },
+  { name: "PPI (m/m)", category: "Inflation", time: "08:30", importance: "MEDIUM", freq: "monthly", releaseDay: 13, baseValue: 0.15, volatility: 0.2, unit: "%", fmt: pctFmt, fredId: "PPIACO", fredUnits: "pch" },
 ];
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -341,3 +344,4 @@ export function getEventSeriesHistory(seriesName?: string): EventSeriesHistory[]
 }
 
 export const EVENT_SERIES_NAMES = EVENT_SERIES.map((d) => d.name);
+export { EVENT_SERIES };

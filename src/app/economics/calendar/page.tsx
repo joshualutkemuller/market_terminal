@@ -9,8 +9,7 @@ import { SourceBadge } from "@/components/econ/SourceBadge";
 import { getCalendarSensitivity, getReleaseMoveSummaries, type CalendarSensitivityTag, type ReleaseMoveSummary } from "@/data/econEnhancements";
 import { useEconCalendar } from "@/lib/useEcon";
 import { useTick, useMounted } from "@/lib/hooks";
-import type { EconEvent, EventImportance } from "@/data/econRates";
-import { getEventSeriesHistory, EVENT_SERIES_NAMES, type EventSeriesHistory } from "@/data/econRates";
+import type { EconEvent, EventImportance, EventSeriesHistory, EventHistoryPoint } from "@/data/econRates";
 import { fmtSigned } from "@/lib/format";
 
 const IMPORTANCES: (EventImportance | "ALL")[] = ["ALL", "HIGH", "MEDIUM", "LOW"];
@@ -56,9 +55,36 @@ function surprise(actual: string | null, consensus: string): { label: string; to
   const a = toNum(actual);
   const c = toNum(consensus);
   if (a == null || c == null) return null;
+  if (Math.abs(a - c) < 1e-9) return { label: "IN-LINE", tone: "neutral" };
   if (a > c) return { label: "BEAT", tone: "up" };
-  if (a < c) return { label: "MISS", tone: "down" };
-  return { label: "IN-LINE", tone: "neutral" };
+  return { label: "MISS", tone: "down" };
+}
+
+function deriveSeriesHistory(events: EconEvent[]): EventSeriesHistory[] {
+  const released = events.filter((e) => e.actual != null);
+  const byName = new Map<string, EconEvent[]>();
+  for (const e of released) {
+    const arr = byName.get(e.name) ?? [];
+    arr.push(e);
+    byName.set(e.name, arr);
+  }
+
+  const result: EventSeriesHistory[] = [];
+  for (const [name, evts] of byName) {
+    const points: EventHistoryPoint[] = [];
+    for (const e of evts) {
+      const a = toNum(e.actual);
+      const c = toNum(e.consensus);
+      const p = toNum(e.prior);
+      if (a == null || c == null) continue;
+      points.push({ date: e.date, period: e.period, actual: a, consensus: c, prior: p ?? a, surprise: a - c });
+    }
+    points.sort((a, b) => a.date.localeCompare(b.date));
+    if (points.length >= 2) {
+      result.push({ name, category: evts[0].category, importance: evts[0].importance, unit: "", points });
+    }
+  }
+  return result.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function filterByTimeRange(events: EconEvent[], range: TimeRange): EconEvent[] {
@@ -171,7 +197,7 @@ function SeriesTrendView({ series, onBack }: { series: EventSeriesHistory; onBac
 export default function EconomicCalendarPage() {
   const { data: events, source } = useEconCalendar();
   const moveSummaries = getReleaseMoveSummaries();
-  const allSeriesHistory = useMemo(() => getEventSeriesHistory(), []);
+  const allSeriesHistory = useMemo(() => deriveSeriesHistory(events), [events]);
   const tick = useTick(2000);
   const mounted = useMounted();
   const todayStr = mounted ? new Date().toISOString().slice(0, 10) : null;
