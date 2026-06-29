@@ -1,6 +1,6 @@
 # Economics & Macro — Functionality Summary & Securities-Lending Relevance
 
-A short tour of the SFX Terminal's **Economics & Macro** section and *why each
+A short tour of the QIT Terminal's **Economics & Macro** section and *why each
 module matters to a securities-finance desk*. Securities-lending economics are,
 at bottom, **a rates-and-funding business**: lending revenue is driven by rebate
 rates, the yield earned reinvesting cash collateral, the spread of specials over

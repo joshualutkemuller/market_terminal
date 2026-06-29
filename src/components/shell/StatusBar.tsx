@@ -54,7 +54,7 @@ export function StatusBar() {
         <span className="tnum text-term-text-mute" title="Illustrative — no live websocket streams in this build">WS <span className="text-term-text-mute">●</span> 14 streams · SIM</span>
         {critical > 0 && <span className="tnum font-semibold text-term-down">⚠ {critical} CRIT</span>}
         {high > 0 && <span className="tnum text-term-amber">{high} HIGH</span>}
-        <span className="tnum text-term-text-mute">SFX-TERM v0.1.0</span>
+        <span className="tnum text-term-text-mute">QIT-TERM v0.1.0</span>
       </div>
     </footer>
   );

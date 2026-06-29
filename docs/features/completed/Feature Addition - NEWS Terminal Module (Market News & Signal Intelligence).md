@@ -19,7 +19,7 @@ Related: `docs/MARKET_TERMINAL_ROADMAP.md`, `docs/features/Feature Addition - In
 
 ## Objective
 
-Design and implement a production-grade **NEWS Module** for the SFX Terminal (Bloomberg-style Securities Finance Intelligence Platform).
+Design and implement a production-grade **NEWS Module** for the QIT Terminal (Bloomberg-style Quant Intelligence Platform).
 
 This is NOT a generic news feed.
 

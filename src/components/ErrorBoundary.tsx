@@ -36,7 +36,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
             <AlertTriangle size={15} className="text-term-down" />
             <span className="font-mono text-sm font-bold text-term-down">MODULE FAULT</span>
             <span className="ml-auto font-mono text-3xs uppercase tracking-widest text-term-text-mute">
-              SFX · runtime exception
+              QIT · runtime exception
             </span>
           </div>
           <div className="p-4">
