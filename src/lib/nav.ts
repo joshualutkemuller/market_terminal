@@ -31,6 +31,7 @@ import {
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
+import { isModuleEnabled } from "@/lib/moduleConfig";
 
 export interface NavItem {
   /** Bloomberg-style mnemonic command, e.g. "SLAB". */
@@ -42,7 +43,7 @@ export interface NavItem {
   group: "MARKETS" | "FINANCE" | "OPTIMIZATION" | "DESK" | "ECONOMICS" | "INTELLIGENCE";
 }
 
-export const NAV: NavItem[] = [
+const ALL_NAV: NavItem[] = [
   { code: "HOME", label: "Command Center", href: "/", icon: LayoutDashboard, desc: "Cross-desk overview & KPIs", group: "MARKETS" },
   { code: "MKT", label: "Live Markets", href: "/markets", icon: Activity, desc: "Real-time multi-asset monitor", group: "MARKETS" },
   { code: "SNAP", label: "Market Snapshot", href: "/market-snapshot", icon: Gauge, desc: "Cross-asset returns, drawdowns & regime", group: "MARKETS" },
@@ -89,6 +90,8 @@ export const NAV: NavItem[] = [
   { code: "DATAOPS", label: "Data Ops", href: "/dataops", icon: Cpu, desc: "Provider health and lineage", group: "INTELLIGENCE" },
   { code: "ALRT", label: "Alert Center", href: "/alerts", icon: BellRing, desc: "Streaming risk & ops alerts", group: "INTELLIGENCE" },
 ];
+
+export const NAV: NavItem[] = ALL_NAV.filter((n) => isModuleEnabled(n.code));
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [
   { id: "MARKETS", label: "Markets" },
