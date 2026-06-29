@@ -7,7 +7,7 @@ interface SimModeState {
 
 const SimModeContext = createContext<SimModeState>({ simEnabled: false, toggle: () => {} });
 
-const STORAGE_KEY = "sfx-sim-mode";
+const STORAGE_KEY = "qit-sim-mode";
 
 export function SimModeProvider({ children }: { children: ReactNode }) {
   const [simEnabled, setSimEnabled] = useState(false);

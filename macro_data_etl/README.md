@@ -3,7 +3,7 @@
 A production-grade Python ETL that ingests **global inflation**, **central-bank
 policy rates**, and **Fed Funds futures → FOMC probabilities** from free public
 sources, lands them through a **raw → bronze → silver → gold** medallion
-architecture, and serves analytical tables to the SFX Terminal.
+architecture, and serves analytical tables to the QIT Terminal.
 
 ```
 World Bank ─┐
@@ -115,7 +115,7 @@ bots, falls back to a deterministic futures curve (gold rows flagged
 
 ## Terminal integration
 
-`macro-etl export <table>` writes gold tables to JSON. The SFX Terminal's
+`macro-etl export <table>` writes gold tables to JSON. The QIT Terminal's
 economics API reads a committed snapshot of `country_macro_latest`,
 `inflation_timeseries`, `policy_rate_timeseries`, and `fed_probabilities`,
 falling back to its built-in simulation when the snapshot is absent — the same

@@ -1,4 +1,4 @@
-# Deploying SFX Terminal
+# Deploying QIT Terminal
 
 This is a **Vite + React SPA** with Web-standard `/api/*` handlers. The SPA is static,
 but `/api/*` needs a **runtime**. A static-only deploy (plain CDN, `vite preview`, or a

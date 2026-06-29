@@ -14,9 +14,9 @@ export function CommandBar({ onOpenPalette, onToggleSidebar }: { onOpenPalette: 
         <PanelLeft size={16} />
       </button>
       <div className="flex shrink-0 items-center gap-2">
-        <div className="flex h-5 w-5 items-center justify-center bg-term-amber font-mono text-xs font-bold text-black">S</div>
-        <span className="font-mono text-sm font-bold tracking-tight text-term-amber">SFX</span>
-        <span className="hidden text-3xs uppercase tracking-widest text-term-text-mute sm:inline">Securities Finance Terminal</span>
+        <div className="flex h-5 w-5 items-center justify-center bg-term-amber font-mono text-xs font-bold text-black">Q</div>
+        <span className="font-mono text-sm font-bold tracking-tight text-term-amber">QIT</span>
+        <span className="hidden text-3xs uppercase tracking-widest text-term-text-mute sm:inline">Quant Intelligence Platform</span>
       </div>
 
       <div className="mx-1 hidden h-4 w-px bg-term-border sm:block" />

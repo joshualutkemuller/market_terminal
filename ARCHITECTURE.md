@@ -7,7 +7,7 @@ to in a real institutional deployment.
 
 ```
                          ┌────────────────────────────────────────────┐
-                         │            SFX Terminal (Next.js)            │
+                         │            QIT Terminal (Next.js)            │
                          │  Bloomberg-style UI · keyboard-driven · RBAC │
                          └───────────────┬───────────────┬─────────────┘
                           WebSocket /    │               │  REST (FastAPI)

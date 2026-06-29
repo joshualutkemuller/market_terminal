@@ -1,4 +1,4 @@
-# SFX Terminal — Securities Finance Intelligence Platform
+# QIT Terminal — Quant Intelligence Platform
 
 A **Bloomberg-style operating system** for the securities finance business — unifying
 **Securities Lending, Prime Finance, Collateral Optimization, Cash Optimization,
@@ -634,6 +634,5 @@ docs/LIVE_DATA_READINESS_ASSESSMENT.md   # full live-vs-snapshot-vs-sim audit of
 
 ---
 
-*Unified Securities Finance Intelligence — Securities Lending · Prime Finance · Collateral &
-Cash Optimization · Sources & Uses Matching · Treasury Analytics · AI decision support, in a
-single Bloomberg-style operating system.*
+*Quant Intelligence Platform — Market intelligence · Macro analytics · Securities finance ·
+Treasury analytics · AI decision support, in a single Bloomberg-style operating system.*

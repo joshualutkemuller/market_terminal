@@ -106,7 +106,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             <span><span className="term-kbd">↑</span> <span className="term-kbd">↓</span> navigate</span>
             <span><span className="term-kbd">↵</span> open</span>
           </span>
-          <span>SFX Command Line</span>
+          <span>QIT Command Line</span>
         </div>
       </div>
     </Modal>

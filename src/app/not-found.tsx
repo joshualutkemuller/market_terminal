@@ -9,7 +9,7 @@ export default function NotFound() {
         <div className="flex items-center gap-2 border-b border-term-border bg-term-panel-2 px-3 py-2">
           <Compass size={15} className="text-term-amber" />
           <span className="font-mono text-sm font-bold text-term-amber">UNKNOWN MNEMONIC</span>
-          <span className="ml-auto font-mono text-3xs uppercase tracking-widest text-term-text-mute">SFX · 404</span>
+          <span className="ml-auto font-mono text-3xs uppercase tracking-widest text-term-text-mute">QIT · 404</span>
         </div>
         <div className="p-4">
           <p className="text-xs text-term-text-dim">

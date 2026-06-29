@@ -1,6 +1,6 @@
-# SFX Terminal Future Feature Roadmap
+# QIT Terminal Future Feature Roadmap
 
-This roadmap is a product and engineering backlog for the SFX Terminal, with the first focus on user-interface polish and bug-risk reduction before adding larger platform capabilities. It is based on the current Next.js terminal shell, navigation model, module inventory, data-source posture, and observed test/lint output.
+This roadmap is a product and engineering backlog for the QIT Terminal, with the first focus on user-interface polish and bug-risk reduction before adding larger platform capabilities. It is based on the current Next.js terminal shell, navigation model, module inventory, data-source posture, and observed test/lint output.
 
 ## Roadmap principles
 
