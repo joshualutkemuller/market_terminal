@@ -1,6 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { FRED_CATALOG } from "@/data/econSeries";
 import { getSnapshotObservations } from "@/data/econSnapshot";
+import { worstSource } from "@/lib/provenance";
 
 const pct = (now: number | undefined, then: number | undefined, decimals = 1): number | null => {
   if (now == null || then == null || then === 0) return null;
@@ -100,25 +101,23 @@ describe("per-indicator source independence", () => {
     expect(hasSnapshot).toBeGreaterThan(0);
   });
 
-  test("overall source should reflect highest tier present", () => {
-    type EconSource = "FRED" | "SNAPSHOT" | "SIM";
-    const sources: EconSource[] = ["FRED", "SIM", "SIM", "SNAPSHOT", "SIM"];
-    const overall: EconSource = sources.some((s) => s === "FRED")
-      ? "FRED"
-      : sources.some((s) => s === "SNAPSHOT")
-      ? "SNAPSHOT"
-      : "SIM";
-    expect(overall).toBe("FRED");
+  test("overall source reflects worst tier present (SIM when any are SIM)", () => {
+    expect(worstSource(["FRED", "SIM", "SIM", "SNAPSHOT", "SIM"])).toBe("SIM");
+  });
+
+  test("overall source is SNAPSHOT when worst tier is SNAPSHOT", () => {
+    expect(worstSource(["FRED", "FRED", "SNAPSHOT"])).toBe("SNAPSHOT");
+  });
+
+  test("overall source is FRED when all indicators are FRED", () => {
+    expect(worstSource(["FRED", "FRED", "FRED"])).toBe("FRED");
   });
 
   test("overall source is SIM when all indicators are SIM", () => {
-    type EconSource = "FRED" | "SNAPSHOT" | "SIM";
-    const sources: EconSource[] = ["SIM", "SIM", "SIM"];
-    const overall: EconSource = sources.some((s) => s === "FRED")
-      ? "FRED"
-      : sources.some((s) => s === "SNAPSHOT")
-      ? "SNAPSHOT"
-      : "SIM";
-    expect(overall).toBe("SIM");
+    expect(worstSource(["SIM", "SIM", "SIM"])).toBe("SIM");
+  });
+
+  test("overall source defaults to SIM for empty array", () => {
+    expect(worstSource([])).toBe("SIM");
   });
 });

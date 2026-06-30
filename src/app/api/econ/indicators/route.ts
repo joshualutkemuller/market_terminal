@@ -2,6 +2,7 @@ import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { FRED_CATALOG, getSeriesHistory, getSeriesHistoryRaw, resolveFred, type FredSeries } from "@/data/econSeries";
 import { getSnapshotObservations, getSnapshotRawObservations } from "@/data/econSnapshot";
+import { worstSource } from "@/lib/provenance";
 
 type EconSource = "FRED" | "SNAPSHOT" | "SIM";
 
@@ -126,10 +127,6 @@ export async function GET() {
       return buildPoint(s, simHist, "SIM", simRaw);
     })
   );
-  const source: EconSource = out.some((o) => o.source === "FRED")
-    ? "FRED"
-    : out.some((o) => o.source === "SNAPSHOT")
-    ? "SNAPSHOT"
-    : "SIM";
+  const source: EconSource = worstSource(out.map((o) => o.source));
   return json({ source, indicators: out });
 }

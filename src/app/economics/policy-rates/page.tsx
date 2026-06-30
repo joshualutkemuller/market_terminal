@@ -10,6 +10,7 @@ import { Donut } from "@/components/charts/Radial";
 import { useDrill } from "@/components/econ/DrillProvider";
 import { SourceBadge } from "@/components/econ/SourceBadge";
 import { isRealEconSource, useLiveSeriesSet, type DataSource } from "@/lib/useEcon";
+import { worstSource } from "@/lib/provenance";
 import { etlPolicyRate, getGlobalPolicyRates, getGlobalSummary, livePolicyRate, type PolicyRate, type Region } from "@/data/globalMacro";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
 
@@ -36,15 +37,10 @@ export default function GlobalPolicyRates() {
     const L = r.fredId ? liveMap[r.fredId] : undefined;
     return L && isRealEconSource(L.source) && L.observations.length ? { ...livePolicyRate(r, L.observations), source: L.source } : r;
   }).sort((a, b) => b.rate - a.rate);
-  const pageSource: DataSource = all.some((r) => r.source === "FRED")
-    ? "FRED"
-    : all.some((r) => r.source === "SNAPSHOT")
-    ? "SNAPSHOT"
-    : all.some((r) => r.source === "ETL")
-    ? "ETL"
-    : source === "LOADING"
+  const allSources = all.map((r) => r.source).filter((s) => s && s !== "LOADING");
+  const pageSource: DataSource = source === "LOADING" && !allSources.length
     ? "LOADING"
-    : "SIM";
+    : worstSource(allSources.length ? allSources : ["SIM" as DataSource]) as DataSource;
   const summary = {
     ...base,
     avgPolicyRate: Number((all.reduce((a, r) => a + r.rate, 0) / all.length).toFixed(2)),

@@ -324,22 +324,33 @@ test:
 
 ---
 
-## 8. Key Risk: Silent SIM Data
+## 8. Key Risk: Silent SIM Data — MITIGATED
 
-### How It Happens Today
+### How It Happened (Before Fix)
 
-1. **Per-indicator fallback**: The `/api/econ/indicators` route resolves each of ~40 indicators independently. If FRED is down for one series, that one silently falls back to SIM while others show FRED. The page-level badge says "FRED" because at least one indicator resolved from FRED.
+1. **Per-indicator fallback**: The `/api/econ/indicators` route resolved each of ~40 indicators independently. If FRED was down for one series, that one silently fell back to SIM while others showed FRED. The page-level badge said "FRED" because at least one indicator resolved from FRED.
 
-2. **Mixed market sources**: The command center merges FRED index data with pipeline snapshot data. The badge shows "FRED" even if the pipeline cards are stale snapshots.
+2. **Mixed market sources**: The command center merged FRED index data with pipeline snapshot data. The badge showed "FRED" even if the pipeline cards were stale snapshots.
 
-3. **Initial render flash**: `useMarketView` renders committed SNAPSHOT data synchronously, then tries the API. If the API is slow or fails, the user sees SNAPSHOT data that may be days/weeks old with no staleness warning unless `asOf` is displayed.
+3. **Initial render flash**: `useMarketView` renders committed SNAPSHOT data synchronously, then tries the API. If the API is slow or fails, the user sees SNAPSHOT data that may be days/weeks old.
 
-### Recommended Mitigations
+### Mitigations Implemented
 
-1. **Per-row source indicators**: Add a small colored dot to each indicator row and each index card showing its individual source (green=FRED/LIVE, blue=SNAPSHOT, amber=SIM).
+1. **Per-row source indicators** — ALREADY EXISTED: Each indicator row in the Macro Dashboard shows a colored dot (green=FRED, violet=SNAPSHOT, amber=SIM) with a tooltip at `economics/page.tsx:306-308`. Column header "Src" at line 264.
 
-2. **Worst-source badge**: Change the overall badge to show the lowest-tier source present, not the highest. If any data is SIM, the badge should indicate mixed sources.
+2. **Worst-source badge** — IMPLEMENTED: Added `worstSource()` utility to `src/lib/provenance.ts` that returns the lowest-tier source from an array (tier order: FRED > LIVE > POLY > DB > FILE > ETL > SNAPSHOT > ECON > SIM). Updated all API routes and pages to use worst-source logic:
+   - `src/app/api/econ/indicators/route.ts` — overall source now reflects worst indicator
+   - `src/app/api/econ/batch/route.ts` — batch endpoint uses worstSource
+   - `src/app/api/econ/benchmark/route.ts` — benchmark endpoint uses worstSource
+   - `src/app/page.tsx` — Command Center badge reflects worst source across FRED indices + pipeline cards
+   - `src/app/economics/global-cpi/page.tsx` — Global CPI badge uses worstSource
+   - `src/app/economics/policy-rates/page.tsx` — Policy Rates badge uses worstSource
 
-3. **Staleness alerts**: When any displayed data has `asOf` older than 7 days, show a warning banner in the page header: "Some data is N days stale — run pipeline to refresh."
+3. **Staleness alerts** — ALREADY EXISTED: `StalenessBar` component (`src/components/ui/StalenessBar.tsx`) renders a red warning banner when data is >7 days stale. Already integrated into Command Center, Markets, Economics, and Asset Quilt pages.
 
-4. **Loading skeleton**: During the `LOADING` state, show a skeleton/shimmer instead of snapshot data to make the transition visible.
+4. **Loading skeleton**: Not yet implemented (deferred — lower priority). The `LOADING` state currently shows SNAPSHOT data during initial render.
+
+### Test Coverage
+
+- `src/lib/provenance.test.ts`: 7 new tests for `worstSource()` covering mixed arrays, single-element, empty array, unknown strings, and full tier ordering.
+- `src/app/api/econ/indicators/route.test.ts`: 5 tests updated to verify worst-source logic instead of best-source.
