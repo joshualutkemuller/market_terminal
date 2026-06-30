@@ -308,19 +308,28 @@ All pages now have provenance badges. Audit results:
 
 ---
 
-## 7. Recommended CI Pipeline
+## 7. CI Pipeline — IMPLEMENTED
 
-```yaml
-test:
-  steps:
-    - npx vitest run                          # Unit tests
-    - npx tsc --noEmit                        # Type check
-    - npx vite build                          # Build check
-    - npx playwright test tests/smoke/        # E2E smoke tests
-    - npx vitest run tests/badge-coverage     # Badge audit
-    - npx vitest run tests/source-propagation # Source contract
-    - npx vitest run tests/snapshot-staleness  # Staleness contract
-```
+**Config:** `.github/workflows/ci.yml`
+
+### `verify` job (runs on every push/PR)
+| Step | Command | Covers |
+|------|---------|--------|
+| Type-check | `npx tsc --noEmit` | TypeScript compilation |
+| Lint | `npm run lint` | Code style |
+| Unit tests | `npm test` (`vitest run`) | All unit tests including badge-coverage, snapshot-staleness, provenance, source resolution, charting |
+| Build | `npm run build` | Production build |
+
+### `e2e` job (runs after verify passes)
+| Step | Command | Covers |
+|------|---------|--------|
+| Install Playwright | `npx playwright install --with-deps chromium` | Browser setup |
+| Smoke tests | `npx playwright test test/smoke.spec.ts` | 93 E2E tests: page loads, badge visibility, no undefined/NaN |
+| Upload artifacts | `actions/upload-artifact@v4` | Playwright report (7-day retention) |
+
+### Test inventory covered by CI
+- **Unit tests (vitest)**: provenance (19), useMarket (12), useEcon (14), indicators route (19), charting indicators (7), charting studies (5), charting transforms (6), badge-coverage (1), snapshot-staleness (varies)
+- **E2E tests (Playwright)**: 44 page load smoke tests, 44 provenance badge visibility tests, 5 no-undefined/NaN tests
 
 ---
 
