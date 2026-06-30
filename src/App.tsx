@@ -1,6 +1,7 @@
 import { Outlet, Route, Routes } from "react-router-dom";
 import { RootLayout } from "./app/RootLayout";
 import { DrillProvider } from "@/components/econ/DrillProvider";
+import { isModuleEnabled } from "@/lib/moduleConfig";
 
 // Top-level modules
 import Home from "./app/page";
@@ -52,65 +53,76 @@ import EconRateAnalysis from "./app/economics/rate-analysis/page";
 
 import NotFound from "./app/not-found";
 
+function on(code: string) {
+  return isModuleEnabled(code);
+}
+
 export function App() {
+  const econChildren = [
+    on("ECON") && <Route key="econ-idx" index element={<Economics />} />,
+    on("CURV") && <Route key="curv" path="curve" element={<EconCurve />} />,
+    on("INFL") && <Route key="infl" path="inflation" element={<EconInflation />} />,
+    on("GCPI") && <Route key="gcpi" path="global-cpi" element={<EconGlobalCpi />} />,
+    on("GPOL") && <Route key="gpol" path="policy-rates" element={<EconPolicyRates />} />,
+    on("CRDT") && <Route key="crdt" path="credit" element={<EconCredit />} />,
+    on("FOMC") && <Route key="fomc" path="rates" element={<EconRates />} />,
+    on("CAL") && <Route key="cal" path="calendar" element={<EconCalendar />} />,
+    on("STAT") && <Route key="stat" path="stats" element={<EconStats />} />,
+    on("REGIME") && <Route key="regime" path="regime" element={<EconRegime />} />,
+    on("EML") && <Route key="eml" path="ml" element={<EconMl />} />,
+    on("SFE") && <Route key="sfe" path="sec-finance" element={<EconSecFinance />} />,
+    on("FUND") && <Route key="fund" path="funding" element={<EconFunding />} />,
+    on("MOTN") && <Route key="motn" path="motion" element={<EconMotion />} />,
+    on("BMRK") && <Route key="bmrk" path="benchmark" element={<EconBenchmark />} />,
+    on("UTIL") && <Route key="util" path="utilization" element={<EconUtilization />} />,
+    on("YCURV") && <Route key="ycurv" path="yield-curve" element={<EconYieldCurve />} />,
+    on("RVOL") && <Route key="rvol" path="rate-vol" element={<EconRateVol />} />,
+    on("FCOST") && <Route key="fcost" path="funding-cost" element={<EconFundingCost />} />,
+    on("BRA") && <Route key="bra" path="rate-analysis" element={<EconRateAnalysis />} />,
+  ].filter(Boolean);
+
+  const showEcon = econChildren.length > 0;
+
   return (
     <Routes>
       <Route element={<RootLayout />}>
         <Route index element={<Home />} />
-        <Route path="markets" element={<Markets />} />
-        <Route path="market-snapshot" element={<MarketSnapshot />} />
-        <Route path="asset-quilt" element={<AssetQuilt />} />
-        <Route path="index-returns" element={<IndexReturns />} />
-        <Route path="market-lens" element={<MarketLens />} />
-        <Route path="market-chart" element={<MarketChart />} />
-        <Route path="securities-lending" element={<SecuritiesLending />} />
-        <Route path="securities-lending/squeeze" element={<Squeeze />} />
-        <Route path="prime-finance" element={<PrimeFinance />} />
-        <Route path="collateral" element={<Collateral />} />
-        <Route path="cash-optimizer" element={<CashOptimizer />} />
-        <Route path="reinvestment" element={<Reinvestment />} />
-        <Route path="liquidity" element={<Liquidity />} />
-        <Route path="sources-uses" element={<SourcesUses />} />
-        <Route path="optimization" element={<Optimization />} />
-        <Route path="trading-desk" element={<TradingDesk />} />
-        <Route path="macro-chart" element={<MacroChart />} />
-        <Route path="polymarket" element={<Polymarket />} />
-        <Route path="news" element={<News />} />
-        <Route path="sentiment" element={<Sentiment />} />
-        <Route path="copilot" element={<Copilot />} />
-        <Route path="dataops" element={<DataOps />} />
-        <Route path="alerts" element={<Alerts />} />
+        {on("MKT") && <Route path="markets" element={<Markets />} />}
+        {on("SNAP") && <Route path="market-snapshot" element={<MarketSnapshot />} />}
+        {on("QUILT") && <Route path="asset-quilt" element={<AssetQuilt />} />}
+        {on("IRET") && <Route path="index-returns" element={<IndexReturns />} />}
+        {on("LENS") && <Route path="market-lens" element={<MarketLens />} />}
+        {on("MKC") && <Route path="market-chart" element={<MarketChart />} />}
+        {on("SLAB") && <Route path="securities-lending" element={<SecuritiesLending />} />}
+        {on("SQZ") && <Route path="securities-lending/squeeze" element={<Squeeze />} />}
+        {on("PB") && <Route path="prime-finance" element={<PrimeFinance />} />}
+        {on("COLL") && <Route path="collateral" element={<Collateral />} />}
+        {on("CASH") && <Route path="cash-optimizer" element={<CashOptimizer />} />}
+        {on("REINV") && <Route path="reinvestment" element={<Reinvestment />} />}
+        {on("LIQ") && <Route path="liquidity" element={<Liquidity />} />}
+        {on("SXU") && <Route path="sources-uses" element={<SourcesUses />} />}
+        {on("OPT") && <Route path="optimization" element={<Optimization />} />}
+        {on("DESK") && <Route path="trading-desk" element={<TradingDesk />} />}
+        {on("MGC") && <Route path="macro-chart" element={<MacroChart />} />}
+        {on("POLY") && <Route path="polymarket" element={<Polymarket />} />}
+        {on("NEWS") && <Route path="news" element={<News />} />}
+        {on("SENT") && <Route path="sentiment" element={<Sentiment />} />}
+        {on("AI") && <Route path="copilot" element={<Copilot />} />}
+        {on("DATAOPS") && <Route path="dataops" element={<DataOps />} />}
+        {on("ALRT") && <Route path="alerts" element={<Alerts />} />}
 
-        {/* Economics modules share the drill-down provider (was economics/layout.tsx). */}
-        <Route
-          path="economics"
-          element={
-            <DrillProvider>
-              <EconomicsOutlet />
-            </DrillProvider>
-          }
-        >
-          <Route index element={<Economics />} />
-          <Route path="curve" element={<EconCurve />} />
-          <Route path="inflation" element={<EconInflation />} />
-          <Route path="global-cpi" element={<EconGlobalCpi />} />
-          <Route path="policy-rates" element={<EconPolicyRates />} />
-          <Route path="credit" element={<EconCredit />} />
-          <Route path="rates" element={<EconRates />} />
-          <Route path="calendar" element={<EconCalendar />} />
-          <Route path="stats" element={<EconStats />} />
-          <Route path="regime" element={<EconRegime />} />
-          <Route path="ml" element={<EconMl />} />
-          <Route path="sec-finance" element={<EconSecFinance />} />
-          <Route path="funding" element={<EconFunding />} />
-          <Route path="motion" element={<EconMotion />} />
-          <Route path="benchmark" element={<EconBenchmark />} />
-          <Route path="utilization" element={<EconUtilization />} />
-          <Route path="yield-curve" element={<EconYieldCurve />} />
-          <Route path="rate-vol" element={<EconRateVol />} />
-          <Route path="funding-cost" element={<EconFundingCost />} />
-          <Route path="rate-analysis" element={<EconRateAnalysis />} />
-        </Route>
+        {showEcon && (
+          <Route
+            path="economics"
+            element={
+              <DrillProvider>
+                <EconomicsOutlet />
+              </DrillProvider>
+            }
+          >
+            {econChildren}
+          </Route>
+        )}
 
         <Route path="*" element={<NotFound />} />
       </Route>
