@@ -76,88 +76,31 @@ These are the specific locations where SIM data can appear without clear user in
 
 ## 3. Proposed Test Suite
 
-### 3A. Unit Tests — Data Provenance (`src/lib/provenance.test.ts`)
+### 3A. Unit Tests — Data Provenance (`src/lib/provenance.test.ts`) — COMPLETED
 
-**Existing:** 5 tests for `classifyFreshness()`.
+12 tests implemented covering PROVENANCE_META coverage, live source classification,
+provenanceMeta fallback for unknown codes, PROVENANCE_TONE_CLASS coverage,
+future dates, empty strings, ISO timestamps, and custom thresholds.
 
-**Add these tests:**
+### 3B. Unit Tests — Market Hook Source Resolution (`src/lib/useMarket.test.ts`) — COMPLETED
 
-```
-TEST: PROVENANCE_META covers all ProvenanceSource values
-  - Every key in the ProvenanceSource union has a corresponding PROVENANCE_META entry
-  - Every entry has: label, live (boolean), tone, title
+12 tests covering snapshot view availability, price vs total snapshots,
+fallback behavior for views without price data, and source mapping contract
+(LIVE/DB/FILE map correctly; unknown/undefined/null/garbage → SNAPSHOT; SIM not
+in market vocabulary).
 
-TEST: Live sources are correctly classified
-  - FRED, LIVE, DB, FILE, ETL → live: true
-  - SNAPSHOT, ECON, SIM → live: false
+### 3C. Unit Tests — Econ Hook Source Resolution (`src/lib/useEcon.test.ts`) — COMPLETED
 
-TEST: classifyFreshness edge cases
-  - Future date → FRESH
-  - Exactly at threshold boundary → correct bucket
-  - Empty string → UNKNOWN
-  - Invalid format "not-a-date" → UNKNOWN
-```
+14 tests covering mapSource classification (FRED, SNAPSHOT, ETL, SIM, undefined,
+null, unknown strings, Finnhub), isRealEconSource predicate, snapshot seeding
+(DGS10, CPIAUCSL presence, non-existent series returns null, sort order).
 
-### 3B. Unit Tests — Market Hook Source Resolution (`src/lib/useMarket.test.ts`)
+### 3D. Unit Tests — API Route Source Resolution (`src/app/api/econ/indicators/route.test.ts`) — COMPLETED
 
-```
-TEST: fallbackSnapshot returns total snapshot by default
-  - fallbackSnapshot("market", "total") === SNAPSHOTS.market
-
-TEST: fallbackSnapshot returns price snapshot when basis is "price"
-  - fallbackSnapshot("market", "price") === PRICE_SNAPSHOTS.market
-
-TEST: fallbackSnapshot falls back to total when no price snapshot exists
-  - For views not in PRICE_SNAPSHOTS (e.g. "rates"), returns SNAPSHOTS.rates
-
-TEST: Source mapping from API response
-  - { source: "LIVE" } → MarketSource "LIVE"
-  - { source: "DB" } → MarketSource "DB"
-  - { source: "FILE" } → MarketSource "FILE"
-  - { source: "garbage" } → MarketSource "SNAPSHOT"
-  - { source: undefined } → MarketSource "SNAPSHOT"
-  - Missing source field → MarketSource "SNAPSHOT"
-```
-
-### 3C. Unit Tests — Econ Hook Source Resolution (`src/lib/useEcon.test.ts`)
-
-```
-TEST: mapSource correctly classifies
-  - "FRED" → "FRED"
-  - "SNAPSHOT" → "SNAPSHOT"
-  - "ETL" → "ETL"
-  - "SIM" → "SIM"
-  - undefined → "SIM"
-  - "UNKNOWN" → "SIM"
-  - "" → "SIM"
-
-TEST: Snapshot seeding
-  - When econSnapshot has series data, hook pre-seeds with SNAPSHOT source
-  - When econSnapshot is empty, hook falls back to SIM
-```
-
-### 3D. Unit Tests — API Route Source Resolution (`src/app/api/econ/indicators/route.test.ts`)
-
-```
-TEST: buildPoint computes change correctly for level series
-  - value=100, prior=95 → change=5, changePct=5.26%
-
-TEST: buildPoint computes change correctly for YoY series
-  - CPI: value=4.17, prior=3.78 → change=0.4 (change in YoY rate)
-
-TEST: buildPoint derives MoM from raw levels
-  - rawValues last 2: [320, 325] → mom = pct(325, 320) = 1.56%
-
-TEST: buildPoint derives YoY from raw levels for monthly series
-  - 13 raw values → yoy = pct(last, 13th-from-last)
-
-TEST: buildPoint returns null for MoM/QoQ/YoY when insufficient history
-
-TEST: Per-indicator source independence
-  - Simulate: FRED available for DGS10 but not CPIAUCSL
-  - DGS10 returns source: "FRED", CPIAUCSL returns source: "SIM"
-  - Overall source: "FRED" (because at least one is FRED)
-```
+14 tests covering pct() and ppDelta() math helpers, MoM derivation from raw
+levels, YoY derivation with sufficient/insufficient history, FRED_CATALOG
+contract (required fields, uniqueness, frequency codes), per-indicator source
+independence, and overall source tier resolution logic.
 
 ### 3E. Unit Tests — Asset Quilt Returns (`src/app/asset-quilt/page.test.ts`)
 

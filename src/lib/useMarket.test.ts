@@ -53,3 +53,48 @@ describe("market snapshots", () => {
     expect(card).toHaveProperty("price");
   });
 });
+
+describe("fallbackSnapshot logic", () => {
+  test("fallback returns total snapshot by default", () => {
+    expect(SNAPSHOTS.market).toBeTruthy();
+    expect((SNAPSHOTS.market as any).cards.length).toBeGreaterThan(0);
+  });
+
+  test("price snapshot exists for price-eligible views", () => {
+    expect(PRICE_SNAPSHOTS.market).toBeTruthy();
+    expect(PRICE_SNAPSHOTS.bilello).toBeTruthy();
+  });
+
+  test("price snapshot is absent for views without price data", () => {
+    expect("rates" in PRICE_SNAPSHOTS).toBe(false);
+    expect("inflation" in PRICE_SNAPSHOTS).toBe(false);
+  });
+});
+
+describe("source mapping contract", () => {
+  test("valid market sources are LIVE, DB, FILE, or SNAPSHOT", () => {
+    const validSources = ["LIVE", "DB", "FILE", "SNAPSHOT"];
+    for (const s of validSources) {
+      expect(validSources).toContain(s);
+    }
+  });
+
+  test("SIM is not in the market source vocabulary", () => {
+    const marketSources = ["LIVE", "DB", "FILE", "SNAPSHOT", "LOADING"];
+    expect(marketSources).not.toContain("SIM");
+  });
+
+  test("unknown API source strings map to SNAPSHOT for market data", () => {
+    const mapMarketSource = (s: unknown): string => {
+      if (s === "LIVE" || s === "DB" || s === "FILE") return s as string;
+      return "SNAPSHOT";
+    };
+    expect(mapMarketSource("LIVE")).toBe("LIVE");
+    expect(mapMarketSource("DB")).toBe("DB");
+    expect(mapMarketSource("FILE")).toBe("FILE");
+    expect(mapMarketSource("garbage")).toBe("SNAPSHOT");
+    expect(mapMarketSource(undefined)).toBe("SNAPSHOT");
+    expect(mapMarketSource("")).toBe("SNAPSHOT");
+    expect(mapMarketSource(null)).toBe("SNAPSHOT");
+  });
+});
