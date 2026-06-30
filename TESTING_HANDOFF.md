@@ -401,23 +401,29 @@ TEST: Asset quilt shows source accurately with partial-year data
 
 ---
 
-## 6. Pages Currently Missing Provenance Badges
+## 6. Pages Currently Missing Provenance Badges — COMPLETED
 
-These pages need badge additions or explicit exemption documentation:
+All pages now have provenance badges. Audit results:
 
-| Page | Path | Current Source | Action Needed |
-|------|------|---------------|---------------|
-| DataOps | `/dataops` | SIM | Add badge |
-| Statistics | `/statistics` | SIM | Add badge |
-| Credit Spreads | `/economics/credit` | FRED/SIM | Add badge |
-| Inflation Explorer | `/economics/inflation` | FRED/SIM | Add badge |
-| Global CPI | `/economics/global-cpi` | ETL/SIM | Add badge |
-| Global Policy | `/economics/global-policy` | ETL/SIM | Add badge |
-| Rate Probabilities | `/economics/rate-probabilities` | SIM | Add badge |
-| Economic Calendar | `/economics/calendar` | SIM | Add badge |
-| Sec-Finance Econ | `/economics/sec-finance` | FRED/SIM | Add badge |
-| Yield Curve Analytics | `/economics/yield-curve-analytics` | FRED/SIM | Add badge |
-| Squeeze Radar | `/securities-lending/squeeze` | SIM | Verify badge |
+| Page | Path | Status | Notes |
+|------|------|--------|-------|
+| DataOps | `/dataops` | **ADDED** | ProvenanceBadge showing LIVE/SIM based on health probe |
+| Market Lens | `/market-lens` | **ADDED** | Replaced custom Tag with standard ProvenanceBadge |
+| Statistics | `/economics/stats` | Already had badge | SourceBadge via useLiveSeriesSet |
+| Credit Spreads | `/economics/credit` | Already had badge | SourceBadge with regime tag |
+| Inflation Explorer | `/economics/inflation` | Already had badge | SourceBadge via useLiveSeriesSet |
+| Global CPI | `/economics/global-cpi` | Already had badge | SourceBadge with country count |
+| Global Policy | `/economics/policy-rates` | Already had badge | SourceBadge with ChartLink |
+| Rate Probabilities | `/economics/rates` | Already had badge | SourceBadge via fedSource |
+| Economic Calendar | `/economics/calendar` | Already had badge | SourceBadge via useEconCalendar |
+| Sec-Finance Econ | `/economics/sec-finance` | Already had badge | SourceBadge via useLiveSeriesSet |
+| Yield Curve | `/economics/yield-curve` | Already had badge | ProvenanceBadge via badgeSource |
+| Squeeze Radar | `/securities-lending/squeeze` | Already had badge | ProvenanceBadge hardcoded SIM |
+
+**Badge-exempt pages** (badges render inside child components):
+- `/macro-chart` — badge rendered inside ChartStudio
+- `/market-chart` — badge rendered inside ChartStudio
+- `/economics/motion` — badge rendered inside MotionStudio
 
 ---
 

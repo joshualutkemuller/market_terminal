@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { PageHeader, KpiStrip } from "@/components/ui/PageHeader";
 import { Panel, Stat, Tag } from "@/components/ui/Panel";
 import { fmtNum, fmtSignedPct } from "@/lib/format";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -685,16 +686,7 @@ export default function MarketLensStudioPage() {
         desc="Configurable analytics workspace — Bilello-style analysis"
         right={
           <span className="flex items-center gap-2">
-            <Tag tone={analysisSource === "LIVE" ? "up" : "violet"}>
-              {analysisSource === "LIVE" ? (
-                <>
-                  <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-term-up animate-blink" />
-                  LIVE
-                </>
-              ) : (
-                "SNAPSHOT"
-              )}
-            </Tag>
+            <ProvenanceBadge source={analysisSource} />
           </span>
         }
       />
