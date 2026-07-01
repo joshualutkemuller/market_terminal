@@ -2,6 +2,7 @@ import { json } from "@/lib/server/http";
 import { fredEnabled, fredSeries } from "@/lib/server/fred";
 import { getSeriesHistory, getSeriesHistoryRaw, resolveFred } from "@/data/econSeries";
 import { getSnapshotObservations, getSnapshotRawObservations } from "@/data/econSnapshot";
+import { worstSource } from "@/lib/provenance";
 
 
 export interface BatchSeries {
@@ -43,10 +44,6 @@ export async function GET(req: Request) {
     })
   );
 
-  const source = series.some((s) => s.source === "FRED")
-    ? "FRED"
-    : series.some((s) => s.source === "SNAPSHOT")
-    ? "SNAPSHOT"
-    : "SIM";
+  const source = worstSource(series.map((s) => s.source));
   return json({ source, series });
 }

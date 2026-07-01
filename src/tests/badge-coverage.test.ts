@@ -7,7 +7,6 @@ const BADGE_EXEMPT_PAGES = [
   "macro-chart/page.tsx",
   "market-chart/page.tsx",
   "economics/motion/page.tsx",
-  "market-lens/page.tsx",
 ];
 
 function findPages(dir: string): string[] {
@@ -47,8 +46,6 @@ describe("badge coverage", () => {
     if (missing.length > 0) {
       console.warn("Pages missing provenance badge:", missing);
     }
-    // This is a tracking test — we expect some pages to still be missing
-    // Update the threshold as badges are added
-    expect(missing.length).toBeLessThanOrEqual(25);
+    expect(missing.length).toBe(0);
   });
 });

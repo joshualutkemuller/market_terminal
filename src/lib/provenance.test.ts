@@ -1,5 +1,5 @@
 import { describe, it, expect, test } from "vitest";
-import { classifyFreshness, PROVENANCE_META, provenanceMeta, type ProvenanceSource, PROVENANCE_TONE_CLASS } from "./provenance";
+import { classifyFreshness, PROVENANCE_META, provenanceMeta, worstSource, type ProvenanceSource, PROVENANCE_TONE_CLASS } from "./provenance";
 
 const NOW = new Date("2026-06-23T12:00:00Z");
 
@@ -83,4 +83,41 @@ test("classifyFreshness handles future dates as FRESH", () => {
 test("classifyFreshness handles empty string as UNKNOWN", () => {
   const result = classifyFreshness("");
   expect(result.status).toBe("UNKNOWN");
+});
+
+describe("worstSource", () => {
+  test("returns the lowest-tier source from a mixed array", () => {
+    expect(worstSource(["FRED", "SNAPSHOT", "SIM"])).toBe("SIM");
+  });
+
+  test("returns FRED when all sources are FRED", () => {
+    expect(worstSource(["FRED", "FRED", "FRED"])).toBe("FRED");
+  });
+
+  test("returns SNAPSHOT when worst is SNAPSHOT", () => {
+    expect(worstSource(["FRED", "LIVE", "SNAPSHOT"])).toBe("SNAPSHOT");
+  });
+
+  test("returns SIM for empty array", () => {
+    expect(worstSource([])).toBe("SIM");
+  });
+
+  test("treats unknown source strings as SIM tier", () => {
+    expect(worstSource(["FRED", "GARBAGE" as any])).toBe("GARBAGE");
+  });
+
+  test("handles single-element arrays", () => {
+    expect(worstSource(["FRED"])).toBe("FRED");
+    expect(worstSource(["SIM"])).toBe("SIM");
+  });
+
+  test("respects full tier ordering", () => {
+    expect(worstSource(["FRED", "LIVE"])).toBe("LIVE");
+    expect(worstSource(["LIVE", "DB"])).toBe("DB");
+    expect(worstSource(["DB", "FILE"])).toBe("FILE");
+    expect(worstSource(["FILE", "ETL"])).toBe("ETL");
+    expect(worstSource(["ETL", "SNAPSHOT"])).toBe("SNAPSHOT");
+    expect(worstSource(["SNAPSHOT", "ECON"])).toBe("ECON");
+    expect(worstSource(["ECON", "SIM"])).toBe("SIM");
+  });
 });

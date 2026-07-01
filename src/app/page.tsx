@@ -24,6 +24,7 @@ import { useMarketView } from "@/lib/useMarket";
 import { fmtUsdAbbr, fmtSignedPct, fmtNum, pnlClass, fmtAbbr } from "@/lib/format";
 import { NAV } from "@/lib/nav";
 import { StalenessBar } from "@/components/ui/StalenessBar";
+import { worstSource } from "@/lib/provenance";
 
 function NewsTicker({ headlines }: { headlines: Headline[] }) {
   if (!headlines.length) return null;
@@ -85,8 +86,11 @@ export default function CommandCenter() {
   }, [hasCards, marketData, simMovers]);
 
   const marketAsOf = fredAsOf ?? pipelineAsOf;
-  const overallSource = anyIndexLive ? "FRED" : hasCards ? "SNAPSHOT" : "SIM";
-  const badgeSource = anyIndexLive ? "FRED" as const : hasCards ? "SNAPSHOT" as const : "SIM" as const;
+  const sourceTiers: ("FRED" | "SNAPSHOT" | "SIM")[] = [];
+  if (anyIndexLive) sourceTiers.push("FRED");
+  if (hasCards) sourceTiers.push(pipelineLive ? "LIVE" as any : "SNAPSHOT");
+  if (!sourceTiers.length) sourceTiers.push("SIM");
+  const badgeSource = worstSource(sourceTiers);
 
   const alertCols: Column<Alert>[] = [
     { key: "sev", header: "", width: "8px", render: (a) => <span className={`inline-block h-2 w-2 rounded-full ${a.severity === "CRITICAL" ? "bg-term-down" : a.severity === "HIGH" ? "bg-term-amber" : "bg-term-blue"}`} /> },
@@ -160,8 +164,8 @@ export default function CommandCenter() {
         <div className="flex flex-col gap-2">
           <Panel title="Global Markets" code="WEI" right={
             <span className="flex items-center gap-1.5 text-3xs text-term-text-mute">
-              <span className={`inline-block h-1.5 w-1.5 rounded-full ${overallSource === "SIM" ? "bg-term-amber" : "bg-term-up"}`} />
-              {overallSource}{marketAsOf ? ` ${marketAsOf}` : ""}
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${badgeSource === "SIM" ? "bg-term-amber" : "bg-term-up"}`} />
+              {badgeSource}{marketAsOf ? ` ${marketAsOf}` : ""}
             </span>
           }>
             <div className="grid grid-cols-2 gap-px bg-term-border">

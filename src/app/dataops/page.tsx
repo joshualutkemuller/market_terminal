@@ -28,6 +28,7 @@ import {
 import { useProviderHealth } from "@/lib/useProviderHealth";
 import { useLiveRuns } from "@/lib/useLiveRuns";
 import { fmtInt, fmtNum, fmtPct } from "@/lib/format";
+import { ProvenanceBadge } from "@/components/ui/ProvenanceBadge";
 
 const STATUS_TONE: Record<ProviderStatus, "up" | "blue" | "amber" | "down" | "neutral"> = {
   LIVE: "up",
@@ -242,7 +243,7 @@ export default function DataOpsPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PageHeader code="DATAOPS" title="Data Health & Lineage" desc="Provider runs, series outcomes, quality exceptions and production readiness" right={<Tag tone="blue">DRILLDOWN</Tag>} />
+      <PageHeader code="DATAOPS" title="Data Health & Lineage" desc="Provider runs, series outcomes, quality exceptions and production readiness" right={<span className="flex items-center gap-2"><ProvenanceBadge source={probe.health ? "LIVE" : "SIM"} /><Tag tone="blue">DRILLDOWN</Tag></span>} />
 
       <KpiStrip>
         <Stat label="Live Providers" value={`${providersLive}/${providers.length}`} sub={probe.health ? "live-probed" : "active feeds"} tone="up" />

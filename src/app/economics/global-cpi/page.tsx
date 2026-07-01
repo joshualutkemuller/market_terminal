@@ -7,7 +7,8 @@ import { BarChart } from "@/components/charts/BarChart";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { useDrill } from "@/components/econ/DrillProvider";
 import { SourceBadge } from "@/components/econ/SourceBadge";
-import { isRealEconSource, useLiveSeriesSet } from "@/lib/useEcon";
+import { isRealEconSource, useLiveSeriesSet, type DataSource } from "@/lib/useEcon";
+import { worstSource } from "@/lib/provenance";
 import { etlCountryCPI, getGlobalCPI, getGlobalSummary, liveCountryCPI, type CountryInflation, type Region } from "@/data/globalMacro";
 import { fmtNum, fmtSigned, pnlClass } from "@/lib/format";
 
@@ -42,15 +43,10 @@ export default function GlobalInflation() {
       ? { ...liveCountryCPI(c, L.observations), source: L.source }
       : c;
   });
-  const pageSource = all.some((c) => c.source === "FRED")
-    ? "FRED"
-    : all.some((c) => c.source === "SNAPSHOT")
-    ? "SNAPSHOT"
-    : all.some((c) => c.source === "ETL")
-    ? "ETL"
-    : source === "LOADING"
-    ? "LOADING"
-    : "SIM";
+  const allSources = all.map((c) => c.source).filter((s) => s && s !== "LOADING");
+  const pageSource = source === "LOADING" && !allSources.length
+    ? ("LOADING" as const)
+    : worstSource(allSources.length ? allSources : ["SIM" as DataSource]);
   const base = getGlobalSummary();
   const ys = all.map((c) => c.yoy).sort((a, b) => a - b);
   const summary = {

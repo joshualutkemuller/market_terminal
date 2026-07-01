@@ -102,6 +102,27 @@ export function classifyFreshness(
   return { status: "STALE", ageDays, label: `STALE · ${ageDays}d`, title: `Data as of ${asOf} (${ageDays}d ago) — stale; upstream has not refreshed.` };
 }
 
+/**
+ * Given an array of source strings, return the worst (lowest-tier) source.
+ * Tier order: FRED > LIVE > DB > FILE > ETL > SNAPSHOT > ECON > SIM.
+ * If any source is SIM, the overall source is SIM.
+ * If sources are mixed across live/non-live, returns the worst one present.
+ */
+const SOURCE_TIER: Record<string, number> = {
+  FRED: 0, LIVE: 1, POLY: 2, DB: 3, FILE: 4, ETL: 5, SNAPSHOT: 6, ECON: 7, SIM: 8,
+};
+
+export function worstSource<T extends string>(sources: T[]): T {
+  if (!sources.length) return "SIM" as T;
+  let worst = sources[0];
+  let worstTier = SOURCE_TIER[worst] ?? 8;
+  for (let i = 1; i < sources.length; i++) {
+    const tier = SOURCE_TIER[sources[i]] ?? 8;
+    if (tier > worstTier) { worst = sources[i]; worstTier = tier; }
+  }
+  return worst;
+}
+
 /** Tailwind classes for the non-fresh freshness states: [pill, dot]. */
 export const FRESHNESS_TONE_CLASS: Record<"AGING" | "STALE", { pill: string; dot: string }> = {
   AGING: { pill: "border-term-amber/40 bg-term-amber/10 text-term-amber", dot: "bg-term-amber" },
